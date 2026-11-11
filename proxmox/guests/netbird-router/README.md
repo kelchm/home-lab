@@ -2,7 +2,7 @@
 
 VM 103 is one of NetBird's two routing peers; [VM 104](../netbird-router-2/README.md) on `pve-sbx-2` is the other. It carries traffic from away clients to the household HTTPS, admin HTTPS and DNS resources. NetBird Cloud objects, client ownership, access verification and recovery limits are in the [NetBird runbook](../../../docs/runbooks/netbird-remote-access.md); it was qualified in [#625](https://github.com/kelchm/home-lab/issues/625).
 
-Read back on 2026-11-08, after the stage-2 rename, upgrade and reboots that day:
+Read back on 2026-11-08 after the stage-2 rename and upgrade, with unattended host startup verified on 2026-11-11:
 
 | Setting | Value |
 |---|---|
@@ -10,7 +10,7 @@ Read back on 2026-11-08, after the stage-2 rename, upgrade and reboots that day:
 | Node | `pve-sbx-1`. Template 9000 is on that node's `local-lvm`, so a rebuild clones there. |
 | Network | `10.32.19.103/24` on VLAN 19 (`vmbr0` tag 19); gateway and resolver `10.32.19.1`; search domain `home.kelch.io` |
 | Guest | Full clone of template 9000 (Debian 13 genericcloud): 1 vCPU, 1 GiB RAM, 8 GiB `local-lvm`, OVMF, QEMU guest agent |
-| Boot | `onboot: 1`, `startup: order=10,up=30`; unattended host-boot acceptance is still pending (#1096). |
+| Boot | `onboot: 1`, `startup: order=10,up=30`; unattended host startup verified on 2026-11-11, about 23 seconds after host boot ([evidence](local-startup.md#accepted-host-boot-2026-11-11), #1096). |
 | Protection, backup, HA | `protection: 1` and covered by `daily-backups`, both since 2026-10-28. Not a PVE HA resource. |
 | OS | Debian 13, kernel 6.12.116 after the renamed instance's first boot on 2026-11-08 |
 | NetBird | 0.82.0 from the `pkgs.netbird.io` `stable` repository, set by [`upgrade-routers.sh`](upgrade-routers.sh); kernel WireGuard on `wt0`, UDP 51820; client routes and DNS disabled, all other client settings default |
@@ -20,7 +20,7 @@ Main cannot reach the VM's SSH. Manage it with `qm guest exec 103` from `pve-sbx
 
 ## Vendor data
 
-[`vendor-data.yaml`](vendor-data.yaml) is byte-identical to the installed snippet referenced by VM 103's saved `local:snippets/netbird-router-1.yaml`. Two copies under the old name stay for older backups: `local:snippets/netbird-pilot-router.yaml`, referenced by archives from 2026-10-30 to 2026-11-08, and the NAS source `library-pve:snippets/netbird-pilot-router.yaml`, referenced by earlier ones. All have SHA-256 `1c45c56620287cce1825e8af4ed7a03c7f316dd7a10744a5ad102a06a14dc52a`. The [node-local replacement](local-startup.md#accepted-installation-2026-10-29) was installed on 2026-10-29; the 2026-11-08 restarts were operator restarts, so unattended host-boot acceptance remains untested in #1096. The vendor data does the following:
+[`vendor-data.yaml`](vendor-data.yaml) is byte-identical to the installed snippet referenced by VM 103's saved `local:snippets/netbird-router-1.yaml`. Two copies under the old name stay for older backups: `local:snippets/netbird-pilot-router.yaml`, referenced by archives from 2026-10-30 to 2026-11-08, and the NAS source `library-pve:snippets/netbird-pilot-router.yaml`, referenced by earlier ones. All have SHA-256 `1c45c56620287cce1825e8af4ed7a03c7f316dd7a10744a5ad102a06a14dc52a`. The [node-local replacement](local-startup.md#accepted-installation-2026-10-29) was installed on 2026-10-29; unattended startup passed the separately authorized 2026-11-11 host reboot in [#1096](https://github.com/kelchm/home-lab/issues/1096#issuecomment-6784794380). The vendor data does the following:
 
 - installs `ca-certificates`, `curl`, `qemu-guest-agent` and `tcpdump`;
 - enables IPv4 forwarding;
@@ -100,6 +100,6 @@ It installs the declared version on VM 103, then VM 104. It upgrades or downgrad
 
 The vendor data's `package_upgrade: false` has no effect. PVE's generated user data sets `package_upgrade: true`, its `ciupgrade` default, and user data takes precedence. The first boot of each cloud-init instance therefore runs `apt-get dist-upgrade`, then the vendor bootstrap's `apt-get install netbird`; VM 103's first boot on 2026-09-27 did both.
 
-A byte-identical vendor-only path change is different: vendor content and its storage reference are excluded from the generated instance ID. The [node-local startup procedure](local-startup.md) verifies user/network/metadata hashes without a restart and leaves acceptance for the next planned authorized host reboot.
+A byte-identical vendor-only path change is different: vendor content and its storage reference are excluded from the generated instance ID. The [node-local startup procedure](local-startup.md) verified installation without a restart on 2026-10-29; the separately authorized 2026-11-11 host reboot subsequently verified unattended startup with unchanged user/network/metadata hashes and guest identity.
 
 PVE derives the instance ID from the user and network data, and regenerates them each time it starts the VM. They hold the VM name as the hostname, the cloud-init user, its SSH keys and the network settings. Changing any of these makes the next start, including one after a host reboot, a new instance: it upgrades every package including NetBird, and applies any new hostname. Make such a change only as part of a planned upgrade, and restart VM 103 immediately afterwards rather than leaving it for the next host reboot. This was read from PVE 9.2.21 and the guest's cloud-init and apt logs on 2026-10-28. The 2026-11-08 rename followed it: `qm reboot 103` started a new instance that upgraded Debian and NetBird and set the new hostname, followed by a second reboot onto the new kernel. Run `upgrade-routers.sh` after any new instance to return NetBird to the declared version.
