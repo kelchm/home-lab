@@ -96,17 +96,33 @@ To return to the vendor certificate, remove the cron entry and boot script, rest
 
 The appliance is a NetBird peer so the console is reachable away from home even when the cluster and the PVE-hosted NetBird routers are down. It routes only its own address: the NetBird network for the console names this peer as its router and `10.32.20.10/32` as its resource, so an away client browses to the normal hostname with the trusted certificate. The site's NetBird Cloud objects and policy are recorded in the [NetBird runbook](../../docs/runbooks/netbird-remote-access.md#glkvm-console-added-2026-11-11).
 
-The firmware ships the client and its GL UI integration:
+The firmware ships a client and its GL UI integration. Its client (0.74.7 on `V1.10.1 release2`) changes only with firmware, so a pinned upstream client runs in its place:
 
 | Piece | Behavior |
 |---|---|
-| `/usr/bin/netbird` | Firmware's client, 0.74.7 on `V1.10.1 release2`; updated only with firmware |
+| `/usr/bin/netbird` | Firmware's client. At boot the pinned client is bind-mounted over it when newer |
+| `/etc/kvmd/user/bin/netbird` | Pinned upstream `linux/arm64` client, installed by [`netbird/install.sh`](netbird/install.sh) |
+| `/etc/kvmd/user/scripts/S40netbird-binary` | [`netbird/S40netbird-binary`](netbird/S40netbird-binary), run at boot by `S99custom` before `S99netbird` starts the daemon. Mounts the pinned client only if its version is newer than the firmware's, so a firmware update that ships a newer client wins |
 | `/etc/init.d/S99netbird` | Starts `netbird service run --daemon-addr unix:///var/run/netbird.sock` when `/etc/kvmd/user/netbird.json` has `"enable": true`; also sets IP forwarding in `/etc/sysctl.conf` |
 | `/etc/kvmd/user/netbird.json` | `enable` and optional `management_url`, written by the GL UI |
 | `/etc/kvmd/user/netbird/` | Peer key and state (`/var/lib/netbird` links here). Secret; kept by the firmware's update backup |
 | GL UI NetBird page | Calls `netbird up --disable-dns --setup-key …`, `netbird logout` and reads status from the daemon socket |
 
 `--disable-dns` means the appliance never uses NetBird's DNS, which it doesn't need. The appliance's kernel has WireGuard, so the client runs in kernel mode.
+
+Nothing else changes: the GL UI and `S99netbird` call `/usr/bin/netbird` by path and talk to the same daemon socket. GL's status reader parses 0.82.1's daemon status correctly (`Connected`, IP and version). To go back to the firmware's client, delete the boot script and the pinned binary, then `umount /usr/bin/netbird` and `/etc/init.d/S99netbird restart`; the peer identity is unchanged.
+
+### Update the client
+
+Renovate opens a PR for each NetBird release against `NETBIRD_VERSION` in [`netbird/install.sh`](netbird/install.sh). Merging changes nothing on the appliance. Run the installer from a repository checkout:
+
+```sh
+devices/glkvm/netbird/install.sh
+```
+
+It downloads the release archive, verifies it against the release's checksum file, installs the binary and boot script, stops the daemon, waits for the old one to exit, remounts and starts it, and prints the status. NetBird access to the console drops for a few seconds; the local network path is unaffected. Do it from home or with a second way in.
+
+Installed 2026-11-11: 0.82.1, the routers' version. The peer kept its identity and address, reconnected to management, signal and relays, and announced `Networks: 10.32.20.10/32`; NetBird's input and forward rules for the away iPhone were unchanged. The first run exposed a race, now handled by the installer: a daemon started while the previous one was still shutting down exited at once.
 
 Enrolled 2026-11-11 as `kvm-compute-rack.netbird.cloud` with a one-off setup key whose auto-group is the console's router group; the key was revoked after its single use. The peer reported Management, Signal and Relay connected and `Networks: 10.32.20.10/32`. On the same day the iPhone, on cellular, loaded the console at its normal hostname with the trusted certificate.
 
@@ -482,7 +498,7 @@ After the update:
 6. Recheck the [monitoring](#monitoring) patch against the new firmware's `export.pyc` before reinstalling it. The installed copy steps aside on its own when that file changes, and its install refuses a module it was not verified against.
 7. Confirm the [name and address](#name-and-address) survived: `hostname` prints `kvm-compute-rack` and connman still reports the static address (`connmanctl services ethernet_9483c4c499d7_cable | grep IPv4`).
 8. Confirm [TLS](#tls) survived: the renewal entry is in `/etc/crontabs/root` (the boot script restores it), and the `curl` check in that section returns `0`. If the firmware dropped `/etc/kvmd/user/scripts` or the nginx `ssl.conf` no longer reads `/etc/kvmd/user/ssl`, rerun `devices/glkvm/acme/install.sh` and `deploy.sh`.
-9. Confirm [NetBird](#netbird) survived: `netbird status` shows Management connected and `Networks: 10.32.20.10/32`, and `netbird version` matches the README's version or a newer firmware one.
+9. Confirm [NetBird](#netbird) survived: `netbird status` shows Management connected and `Networks: 10.32.20.10/32`, and `netbird version` reports the pinned version or a newer firmware one. If `/etc/kvmd/user/scripts/S40netbird-binary` or the pinned binary is gone, rerun `devices/glkvm/netbird/install.sh`.
 
 The update to `V1.10.1 release2` kept `/etc/kvmd/user`, the mass-storage settings in `user/boot.yaml`, and `/etc/kvmd/override.yaml`, but replaced `/etc/kvmd/nginx-kvmd.conf` with the vendor's, which serves only the GLKVM UI on 443.
 

@@ -84,6 +84,7 @@ Read back on 2026-11-08:
 | `netbird-router-1`, `netbird-router-2` | Debian package from `pkgs.netbird.io` `stable`; vendor data installs it at first boot | 0.82.1 | Renovate opens a PR for each NetBird release against [`upgrade-routers.sh`](../../proxmox/guests/netbird-router/upgrade-routers.sh). Merging changes no router; running the script upgrades them one at a time, and away clients move to the other router ([procedure](../../proxmox/guests/netbird-router/README.md#upgrades)). |
 | Hyperion | Homebrew `netbirdio/tap/netbird` (daemon and CLI) and cask `netbirdio/tap/netbird-ui`; LaunchDaemon `netbird` runs `/opt/homebrew/bin/netbird service run` | 0.81.5, daemon and CLI read back on 2026-11-10 | Operator, with `brew upgrade`. A `netbird-ui` cask upgrade removes and reinstalls the service; an interrupted one on 2026-10-28 left no daemon until the upgrade was rerun. Check `netbird status` after upgrading. |
 | Persephone | — | 0.82.0, reported by management | Operator |
+| `kvm-compute-rack` | Upstream `linux/arm64` binary bind-mounted over the GLKVM firmware's client | 0.82.1, installed 2026-11-11 | Renovate opens a PR against [`devices/glkvm/netbird/install.sh`](../../devices/glkvm/netbird/install.sh); running it updates the appliance ([procedure](../../devices/glkvm/README.md#update-the-client)) |
 | iPhone | App Store | Management reports build `ci-cb7ca8ef` | App Store updates |
 
 NetBird's client auto-update setting is off, so no client upgrades itself through NetBird.
