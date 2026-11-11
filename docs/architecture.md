@@ -301,7 +301,7 @@ API VIP is managed by the Talos `vipController` (GARP-based at the machine-confi
 10.32.20.1        gateway-infra            Router interface
 10.32.20.5        nas                      Synology admin interface
 10.32.20.7        pbs                      (planned) PBS appliance, aligned with pbs-storage
-10.32.20.10       glkvm                    GL-RM1PE KVM (currently a DHCP fixed assignment; prefer on-device static — the recovery console should not depend on DHCP)
+10.32.20.10       kvm-compute-rack         GL-RM1PE KVM; static on the device, UniFi fixed assignment kept as a guard (devices/glkvm/README.md)
 10.32.20.20       pdm                      (reserved) Proxmox Datacenter Manager
 10.32.20.21-.23   pve-sbx-{1,2,3}          PVE UI/API, SSH, Corosync link 0
 10.32.20.24-.29   (reserved, pve-sbx expansion)

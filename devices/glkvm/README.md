@@ -20,7 +20,7 @@ Restored 2026-10-20 by validating and copying the firmware's nginx configuration
 
 ## Name and address
 
-**Status:** not yet applied; tracked in [#419](https://github.com/kelchm/home-lab/issues/419). The appliance still answers as `glkvm` on a DHCP address.
+Applied 2026-11-11: the UniFi record answers `10.32.20.10` from `10.32.10.1`, `10.32.20.1` and `10.32.30.1`; `hostname` and `/etc/hostname` read `kvm-compute-rack` (set the way the GL UI does: write `/etc/hostname`, run `hostname`, restart `gl_mdns`); connman reports `Method=manual` with the address, gateway and nameserver above. The previous DHCP settings are kept at `/etc/kvmd/user/backups/connman-settings.before-static`. Persistence across an appliance reboot has not yet been observed.
 
 The appliance is `kvm-compute-rack.home.kelch.io` at `10.32.20.10`, following the role-plus-rack pattern of `ups-compute-rack`. The name outlives the GL.iNet hardware; the `devices/glkvm/` directory keeps the vendor name because its contents are vendor-specific.
 
@@ -36,7 +36,7 @@ On a firmware update the firmware itself backs up and restores `/etc/kvmd/user`,
 
 ## TLS
 
-**Status:** not yet applied; tracked in [#419](https://github.com/kelchm/home-lab/issues/419). nginx still serves the vendor's self-signed certificate.
+Applied 2026-11-11: the first order created the Lego account and issued a Let's Encrypt (`YE2`) certificate for `kvm-compute-rack.home.kelch.io`, valid until 2027-02-09. A workstation `curl` to the hostname returns HTTP 200 with verify result `0`, and the unauthenticated metrics scrape still returns 200. A scheduled renewal and the boot script's restore of the cron entry after a reboot have not yet been observed.
 
 nginx serves a Let's Encrypt certificate for `kvm-compute-rack.home.kelch.io` from `/etc/kvmd/user/ssl/server.{crt,key}`, the files the firmware's `ssl.conf` reads. [Lego](https://go-acme.github.io/lego/) issues and renews it on the appliance with a Cloudflare DNS-01 challenge, the same way as [Athena](../../docs/runbooks/athena-acme.md). It does not use the cluster's cert-manager: the console must work while the cluster is down.
 
@@ -54,7 +54,7 @@ nginx serves a Let's Encrypt certificate for `kvm-compute-rack.home.kelch.io` fr
 
 The firmware starts two `crond` processes that read the same crontab, so every entry fires twice; `renew.sh` holds a lock and the second copy exits. Lego renews only when the certificate is due and keeps the same key. nginx's startup script regenerates a self-signed pair only if the files are missing or the key doesn't match, never because the certificate expired.
 
-The firmware sends `Strict-Transport-Security` with a one-year `max-age` (`/etc/kvmd/nginx/ssl.conf`). Once a browser has seen the trusted certificate on the hostname, it will refuse to click through a broken one. If renewal ever fails and the certificate expires, use `https://10.32.20.10/`: HSTS does not apply to an IP address, so the browser allows the usual warning. The Pi's TLS probe warns well before that happens; see [Monitoring](#monitoring).
+The firmware sends `Strict-Transport-Security` with a one-year `max-age` (`/etc/kvmd/nginx/ssl.conf`). Once a browser has seen the trusted certificate on the hostname, it will refuse to click through a broken one. If renewal ever fails and the certificate expires, use `https://10.32.20.10/`: HSTS does not apply to an IP address, so the browser allows the usual warning. Nothing yet alerts on an expiring certificate; adding the rack Pi's TLS probe for this host is tracked in [#419](https://github.com/kelchm/home-lab/issues/419).
 
 The `kvm-acme` token has `Zone:Zone:Read` and `Zone:DNS:Edit` on `kelch.io` and is used only here, so it can be revoked without touching Athena or S3. Its 1Password item is `op://Project - home-lab/kvm-acme/credential`. Cloudflare cannot scope a token to one record, so a stolen token could edit any `kelch.io` record. Anyone who can read it already has root on the console that types into every host's BIOS.
 
@@ -261,7 +261,7 @@ What the export provides on this firmware:
 
 The scrape drops `pikvm_atx_*` and `pikvm_gpio_*`. ATX is not wired, so its power state means nothing. The GPIO rows are the retained host-switch command channels, which only pulse a switch sequence; they do not read back the selected port, and the vendor code reports each channel's state under both its `online` and `state` names. The export has no HDMI signal, USB enumeration, selected port, uptime or filesystem metrics, and nothing in it observes the host on the selected port. A blank screen or missing video is not an appliance failure. Load average stays between 8 and 10 because of the SoC's media threads and is not a useful signal.
 
-The appliance serves its vendor's self-signed certificate (`CN=localhost`, expired 1979), so the scrape skips verification and there is no certificate-expiry alert; [#419](https://github.com/kelchm/home-lab/issues/419) tracks a real certificate.
+The scrape addresses the appliance by IP so it does not depend on DNS, and therefore skips certificate verification. Certificate expiry is watched separately; see [TLS](#tls).
 
 | Alert | Fires when |
 |---|---|
