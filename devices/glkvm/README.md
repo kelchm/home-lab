@@ -43,7 +43,7 @@ nginx serves a Let's Encrypt certificate for `kvm-compute-rack.home.kelch.io` fr
 | Path on the appliance | Contents |
 |---|---|
 | `/etc/kvmd/user/acme/bin/lego` | Pinned Lego 5.6.0 for `linux/arm64` |
-| `/etc/kvmd/user/acme/lego.yml` | [`acme/lego.yml`](acme/lego.yml) |
+| `/etc/kvmd/user/acme/lego.yml` | [`acme/lego.yml`](acme/lego.yml), the only file that names this site's host; the scripts are generic |
 | `/etc/kvmd/user/acme/renew.sh` | [`acme/renew.sh`](acme/renew.sh), run daily at 03:41 local time |
 | `/etc/kvmd/user/acme/deploy.sh` | [`acme/deploy.sh`](acme/deploy.sh), Lego's hook: checks the new pair, installs it, validates nginx and reloads it, restoring the previous pair if nginx rejects it |
 | `/etc/kvmd/user/acme/cloudflare-token` | The `kvm-acme` Cloudflare token, mode `0600`. Never in Git |
@@ -79,7 +79,7 @@ Request the first certificate, or retry a failed run, by running the daily job b
 ssh root@10.32.20.10 '/etc/kvmd/user/acme/renew.sh; echo "exit $?"; tail -n 30 /etc/kvmd/user/acme/renewal.log'
 ```
 
-Lego saves an issued certificate before running its hook. If the hook failed, a later run that finds the certificate not yet due does not retry it; fix the cause and run `/etc/kvmd/user/acme/deploy.sh` by hand.
+Lego saves an issued certificate before running its hook. If the hook failed, a later run that finds the certificate not yet due does not retry it; fix the cause and run `/etc/kvmd/user/acme/deploy.sh kvm-compute-rack.home.kelch.io` by hand.
 
 Check what the listener serves from a workstation, bypassing DNS but verifying the name:
 

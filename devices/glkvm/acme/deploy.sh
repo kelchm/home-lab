@@ -1,14 +1,27 @@
 #!/bin/sh
 # Lego deploy hook: install the issued certificate where the firmware's nginx
 # reads it and reload nginx. Restores the previous pair if nginx rejects the new
-# one. Installed as /etc/kvmd/user/acme/deploy.sh; safe to rerun by hand.
+# one. Installed as /etc/kvmd/user/acme/deploy.sh.
+#
+# Lego supplies the certificate through LEGO_HOOK_* variables. To rerun it by
+# hand, pass the certificate name instead: deploy.sh <name>
 set -eu
 umask 077
-name=kvm-compute-rack.home.kelch.io
-src=/etc/kvmd/user/acme/lego-state/certificates
+state=/etc/kvmd/user/acme/lego-state/certificates
 ssl=/etc/kvmd/user/ssl
-crt=$src/$name.crt
-key=$src/$name.key
+
+if [ $# = 1 ]; then
+    name=$1
+    crt=$state/$name.crt
+    key=$state/$name.key
+elif [ -n "${LEGO_HOOK_CERT_PATH:-}" ] && [ -n "${LEGO_HOOK_CERT_KEY_PATH:-}" ]; then
+    name=${LEGO_HOOK_CERT_DOMAINS%%,*}
+    crt=$LEGO_HOOK_CERT_PATH
+    key=$LEGO_HOOK_CERT_KEY_PATH
+else
+    echo "usage: $0 <certificate-name>  (or run as Lego's deploy hook)" >&2
+    exit 2
+fi
 
 fingerprint() { openssl sha256 | cut -d' ' -f2; }
 [ "$(openssl x509 -in "$crt" -noout -pubkey | fingerprint)" = \
@@ -34,4 +47,4 @@ if ! /usr/sbin/nginx -t -p /etc/kvmd/nginx -c /etc/kvmd/nginx-kvmd.conf \
 fi
 sync
 kill -HUP "$(cat /run/kvmd/nginx.pid)"
-echo "Installed $(openssl x509 -in "$ssl/server.crt" -noout -enddate)"
+echo "Installed $name, $(openssl x509 -in "$ssl/server.crt" -noout -enddate)"

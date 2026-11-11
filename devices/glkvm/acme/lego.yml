@@ -1,4 +1,5 @@
-# Installed as /etc/kvmd/user/acme/lego.yml. renew.sh supplies the Cloudflare
+# Site configuration, installed as /etc/kvmd/user/acme/lego.yml. The other
+# files in this directory are host-independent. renew.sh supplies the Cloudflare
 # token's path through CF_DNS_API_TOKEN_FILE.
 storage: /etc/kvmd/user/acme/lego-state
 
