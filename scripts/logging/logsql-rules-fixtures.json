@@ -818,7 +818,7 @@
    "expect": [
     {
      "labels": {
-      "src": "10.32.10.244",
+      "client": "10.32.10.244",
       "dst": "13.32.99.10",
       "signature": "ET SCAN Potential SSH Scan OUTBOUND"
      },
@@ -905,6 +905,87 @@
       "cef.extension.msg": "A network intrusion attempt from 10.32.10.244 to 192.168.1.1 has been detected."
      },
      "offset": -150
+    }
+   ],
+   "expect": []
+  },
+  {
+   "rule": "UniFiIntrusionDetectedOutbound",
+   "name": "a detection through a WAN without addresses names the client",
+   "records": [
+    {
+     "fields": {
+      "service.name": "Gateway-DMP",
+      "service.namespace": "unifi",
+      "cef.device_vendor": "Ubiquiti",
+      "cef.device_product": "UniFi Network",
+      "cef.device_version": "11.0.99",
+      "cef.device_event_class_id": "200",
+      "cef.name": "Threat Detected",
+      "cef.severity": "7",
+      "severity_number": 17,
+      "_msg": "A network intrusion attempt from MacBookPro fe:95 to MacBookPro fe:95 has been detected.",
+      "cef.extension.UNIFIcategory": "Security",
+      "cef.extension.UNIFIdirection": "outgoing",
+      "cef.extension.UNIFIipsSignature": "ET DROP Dshield Block Listed Source group 1",
+      "cef.extension.UNIFIipsSignatureId": "2402000",
+      "cef.extension.UNIFIsrcClientAlias": "MacBookPro fe:95",
+      "cef.extension.UNIFIsrcClientMac": "aa:bb:cc:dd:fe:95",
+      "cef.extension.deviceInboundInterface": "Main",
+      "cef.extension.deviceOutboundInterface": "T-Mobile (WAN1)",
+      "cef.extension.UNIFIsrcZone": "Internal",
+      "cef.extension.UNIFIdstZone": "Internal",
+      "cef.extension.proto": "TCP",
+      "cef.extension.spt": "443",
+      "cef.extension.dpt": "65061",
+      "cef.extension.msg": "A network intrusion attempt from MacBookPro fe:95 to MacBookPro fe:95 has been detected."
+     },
+     "offset": -300
+    }
+   ],
+   "expect": [
+    {
+     "labels": {
+      "client": "MacBookPro fe:95",
+      "dst": "an unrecorded external address",
+      "signature": "ET DROP Dshield Block Listed Source group 1"
+     },
+     "value": 1
+    }
+   ]
+  },
+  {
+   "rule": "UniFiIntrusionDetectedOutbound",
+   "name": "CINS group 155 detections, from iCloud Private Relay, stay quiet",
+   "records": [
+    {
+     "fields": {
+      "service.name": "Gateway-DMP",
+      "service.namespace": "unifi",
+      "cef.device_vendor": "Ubiquiti",
+      "cef.device_product": "UniFi Network",
+      "cef.device_version": "11.0.99",
+      "cef.device_event_class_id": "200",
+      "cef.name": "Threat Detected",
+      "cef.severity": "7",
+      "severity_number": 17,
+      "_msg": "A network intrusion attempt from Hyperion to Hyperion has been detected.",
+      "cef.extension.UNIFIcategory": "Security",
+      "cef.extension.UNIFIdirection": "outgoing",
+      "cef.extension.UNIFIipsSignature": "ET CINS Active Threat Intelligence Poor Reputation IP group 155",
+      "cef.extension.UNIFIipsSignatureId": "2403454",
+      "cef.extension.UNIFIsrcClientAlias": "Hyperion",
+      "cef.extension.UNIFIsrcClientMac": "aa:bb:cc:dd:0f:90",
+      "cef.extension.deviceInboundInterface": "Main",
+      "cef.extension.deviceOutboundInterface": "T-Mobile (WAN1)",
+      "cef.extension.UNIFIsrcZone": "Internal",
+      "cef.extension.UNIFIdstZone": "Internal",
+      "cef.extension.proto": "TCP",
+      "cef.extension.spt": "443",
+      "cef.extension.dpt": "65061",
+      "cef.extension.msg": "A network intrusion attempt from Hyperion to Hyperion has been detected."
+     },
+     "offset": -300
     }
    ],
    "expect": []

@@ -14,7 +14,9 @@ configMapGenerator:
   # unpoller/dashboards v2.0.0 Prometheus set at adbe342 (grafana.com 11311-11315);
   # datasource variable, the renamed port satisfaction ratio, and panels on
   # client, DPI and clock-plugin data, or on the upstream author's own devices,
-  # removed.
+  # removed. The USG LAN panels are removed too: since UniFi Network 11 the
+  # console no longer reports device stat totals (unpoller/unpoller#1104), so
+  # the unpoller_device_lan_* series are gone.
   - name: grafana-dashboard-stock-unifi-usg
     files:
       - stock-unifi-usg.json=./dashboards/stock-unifi-usg.json
