@@ -1,12 +1,14 @@
 # Kanidm person accounts
 
-People sign in to Kanidm with accounts declared as `KanidmPersonAccount` resources beside [`person-kelchm.yaml`](../../kubernetes/apps/identity/kanidm/app/person-kelchm.yaml). Kaniop 0.21.0 creates the account; this procedure sets its first credentials without the reset link leaving your terminal.
+People sign in to Kanidm with accounts declared as `KanidmPersonAccount` resources beside [`person-kelchm.yaml`](../../kubernetes/apps/identity/kanidm/app/person-kelchm.yaml). Kaniop creates the account; this procedure sets its first credentials without the reset link leaving your terminal.
 
 ## Why not kaniop's default
 
 With the default `credentialBootstrapDelivery: event`, kaniop answers a person with no credentials by creating a reset token and publishing its link in a `TokenCreated` Kubernetes Event, and it publishes a new one each time the previous token expires (`credentialsTokenTtl`, default one hour) until credentials are set. Anything that can read Events in `identity` can read the link, including the `view`-bound MCP service accounts in `ai`. The events collector redacts the token before it reaches VictoriaLogs (see [Query-string redaction](logging.md#query-string-redaction)), but that is a backstop, not the delivery channel.
 
-`credentialBootstrapDelivery: email` asks kaniop to have Kanidm email the link instead. No Kanidm mail sender is configured, so kaniop issues no token at all: it fails closed with a `MailSenderNotConfigured` warning Event and a `CredentialBootstrapDelivery=False` condition, and never falls back to an Event link (kaniop 0.21.0, `libs/person/src/reconcile.rs`). That leaves the reset token to you.
+`credentialBootstrapDelivery: email` asks kaniop to have Kanidm email the link instead. No Kanidm mail sender is configured, so kaniop issues no token at all: it fails closed with a `MailSenderNotConfigured` warning Event and a `CredentialBootstrapDelivery=False` condition, and never falls back to an Event link. The bootstrap status records only the token's expiry, never the token. This was read in `libs/person/src/reconcile.rs` and `crd.rs` at kaniop 0.21.0, 0.21.1 and 0.22.1, where the person code is identical; check it again before a kaniop update that changes `libs/person`. That leaves the reset token to you.
+
+If a mail sender is ever configured on the `Kanidm` resource (`spec.mailSender`), email delivery stops failing closed and Kanidm emails the link to the person's `mail` address instead.
 
 ## Add a person
 
