@@ -43,7 +43,7 @@ These times precede scrape/evaluation and notification delays; the metrics evalu
 
 For the quickest diagnosis, compare the probe Job's logs and start time with MCPHub's pod replacement/readiness and the CronJob's `lastSuccessfulTime`. A 502/connection failure during the replacement gap followed by a successful scheduled run indicates a recovered restart interruption; the older failed Job can still keep its critical branch firing for the remainder of its ten-minute window. A repeated failure after the replacement pod is Ready needs investigation: 401/403 suggests key loading or tool authorization, 404 suggests the route/tool name, and DNS/TLS/timeouts suggest name resolution or the network path. Read Job events for scheduling or missing-Secret failures. Confirm existing clients reconnect and still list their normal tools. Do not infer recovery merely from the gateway pod being Ready: the functional check must succeed.
 
-Read-only commands for that window (add the explicit main-checkout `--kubeconfig` path when running from a T3 worktree):
+Read-only commands for that window (add the explicit main-checkout `--kubeconfig` path when running from a T3 worktree). Prefer the newest retained Job with failed pods and no success, falling back to the newest probe Job when none matches, so a later success does not hide the failure behind an active alert:
 
 ```sh
 kubectl -n ai get pods -l app.kubernetes.io/name=mcphub -o wide
@@ -52,6 +52,8 @@ kubectl -n ai get jobs --sort-by=.metadata.creationTimestamp
 PROBE_JOB=$(kubectl -n ai get jobs -o json | jq -r '
   [.items[] | select(any(.metadata.ownerReferences[]?;
     .kind == "CronJob" and .name == "grafana-mcp-functional-probe"))]
+  | map(select((.status.failed // 0) > 0 and (.status.succeeded // 0) == 0)) as $failed
+  | (if ($failed | length) > 0 then $failed else . end)
   | max_by(.metadata.creationTimestamp) | .metadata.name // empty')
 if [ -n "$PROBE_JOB" ]; then
   kubectl -n ai logs "job/$PROBE_JOB" --all-containers=true --prefix=true
