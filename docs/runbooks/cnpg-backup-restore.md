@@ -398,7 +398,7 @@ Copy only the data needed back: run `pg_dump` through `kubectl -n <ns> exec <res
 
 ### 2. After the Cluster or the whole Kubernetes cluster is rebuilt
 
-Nothing to do by hand. The Visionect and Bambuddy Cluster manifests carry a permanent `bootstrap.recovery` stanza (Dawarich gets one after its first base backup; until then a rebuild starts empty, see the [Dawarich runbook](dawarich.md#after-the-first-deployment)), which CloudNativePG reads only when it creates a data directory. When Flux applies a Cluster that has no volume, it restores the newest base backup, replays the archived WAL, and carries on archiving into the same archive on a new timeline.
+Nothing to do by hand. The Visionect, Bambuddy and Dawarich Cluster manifests carry a permanent `bootstrap.recovery` stanza, which CloudNativePG reads only when it creates a data directory. When Flux applies a Cluster that has no volume, it restores the newest base backup, replays the archived WAL, and carries on archiving into the same archive on a new timeline.
 
 - It needs the plugin, the `ObjectStore`, the backup secret and the store on Athena. Flux orders the first three; the Cluster's Kustomization depends on `plugin-barman-cloud`.
 - It only fires for a new volume. To force it for an existing Cluster, see [Replace a database](#replace-a-database).

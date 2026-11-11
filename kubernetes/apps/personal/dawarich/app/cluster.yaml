@@ -7,10 +7,9 @@ apiVersion: postgresql.cnpg.io/v1
 kind: Cluster
 metadata:
   name: dawarich-db
-  # No skipEmptyWalArchiveCheck yet: while the bootstrap is initdb, a rebuild
-  # would start an empty database, and CloudNativePG's check is what stops it
-  # archiving over the existing backups. Add the annotation together with
-  # bootstrap.recovery, as the other databases have it.
+  annotations:
+    # A rebuilt cluster recovers from, then archives into, the same archive.
+    cnpg.io/skipEmptyWalArchiveCheck: enabled
 spec:
   instances: 2
   primaryUpdateMethod: switchover
@@ -44,17 +43,21 @@ spec:
     pg_hba:
       - host all all 10.32.25.0/24 reject
       - host all all ::/0 reject
-  # First start only: an empty database. PostGIS is not a trusted extension,
-  # so the superuser creates it here; Dawarich's migrations then find it.
-  # Once the first base backup completes, replace this with the permanent
-  # bootstrap.recovery stanza used by the other databases (#1419).
+  # Read only when the Cluster is created: a rebuild restores the newest
+  # backup. The first start used initdb, which created the PostGIS and
+  # pgcrypto extensions; the archive carries them from then on.
   bootstrap:
-    initdb:
+    recovery:
+      source: dawarich-db
       database: dawarich
       owner: dawarich
-      postInitApplicationSQL:
-        - CREATE EXTENSION IF NOT EXISTS postgis
-        - CREATE EXTENSION IF NOT EXISTS pgcrypto
+  externalClusters:
+    - name: dawarich-db
+      plugin:
+        name: barman-cloud.cloudnative-pg.io
+        parameters:
+          barmanObjectName: dawarich-db
+          serverName: dawarich-db-pg17
   plugins:
     - name: barman-cloud.cloudnative-pg.io
       isWALArchiver: true
