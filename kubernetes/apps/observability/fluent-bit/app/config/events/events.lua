@@ -17,6 +17,20 @@ local function text(v)
   if type(v) == 'string' and v ~= '' then return v end
 end
 
+-- Query parameters whose values are credentials, as in normalize.lua: kaniop's
+-- TokenCreated event carries a Kanidm credential reset link (`/ui/reset?token=`).
+local SECRET_PARAMS = {}
+for _, name in ipairs({ 'access_token', 'api-key', 'api_key', 'apikey', 'client_secret', 'code',
+  'id_token', 'key', 'password', 'refresh_token', 'secret', 'secret_key', 'state', 'token' }) do
+  SECRET_PARAMS[name] = true
+end
+
+local function redact_query(s)
+  return (s:gsub('([?&])([^=&?#%s"]+)=([^&#%s"]+)', function(sep, name, value)
+    if SECRET_PARAMS[name:lower()] then return sep .. name .. '=REDACTED' end
+  end))
+end
+
 -- Days from 1970-01-01 to a civil date (Howard Hinnant's days_from_civil), so
 -- the time needs no timezone.
 local function days(y, m, d)
@@ -64,7 +78,7 @@ function normalize(tag, ts, group, metadata, record)
   if kind and not severity then attributes['pipeline.severity_unmapped'] = true end
   attributes.otlp = { severity_number = severity or 0, severity_text = kind }
   local body = string.format('%s %s/%s: %s', text(record.reason) or '', text(object.kind) or '',
-    text(object.name) or '', text(record.message) or '')
+    text(object.name) or '', redact_query(text(record.message) or ''))
   local out = { body = body, resource = { attributes = RESOURCE } }
   -- The input dates a series by its creation; its last occurrence is when this write happened.
   local last = microtime(series.lastObservedTime)

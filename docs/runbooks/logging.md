@@ -45,6 +45,12 @@ kustomize-controller runs with `GroupChangeLog`, so its applied-object log lists
 
 To give a workload a better service name than its labels produce, set `resource.opentelemetry.io/service.name` on its pod template.
 
+### Query-string redaction
+
+Clients that authenticate with a query parameter put the credential in the request path: SABnzbd's `apikey`, the *arr SignalR `access_token`, Jellyfin's `ApiKey`, Bambuddy's `token`, and the OAuth `code` and `state` on `/oidc/callback` and similar sign-in callbacks. `normalize.lua` replaces the value of each parameter in its `SECRET_PARAMS` list with `REDACTED` in Traefik's `RequestPath` before the message and `url.query` are built, and in the raw line of a record that fails mapping. Names match case-insensitively and whole, so `codeMode` and `limit` stay; an empty value stays empty. `events.lua` applies the same list to [Kubernetes event](#event-fields) messages, which covers kaniop's credential reset link (`/ui/reset?token=`). Add a parameter to both lists, with a fixture, when a new client sends one. Application log lines are not redacted: an application that logs its own request URLs keeps them.
+
+Rows stored before the redaction was deployed age out with VictoriaLogs' 30-day retention.
+
 Record time is the container runtime's timestamp for the line. Application timestamp fields stay application fields, except on Traefik access lines: `time` (the record time, to the second) and `StartLocal` (a copy of `StartUTC`) are dropped. Integers above 2^53 lose precision in Fluent Bit's Lua filter, which converts every number to a double.
 
 Levels come from structured fields (JSON, logfmt, PostgreSQL's `record.error_severity`), klog's leading letter, or a level token at a fixed position in known plain-text formats. Words elsewhere in a line never set severity; an unknown level is stored as unspecified rather than guessed. Terminal colour codes are removed before parsing, and blank lines are dropped. Each line is one record, so continuation lines (Python tracebacks, mcphub's multi-line JSON) are the main unspecified source; read a whole event with **Show context**. The [evaluation](../evaluations/log-schema-and-collector.md#multi-line-events) records why lines are not grouped at collection.
@@ -270,7 +276,7 @@ The `fluent-bit-events` collector, one replica of the node collectors' chart and
 
 | Field | Content |
 | --- | --- |
-| `_msg` | The reason, involved object and message, in the order `kubectl events` shows them, as in `Unhealthy Pod/prowlarr-7d6c5b4a3-z9xwv: Readiness probe failed: …`. Events stored before this line format was deployed on October 22, 2026 hold the message alone until retention removes them. |
+| `_msg` | The reason, involved object and message, in the order `kubectl events` shows them, as in `Unhealthy Pod/prowlarr-7d6c5b4a3-z9xwv: Readiness probe failed: …`, with [credential query parameters](#query-string-redaction) redacted. Events stored before this line format was deployed on October 22, 2026 hold the message alone until retention removes them. |
 | `severity_number`, `severity_text` | `Normal` is 9 (info), `Warning` 13 (warn), `Error` 17 and `Critical` 21, with the type as the text. Any other type is stored as unspecified with `pipeline.severity_unmapped`. |
 | `k8s.namespace.name` | The involved object's namespace, absent for cluster-scoped objects such as nodes. Stream field. |
 | `k8s.object.kind`, `k8s.object.name`, `k8s.object.uid`, `k8s.object.fieldpath`, `k8s.object.api_version`, `k8s.object.resource_version` | The involved object. `fieldpath` names a container, as in `spec.containers{app}`. |
@@ -501,7 +507,7 @@ Measured 2026-09-18 over a 24-hour window with `stats by (service_name) count()`
 | mcphub | 8.3k | all | None documented in the evaluation. | Keep native output; explicit logger prefixes are covered in the later collector evaluation. |
 | multus | 7.4k | all | None established for the deployed klog emitter. | Keep native output. |
 
-Traefik access logs carry their request fields under HTTP semantic-convention names and use Traefik's own `common` line as the message. Do not infer severity from access-log text; filter on `http.response.status_code` or `error.type`. Native source-format changes, noisy-log reduction and secret/PII redaction remain separate work.
+Traefik access logs carry their request fields under HTTP semantic-convention names and use Traefik's own `common` line as the message. Do not infer severity from access-log text; filter on `http.response.status_code` or `error.type`. Credential query parameters are redacted; see [Query-string redaction](#query-string-redaction). Native source-format changes, noisy-log reduction and wider secret/PII redaction remain separate work.
 
 ## Pipeline failures
 

@@ -423,6 +423,45 @@
       }
     },
     {
+      "name": "kaniop reset link is redacted",
+      "phase": "list",
+      "times": {
+        "creationTimestamp": 300,
+        "firstTimestamp": 300,
+        "lastTimestamp": 300
+      },
+      "event": {
+        "metadata": {
+          "name": "newuser.18a1f2c3d4e5f614",
+          "namespace": "identity",
+          "uid": "e0000000-0000-4000-8000-000000000014",
+          "resourceVersion": "110"
+        },
+        "involvedObject": {
+          "kind": "KanidmPersonAccount",
+          "namespace": "identity",
+          "name": "newuser",
+          "uid": "a0000000-0000-4000-8000-000000000014",
+          "apiVersion": "kaniop.rs/v1beta1",
+          "resourceVersion": "5014"
+        },
+        "reason": "TokenCreated",
+        "message": "Update these user credentials with this link: https://auth.home.kelch.io/ui/reset?token=AbCdE-fGhIj_KlMnO. This token will expire at: 2026-10-18T20:00:00Z",
+        "source": {
+          "component": "kaniop"
+        },
+        "count": 1,
+        "type": "Normal",
+        "action": "CreateUpdateCredentialsToken",
+        "reportingComponent": "kaniop",
+        "reportingInstance": "kaniop-0"
+      },
+      "expect": {
+        "timestamp": "lastTimestamp",
+        "body": "TokenCreated KanidmPersonAccount/newuser: Update these user credentials with this link: https://auth.home.kelch.io/ui/reset?token=REDACTED This token will expire at: 2026-10-18T20:00:00Z"
+      }
+    },
+    {
       "name": "the repeated warning's next count arrives from the watch",
       "phase": "watch",
       "watch_type": "MODIFIED",
