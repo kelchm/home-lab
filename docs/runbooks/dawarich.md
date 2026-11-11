@@ -8,8 +8,8 @@ The raw Google Timeline export on Athena (`/volume1/homes/kelchm/cloud-backups/g
 
 | Part | Detail |
 |---|---|
-| App | `freikin/dawarich`, one pod. Background jobs run inside the web process (`SIDEKIQ_EMBEDDED`), so there is no separate worker. Every start runs database migrations and seeds before the server listens. |
-| Valkey | Sidecar on `127.0.0.1:6379` holding the job queue, cache and websocket state. Not persisted: a restart drops queued jobs, so re-run an import that was in flight. |
+| App | `freikin/dawarich`, one pod with a web container and a worker container. The web container runs migrations and seeds on every start, then serves; the worker runs background jobs (`sidekiq-entrypoint.sh`). Jobs used to run embedded in the web process, but after the first big import their CPU load starved the web process until health checks timed out and the site returned 503. |
+| Valkey | Sidecar on `127.0.0.1:6379` holding the job queue, cache and websocket state. Not persisted: a restart of the Valkey container or a pod replacement drops queued and running jobs. Re-run an import that was in flight (delete it under Imports and upload the file again), and re-queue track generation for untracked points (below). Stats recalculate hourly on their own. |
 | Database | `dawarich-db`, CloudNativePG PostgreSQL 17 with PostGIS, two instances, WAL archiving and daily base backups to Athena bucket `k8s-prod-dawarich-db`. See the [CloudNativePG runbook](cnpg-backup-restore.md). |
 | Files | 20 GiB Longhorn volume at `/var/app/storage` for uploaded imports and exports. `/var/app/public`, `/var/app/tmp` and `/tmp` are scratch. |
 
@@ -31,6 +31,21 @@ The raw Google Timeline export on Athena (`/volume1/homes/kelchm/cloud-backups/g
 ## Import Google Timeline
 
 Use the phone's own export (Google Maps → Settings → Personal content → Export Timeline data). Dawarich detects the format, including the on-device `Timeline.json`, Takeout `Records.json` and Semantic Location History. Upload it under Imports → New from a browser on the LAN; the import runs as a background job. Spot-check a few days you remember against the export.
+
+## Re-queue track generation
+
+Imports queue track building per day of history; a large import leaves thousands of jobs. If Valkey restarts or the pod is replaced before they finish, re-queue the remainder. It only touches points not yet in a track:
+
+```sh
+kubectl -n personal exec deploy/dawarich -c app -- bin/rails runner '
+  User.find_each do |u|
+    first, last = u.points.pick(Arel.sql("MIN(timestamp), MAX(timestamp)"))
+    next unless first
+    Tracks::ParallelGeneratorJob.perform_later(u.id, start_at: Time.zone.at(first), end_at: Time.zone.at(last), mode: :bulk, untracked_only: true)
+  end'
+```
+
+It runs for every user with points; `untracked_only` makes it a no-op where tracks are complete.
 
 ## Phone tracking
 
