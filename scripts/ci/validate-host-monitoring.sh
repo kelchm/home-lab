@@ -129,7 +129,11 @@ if ! diff -r -q "${ROOT_DIR}/proxmox/monitoring/logs" "${ROOT_DIR}/sparks/monito
     violation "proxmox/monitoring/logs and sparks/monitoring/logs must be identical"
 fi
 
-if ! diff -r -q "${ROOT_DIR}/proxmox/monitoring/logs" "${ROOT_DIR}/synology/monitoring/logs" >/dev/null; then
+# The NAS runs its output in a worker thread while #1432 trials that there:
+# synced writes to its scrubbing RAID stalled the engine thread, and the output
+# shared it. Only that marked line may differ. Remove the exception when #1432
+# settles whether every host gets the worker.
+if ! diff -r -q -I '# NAS-only trial, #1432$' "${ROOT_DIR}/proxmox/monitoring/logs" "${ROOT_DIR}/synology/monitoring/logs" >/dev/null; then
     violation "proxmox/monitoring/logs and synology/monitoring/logs must be identical"
 fi
 
