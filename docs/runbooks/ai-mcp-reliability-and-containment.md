@@ -36,7 +36,7 @@ Changing MCPHub's settings Secret triggers Stakater Reloader and a single-pod `R
 Flux applies the probe CronJob/Secret and the MCPHub settings through separate Kustomizations; MCPHub depends on grafana-mcp, but the CronJob scheduler does not wait for the new gateway key to load. After the settings Secret changes, Stakater Reloader asynchronously restarts MCPHub using its single-pod `Recreate` strategy. There is no guaranteed restart duration or ordering relative to a probe run. Merge just after a successful scheduled run if practical, leaving almost five minutes before the next run at wall-clock minutes :00, :05, :10, and so on. Do not assume a ten-minute grace period.
 
 - **Failed Job branch, critical:** an unsuccessful Job with failed pod count greater than zero, no success for that same Job, and a start time less than ten minutes ago starts a two-minute `for` timer. It can fire about two minutes after the failure is first scraped, even when the previous run succeeded recently. Each Job permits one retry and has a 120-second total deadline. A subsequent scheduled Job's success does not clear an older failed Job's branch; that branch remains eligible until ten minutes after the failed Job's own start time or until its metrics disappear.
-- **Stale success branch, critical:** a last-success timestamp older than ten minutes starts the same two-minute `for` timer, so this branch fires just over twelve minutes after the last success, rather than twelve minutes after merge. A fresh success resets it.
+- **Stale success branch, critical:** the same two-minute `for` timer starts when vmalert first observes a last-success timestamp older than ten minutes. With uninterrupted evaluation across that threshold, firing is just over twelve minutes after the last success. If a newly loaded rule or newly observed series is already stale, firing can instead begin about two minutes after that first observation, regardless of how old the success is. A timer already pending before merge retains its elapsed time; merge does not grant a fresh two-minute hold. A fresh success resets this branch.
 - **Missing success metric, warning:** twelve continuous minutes without a last-success series fires the missing alert. A failed first-ever run can still trigger the critical failed-Job branch before this warning.
 
 These times precede scrape/evaluation and notification delays; the metrics evaluator runs every 30 seconds and Alertmanager normally waits 30 seconds before a group's first notification. Timers already pending before merge do not acquire a new grace period.
@@ -49,8 +49,16 @@ Read-only commands for that window (add the explicit main-checkout `--kubeconfig
 kubectl -n ai get pods -l app.kubernetes.io/name=mcphub -o wide
 kubectl -n ai get cronjob grafana-mcp-functional-probe -o yaml
 kubectl -n ai get jobs --sort-by=.metadata.creationTimestamp
-kubectl -n ai logs job/<probe-job-name> --all-containers=true --prefix=true
-kubectl -n ai describe job <probe-job-name>
+PROBE_JOB=$(kubectl -n ai get jobs -o json | jq -r '
+  [.items[] | select(any(.metadata.ownerReferences[]?;
+    .kind == "CronJob" and .name == "grafana-mcp-functional-probe"))]
+  | max_by(.metadata.creationTimestamp) | .metadata.name // empty')
+if [ -n "$PROBE_JOB" ]; then
+  kubectl -n ai logs "job/$PROBE_JOB" --all-containers=true --prefix=true
+  kubectl -n ai describe job "$PROBE_JOB"
+else
+  printf '%s\n' 'No retained functional-probe Job was found.'
+fi
 ```
 
 After rollout, an optional manual check follows the existing procedure:

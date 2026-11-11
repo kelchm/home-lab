@@ -553,7 +553,7 @@
       ]
     },
     {
-      "name": "Probe disappears, waits for missing window and hold, then recovers",
+      "name": "Probe disappears, holds, and recovers when samples return at 18m",
       "interval": "1m",
       "input_series": [
         {
@@ -624,7 +624,7 @@
         },
         {
           "expr": "count by (probe, instance, severity) (ALERTS{alertname=\"ProbeMetricsMissing\",alertstate=\"firing\"})",
-          "eval_time": "17m",
+          "eval_time": "16m",
           "exp_samples": [
             {
               "labels": "{probe=\"grafana\",instance=\"ups-compute-rack\",severity=\"warning\"}",
@@ -636,6 +636,21 @@
           "expr": "count by (probe, instance, severity) (ALERTS{alertname=\"ProbeMetricsMissing\",alertstate=\"firing\"})",
           "eval_time": "18m",
           "exp_samples": []
+        },
+        {
+          "expr": "probe_success{job=\"pi-blackbox\",instance=\"ups-compute-rack\",platform=\"pi\",probe=\"grafana\"}",
+          "eval_time": "17m",
+          "exp_samples": []
+        },
+        {
+          "expr": "probe_success{job=\"pi-blackbox\",instance=\"ups-compute-rack\",platform=\"pi\",probe=\"grafana\"}",
+          "eval_time": "18m",
+          "exp_samples": [
+            {
+              "labels": "probe_success{job=\"pi-blackbox\",instance=\"ups-compute-rack\",platform=\"pi\",probe=\"grafana\"}",
+              "value": 1
+            }
+          ]
         }
       ]
     },
