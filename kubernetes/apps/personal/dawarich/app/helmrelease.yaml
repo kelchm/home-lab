@@ -1,0 +1,249 @@
+---
+# Dawarich: private location-history archive (#1419).
+#
+# Private only: the household gateway serves it at home, and NetBird's
+# existing permit to that gateway serves it away. Nothing is published to
+# the internet. Since 1.17 background jobs run embedded in the web process,
+# so one container plus a Valkey sidecar is the whole application.
+apiVersion: helm.toolkit.fluxcd.io/v2
+kind: HelmRelease
+metadata:
+  name: dawarich
+spec:
+  chartRef:
+    kind: OCIRepository
+    name: dawarich
+  interval: 1h
+  values:
+    controllers:
+      dawarich:
+        # Every start runs migrations. One instance at a time; the import
+        # volume is RWO.
+        strategy: Recreate
+        pod:
+          # Matches upstream compose: lets embedded jobs finish.
+          terminationGracePeriodSeconds: 60
+        initContainers:
+          # Ruby refuses a world-writable /tmp without the sticky bit, and
+          # emptyDir is created 0777. Only this step runs as root.
+          tmp-permissions:
+            image: &image
+              # renovate: datasource=docker depName=freikin/dawarich
+              repository: docker.io/freikin/dawarich
+              tag: 1.22.0@sha256:b8ee8d9fdff92a9d6ca570f98e0e875624f4bfb24b61363f8246bba124d5849d
+            command: ["chmod", "1777", "/tmp"]
+            securityContext:
+              runAsUser: 0
+              runAsNonRoot: false
+              allowPrivilegeEscalation: false
+              readOnlyRootFilesystem: true
+              capabilities:
+                drop: ["ALL"]
+                add: ["FOWNER"]
+        containers:
+          app:
+            image: *image
+            command: ["web-entrypoint.sh"]
+            args: ["bin/rails", "server", "-p", "3000", "-b", "0.0.0.0"]
+            env:
+              RAILS_ENV: production
+              SELF_HOSTED: "true"
+              TIME_ZONE: America/New_York
+              APPLICATION_HOSTS: &host dawarich.home.kelch.io
+              # Traefik terminates TLS; this turns on secure cookies and the
+              # HTTPS redirect, which the probes satisfy with X-Forwarded-Proto.
+              APPLICATION_PROTOCOL: https
+              SIDEKIQ_EMBEDDED: "true"
+              WEB_CONCURRENCY: "0"
+              BACKGROUND_PROCESSING_CONCURRENCY: "2"
+              REDIS_URL: redis://127.0.0.1:6379
+              # Discrete variables: the entrypoint's DATABASE_URL parsing does
+              # no URL decoding.
+              DATABASE_HOST:
+                valueFrom:
+                  secretKeyRef: { name: dawarich-db-app, key: host }
+              DATABASE_PORT:
+                valueFrom:
+                  secretKeyRef: { name: dawarich-db-app, key: port }
+              DATABASE_USERNAME:
+                valueFrom:
+                  secretKeyRef: { name: dawarich-db-app, key: username }
+              DATABASE_PASSWORD:
+                valueFrom:
+                  secretKeyRef: { name: dawarich-db-app, key: password }
+              DATABASE_NAME:
+                valueFrom:
+                  secretKeyRef: { name: dawarich-db-app, key: dbname }
+            envFrom:
+              - secretRef:
+                  name: dawarich-secret
+            probes:
+              # Migrations run before the server listens; new releases can
+              # carry long data migrations.
+              startup:
+                enabled: true
+                custom: true
+                spec:
+                  httpGet: &health
+                    path: /api/v1/health
+                    port: &port 3000
+                    httpHeaders:
+                      - name: X-Forwarded-Proto
+                        value: https
+                  periodSeconds: 10
+                  timeoutSeconds: 5
+                  failureThreshold: 180
+              liveness:
+                enabled: true
+                custom: true
+                spec:
+                  httpGet: *health
+                  periodSeconds: 30
+                  timeoutSeconds: 5
+                  failureThreshold: 3
+              # Checks PostgreSQL and Valkey. Unlike /health, it is subject to
+              # the allowed-host check.
+              readiness:
+                enabled: true
+                custom: true
+                spec:
+                  httpGet:
+                    path: /api/v1/ready
+                    port: *port
+                    httpHeaders:
+                      - name: Host
+                        value: *host
+                      - name: X-Forwarded-Proto
+                        value: https
+                  periodSeconds: 15
+                  timeoutSeconds: 5
+                  failureThreshold: 3
+            securityContext: &container-security
+              allowPrivilegeEscalation: false
+              readOnlyRootFilesystem: true
+              capabilities: { drop: ["ALL"] }
+            resources:
+              requests:
+                cpu: 200m
+                memory: 512Mi
+              limits:
+                # Imports stream in batches since 1.10.1; headroom for large
+                # Timeline exports and data migrations.
+                memory: 3Gi
+          # Job queue, cache and websocket state. Not persisted: a restart
+          # drops queued jobs, so re-run an import that was in flight.
+          valkey:
+            image:
+              repository: docker.io/valkey/valkey
+              tag: 9.0.7@sha256:7e1deda01b64ece3167d370ab5be3452d29734feec22cbcbc69b3a64f6859d6d
+            command: ["valkey-server"]
+            args:
+              - --bind
+              - 127.0.0.1
+              - --save
+              - ""
+              - --appendonly
+              - "no"
+              # Sidekiq needs every job kept: refuse writes at the cap rather
+              # than evict, and stay under the container limit so a full
+              # queue errors instead of being OOM-killed.
+              - --maxmemory
+              - 200mb
+              - --maxmemory-policy
+              - noeviction
+            probes:
+              readiness: &valkey-probe
+                enabled: true
+                custom: true
+                spec:
+                  exec:
+                    command: ["valkey-cli", "ping"]
+                  periodSeconds: 10
+                  timeoutSeconds: 3
+                  failureThreshold: 3
+              liveness: *valkey-probe
+            securityContext: *container-security
+            resources:
+              requests:
+                cpu: 10m
+                memory: 32Mi
+              limits:
+                memory: 256Mi
+    defaultPodOptions:
+      securityContext:
+        # The image declares no USER; Dawarich documents running as 1000.
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        fsGroup: 1000
+        fsGroupChangePolicy: OnRootMismatch
+        seccompProfile: { type: RuntimeDefault }
+    service:
+      app:
+        controller: dawarich
+        ports:
+          http:
+            port: *port
+    persistence:
+      # Uploaded imports and generated exports.
+      storage:
+        type: persistentVolumeClaim
+        storageClass: longhorn
+        size: 20Gi
+        accessMode: ReadWriteOnce
+        advancedMounts:
+          dawarich:
+            app:
+              - path: /var/app/storage
+      # Rewritten from the image on every start.
+      public:
+        type: emptyDir
+        advancedMounts:
+          dawarich:
+            app:
+              - path: /var/app/public
+      # PID file, cache, and import/export working files; kept on disk so a
+      # large import does not count against memory. Dawarich caps an
+      # extracted ZIP at 2 GB; the limit evicts this pod, not the node.
+      app-tmp:
+        type: emptyDir
+        sizeLimit: 10Gi
+        advancedMounts:
+          dawarich:
+            app:
+              - path: /var/app/tmp
+      # Rack spools uploads here, so a Timeline upload lands in /tmp first.
+      tmp:
+        type: emptyDir
+        sizeLimit: 5Gi
+        advancedMounts:
+          dawarich:
+            tmp-permissions:
+              - path: /tmp
+            app:
+              - path: /tmp
+      valkey-data:
+        type: emptyDir
+        advancedMounts:
+          dawarich:
+            valkey:
+              - path: /data
+    route:
+      app:
+        annotations:
+          gethomepage.dev/enabled: "true"
+          gethomepage.dev/group: Home
+          gethomepage.dev/name: Dawarich
+          gethomepage.dev/href: https://dawarich.home.kelch.io
+          gethomepage.dev/icon: dawarich.svg
+          gethomepage.dev/description: Location history
+          gethomepage.dev/weight: "40"
+        hostnames: [*host]
+        parentRefs:
+          - name: gateway-services
+            namespace: network
+            sectionName: https
+        rules:
+          - backendRefs:
+              - identifier: app
+                port: *port

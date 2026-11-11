@@ -153,6 +153,7 @@
       // already supports. Patches still flow; 8.x and 9.x do not.
       description: "Valkey: cap the VSS cache sidecar at the 7.x series",
       matchDatasources: ["docker"],
+      matchFileNames: ["kubernetes/apps/iot/visionect/app/helmrelease.yaml"],
       matchPackageNames: ["docker.io/valkey/valkey"],
       allowedVersions: "<8.0.0",
     },
@@ -222,9 +223,20 @@
       // A PostgreSQL major upgrade is a data migration, not an image bump.
       description: "CloudNativePG PostgreSQL: offer minor releases only",
       matchDatasources: ["docker"],
-      matchPackageNames: ["ghcr.io/cloudnative-pg/postgresql"],
+      matchPackageNames: ["ghcr.io/cloudnative-pg/postgresql", "ghcr.io/cloudnative-pg/postgis"],
       matchUpdateTypes: ["major"],
       enabled: false,
+    },
+    {
+      // PostGIS tags carry both versions, as in 17.11-3.6.4-system-trixie.
+      // Docker versioning would treat 3.6.4-system-trixie as a fixed suffix
+      // and never offer a PostGIS update. Map PostgreSQL to major.minor so its
+      // majors stay held back above, and PostGIS to the later components.
+      // Dated rebuild tags do not match and are ignored.
+      description: "CloudNativePG PostGIS: version PostgreSQL and PostGIS together",
+      matchDatasources: ["docker"],
+      matchPackageNames: ["ghcr.io/cloudnative-pg/postgis"],
+      versioning: "regex:^(?<major>\\d+)\\.(?<minor>\\d+)-(?<patch>\\d+)\\.(?<build>\\d+)\\.(?<revision>\\d+)-(?<compatibility>[a-z]+-[a-z]+)$",
     },
     {
       description: "Override Helmfile Dependency Name",

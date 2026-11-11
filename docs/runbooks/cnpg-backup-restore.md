@@ -238,7 +238,7 @@ Rules are in [`alerts.yaml`](../../kubernetes/apps/cnpg-system/plugin-barman-clo
 
 ### Streaming standby is missing
 
-`CNPGStreamingStandbyMissing` warns after **10 minutes** with a database instance reporting up but no primary exporter confirming the required streaming standby. Visionect and Bambuddy each desire two instances and require one standby; CI checks the rule against `spec.instances - 1`. Other singletons are outside these selectors. For a planned return to one instance, remove that Cluster's standby-loss rule.
+`CNPGStreamingStandbyMissing` warns after **10 minutes** with a database instance reporting up but no primary exporter confirming the required streaming standby. Visionect, Bambuddy and Dawarich each desire two instances and require one standby; CI checks the rule against `spec.instances - 1`. Other singletons are outside these selectors. For a planned return to one instance, remove that Cluster's standby-loss rule.
 
 The stock sender-count metric includes `catchup`. The custom `ha` query in each Cluster's `monitoring.yaml` counts physical-slot senders in `streaming` state using CNPG's replication identity. It excludes `*-join` base-backup streams and slots with an `invalidation_reason`, which are not usable standbys. PostgreSQL 17 can keep streaming on an invalidated slot without retaining WAL; that standby now makes this existing warning fire after 10 minutes. Follow [A lost standby](#a-lost-standby) for recovery. `primary: true` stops emission after demotion; failed queries drop the metric and failed scrapes mark series stale. A qualifying streaming connection does not prove replay progress or zero-loss failover. Longhorn replica counts are separate.
 
@@ -398,7 +398,7 @@ Copy only the data needed back: run `pg_dump` through `kubectl -n <ns> exec <res
 
 ### 2. After the Cluster or the whole Kubernetes cluster is rebuilt
 
-Nothing to do by hand. Both Cluster manifests carry a permanent `bootstrap.recovery` stanza, which CloudNativePG reads only when it creates a data directory. When Flux applies a Cluster that has no volume, it restores the newest base backup, replays the archived WAL, and carries on archiving into the same archive on a new timeline.
+Nothing to do by hand. The Visionect and Bambuddy Cluster manifests carry a permanent `bootstrap.recovery` stanza (Dawarich gets one after its first base backup; until then a rebuild starts empty, see the [Dawarich runbook](dawarich.md#after-the-first-deployment)), which CloudNativePG reads only when it creates a data directory. When Flux applies a Cluster that has no volume, it restores the newest base backup, replays the archived WAL, and carries on archiving into the same archive on a new timeline.
 
 - It needs the plugin, the `ObjectStore`, the backup secret and the store on Athena. Flux orders the first three; the Cluster's Kustomization depends on `plugin-barman-cloud`.
 - It only fires for a new volume. To force it for an existing Cluster, see [Replace a database](#replace-a-database).

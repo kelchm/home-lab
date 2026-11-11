@@ -1,0 +1,125 @@
+---
+# Default-deny policy for Dawarich. Inbound is only the household gateway.
+# Outbound is DNS and its own database: no internet. With nothing configured,
+# Dawarich's place search would fall back to public Nominatim and send the
+# query there; this policy keeps every location lookup inside the lab.
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: dawarich
+spec:
+  endpointSelector:
+    matchLabels:
+      app.kubernetes.io/name: dawarich
+  ingress:
+    - fromEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: network
+            app.kubernetes.io/instance: traefik-services-network
+            io.cilium.k8s.policy.serviceaccount: traefik-services
+      toPorts:
+        - ports:
+            - port: "3000"
+              protocol: TCP
+  egress:
+    - toEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: kube-system
+            k8s-app: kube-dns
+      toPorts:
+        - ports:
+            - port: "53"
+              protocol: UDP
+            - port: "53"
+              protocol: TCP
+    - toEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: personal
+            cnpg.io/cluster: dawarich-db
+      toPorts:
+        - ports:
+            - port: "5432"
+              protocol: TCP
+---
+# CNPG is reachable only from Dawarich, the CNPG operator, and the established
+# metrics scrapers. CNPG operator traffic is ordinary pod traffic, not a host
+# entity. Same-cluster peers are admitted so increasing instances does not
+# silently break replication or instance-manager coordination.
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: dawarich-db
+spec:
+  endpointSelector:
+    matchLabels:
+      cnpg.io/cluster: dawarich-db
+  ingress:
+    - fromEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: personal
+            app.kubernetes.io/name: dawarich
+      toPorts:
+        - ports:
+            - port: "5432"
+              protocol: TCP
+    - fromEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: cnpg-system
+            app.kubernetes.io/instance: cnpg-operator
+            app.kubernetes.io/name: cloudnative-pg
+      toPorts:
+        - ports:
+            - port: "5432"
+              protocol: TCP
+            - port: "8000"
+              protocol: TCP
+    - fromEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: personal
+            cnpg.io/cluster: dawarich-db
+      toPorts:
+        - ports:
+            - port: "5432"
+              protocol: TCP
+            - port: "8000"
+              protocol: TCP
+    - fromEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: observability
+            app.kubernetes.io/name: prometheus
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: observability
+            app.kubernetes.io/name: vmagent
+      toPorts:
+        - ports:
+            - port: "9187"
+              protocol: TCP
+    - fromEntities:
+        - host
+      toPorts:
+        - ports:
+            - port: "8000"
+              protocol: TCP
+  egress:
+    - toEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: kube-system
+            k8s-app: kube-dns
+      toPorts:
+        - ports:
+            - port: "53"
+              protocol: UDP
+            - port: "53"
+              protocol: TCP
+    - toEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: personal
+            cnpg.io/cluster: dawarich-db
+      toPorts:
+        - ports:
+            - port: "5432"
+              protocol: TCP
+            - port: "8000"
+              protocol: TCP
+    - toEntities:
+        - kube-apiserver
