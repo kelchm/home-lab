@@ -15,14 +15,16 @@ The raw Google Timeline export on Athena (`/volume1/homes/kelchm/cloud-backups/g
 
 ## After the first deployment
 
-1. **Replace the seeded admin.** On an empty database, the seeds create the admin `demo@dawarich.app` with password `safepassword`. Change both before anything else. Either sign in and change them under the account settings, or set them from the pod and store the new password in 1Password:
+1. **Replace the seeded admin.** On an empty database, the seeds create the admin `demo@dawarich.app` with password `safepassword`. Change both before anything else. Either sign in and change them under the account settings, or set them from the pod, with the new password stored in 1Password first. The values travel on stdin, so they appear in neither the command line nor the shell history:
 
    ```sh
-   kubectl -n location exec deploy/dawarich -c app -- bin/rails runner \
-     'u = User.find_by!(email: "demo@dawarich.app"); u.update!(email: ENV.fetch("NEW_EMAIL"), password: ENV.fetch("NEW_PASSWORD"), password_confirmation: ENV.fetch("NEW_PASSWORD"))'
+   printf '%s\n%s\n' 'you@example.com' "$(op read 'op://<vault>/<item>/password')" |
+     kubectl -n location exec -i deploy/dawarich -c app -- bin/rails runner '
+       email, password = $stdin.read.split("\n").first(2)
+       User.find_by!(email: "demo@dawarich.app").update!(email: email, password: password, password_confirmation: password)'
    ```
 
-   Pass `NEW_EMAIL` and `NEW_PASSWORD` into the command's environment without writing them to the shell history. Self-registration is off by default (`ALLOW_EMAIL_PASSWORD_REGISTRATION`).
+   Self-registration is off by default (`ALLOW_EMAIL_PASSWORD_REGISTRATION`).
 2. **Accept the database backups** as for the other databases: after the instances are Ready, [take a backup by hand](cnpg-backup-restore.md#take-a-backup-by-hand) and require it to complete, with objects on Athena and a nonzero last-backup metric.
 3. **Switch the database to its permanent bootstrap.** `cluster.yaml` starts with `bootstrap.initdb`, which creates an empty database. Once a base backup has completed, replace it with the `bootstrap.recovery` and `externalClusters` stanzas the other databases use, pointing at `dawarich-db` and `serverName: dawarich-db-pg17`. CloudNativePG reads the bootstrap only when it creates a data directory, so the change does not touch the running database; it makes a rebuild restore the archive instead of starting empty. Do not leave `initdb` in place.
 
