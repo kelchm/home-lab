@@ -18,6 +18,80 @@ Port 80 redirects to HTTPS. The active nginx configuration is copied unchanged f
 
 Restored 2026-10-20 by validating and copying the firmware's nginx configuration, then reloading nginx. The prior web configuration is backed up on the appliance at `/etc/kvmd/user/backups/nginx-kvmd.conf.before-stock-ui-20261020`. The USB compatibility fix, monitoring, and SSH helpers remain applied; switching web interfaces does not require rebuilding USB or restarting kvmd.
 
+## Name and address
+
+**Status:** not yet applied; tracked in [#419](https://github.com/kelchm/home-lab/issues/419). The appliance still answers as `glkvm` on a DHCP address.
+
+The appliance is `kvm-compute-rack.home.kelch.io` at `10.32.20.10`, following the role-plus-rack pattern of `ups-compute-rack`. The name outlives the GL.iNet hardware; the `devices/glkvm/` directory keeps the vendor name because its contents are vendor-specific.
+
+| Setting | Where it is set | Survives a firmware update |
+|---|---|---|
+| DNS record `kvm-compute-rack.home.kelch.io → 10.32.20.10` | UniFi local DNS | Not on the appliance |
+| Hostname `kvm-compute-rack` | GL UI hostname setting, which writes `/etc/hostname` | Yes; the firmware's own pre-update backup keeps `/etc/hostname` |
+| Static `10.32.20.10/24`, gateway and DNS `10.32.20.1` | GL UI network settings (connman) | Yes; `/var/lib/connman` links to `/etc/kvmd/user/connman` |
+
+The address is static on the device so the recovery console does not depend on DHCP. UniFi keeps its fixed assignment for the MAC address as a guard against handing `10.32.20.10` to anything else. PiKVM's `server.host` in `/etc/kvmd/meta.yaml` is left unchanged because the stock UI does not display it.
+
+On a firmware update the firmware itself backs up and restores `/etc/kvmd/user`, `/etc/kvmd/override.yaml`, `/etc/hostname`, `/etc/glinet`, `/etc/shadow`, Dropbear host keys, `/root/.ssh` and the timezone (`/etc/init.d/S23config`). Everything else under `/` can revert to the firmware's copy. That is why all appliance state added here lives in `/etc/kvmd/user`, and anything outside it is restored by a boot script.
+
+## TLS
+
+**Status:** not yet applied; tracked in [#419](https://github.com/kelchm/home-lab/issues/419). nginx still serves the vendor's self-signed certificate.
+
+nginx serves a Let's Encrypt certificate for `kvm-compute-rack.home.kelch.io` from `/etc/kvmd/user/ssl/server.{crt,key}`, the files the firmware's `ssl.conf` reads. [Lego](https://go-acme.github.io/lego/) issues and renews it on the appliance with a Cloudflare DNS-01 challenge, the same way as [Athena](../../docs/runbooks/athena-acme.md). It does not use the cluster's cert-manager: the console must work while the cluster is down.
+
+| Path on the appliance | Contents |
+|---|---|
+| `/etc/kvmd/user/acme/bin/lego` | Pinned Lego 5.6.0 for `linux/arm64` |
+| `/etc/kvmd/user/acme/lego.yml` | [`acme/lego.yml`](acme/lego.yml) |
+| `/etc/kvmd/user/acme/renew.sh` | [`acme/renew.sh`](acme/renew.sh), run daily at 03:41 local time |
+| `/etc/kvmd/user/acme/deploy.sh` | [`acme/deploy.sh`](acme/deploy.sh), Lego's hook: checks the new pair, installs it, validates nginx and reloads it, restoring the previous pair if nginx rejects it |
+| `/etc/kvmd/user/acme/cloudflare-token` | The `kvm-acme` Cloudflare token, mode `0600`. Never in Git |
+| `/etc/kvmd/user/acme/lego-state/` | Lego's account, key and certificates |
+| `/etc/kvmd/user/acme/renewal.log` | Every run, appended; trimmed to the last 2,000 lines once it passes 5,000 |
+| `/etc/kvmd/user/scripts/S50acme-renewal` | [`acme/S50acme-renewal`](acme/S50acme-renewal), run at boot by the firmware's `S99custom`; restores the cron entry in `/etc/crontabs/root` |
+| `/etc/kvmd/user/backups/ssl-vendor/` | The firmware's self-signed pair, kept once before the first replacement |
+
+The firmware starts two `crond` processes that read the same crontab, so every entry fires twice; `renew.sh` holds a lock and the second copy exits. Lego renews only when the certificate is due and keeps the same key. nginx's startup script regenerates a self-signed pair only if the files are missing or the key doesn't match, never because the certificate expired.
+
+The firmware sends `Strict-Transport-Security` with a one-year `max-age` (`/etc/kvmd/nginx/ssl.conf`). Once a browser has seen the trusted certificate on the hostname, it will refuse to click through a broken one. If renewal ever fails and the certificate expires, use `https://10.32.20.10/`: HSTS does not apply to an IP address, so the browser allows the usual warning. The Pi's TLS probe warns well before that happens; see [Monitoring](#monitoring).
+
+The `kvm-acme` token has `Zone:Zone:Read` and `Zone:DNS:Edit` on `kelch.io` and is used only here, so it can be revoked without touching Athena or S3. Its 1Password item is `op://Project - home-lab/kvm-acme/credential`. Cloudflare cannot scope a token to one record, so a stolen token could edit any `kelch.io` record. Anyone who can read it already has root on the console that types into every host's BIOS.
+
+### Install or update
+
+Install the client from a repository checkout. This downloads and verifies Lego, installs the files above and the cron entry, and leaves the token, Lego's state and the served certificate unchanged:
+
+```sh
+devices/glkvm/acme/install.sh
+```
+
+Install the token on first setup or after rotating it:
+
+```sh
+op read 'op://Project - home-lab/kvm-acme/credential' |
+    ssh root@10.32.20.10 'umask 077; cat > /etc/kvmd/user/acme/cloudflare-token'
+```
+
+Request the first certificate, or retry a failed run, by running the daily job by hand and reading its log:
+
+```sh
+ssh root@10.32.20.10 '/etc/kvmd/user/acme/renew.sh; echo "exit $?"; tail -n 30 /etc/kvmd/user/acme/renewal.log'
+```
+
+Lego saves an issued certificate before running its hook. If the hook failed, a later run that finds the certificate not yet due does not retry it; fix the cause and run `/etc/kvmd/user/acme/deploy.sh` by hand.
+
+Check what the listener serves from a workstation, bypassing DNS but verifying the name:
+
+```sh
+curl -sS -o /dev/null -w '%{http_code} %{ssl_verify_result}\n' \
+    --resolve kvm-compute-rack.home.kelch.io:443:10.32.20.10 https://kvm-compute-rack.home.kelch.io/
+```
+
+A `0` verify result means the chain and name check passed.
+
+To return to the vendor certificate, remove the cron entry and boot script, restore `/etc/kvmd/user/backups/ssl-vendor/server.{crt,key}` into `/etc/kvmd/user/ssl/`, and reload nginx. Browsers that recorded HSTS for the hostname will then refuse it until their HSTS entry expires; use the IP address.
+
 ## Downstream KVM controls
 
 The physical eight-port KVM switches inputs with `Left Ctrl`, `Left Ctrl`,
@@ -353,10 +427,13 @@ state from `/etc/kvmd/override.yaml`, `/etc/kvmd/nginx-kvmd.conf`, and
 
 ```sh
 backup_dir=$(mktemp -d)
+chmod 0700 "$backup_dir"
 scp -O -r root@10.32.20.10:/etc/kvmd/user "$backup_dir/"
 scp -O root@10.32.20.10:/etc/kvmd/override.yaml "$backup_dir/"
 scp -O root@10.32.20.10:/etc/kvmd/nginx-kvmd.conf "$backup_dir/"
 ```
+
+`/etc/kvmd/user` holds secrets: the Cloudflare token, Lego's account and certificate keys, NetBird's peer key, the login password hashes and the TOTP secret. Keep this backup private and delete it once the update is verified; never commit it.
 
 After the update:
 
@@ -367,6 +444,8 @@ After the update:
 5. With a host at a safe menu, verify one paced HID key and one downstream KVM
    channel switch.
 6. Recheck the [monitoring](#monitoring) patch against the new firmware's `export.pyc` before reinstalling it. The installed copy steps aside on its own when that file changes, and its install refuses a module it was not verified against.
+7. Confirm the [name and address](#name-and-address) survived: `hostname` prints `kvm-compute-rack` and connman still reports the static address (`connmanctl services ethernet_9483c4c499d7_cable | grep IPv4`).
+8. Confirm [TLS](#tls) survived: the renewal entry is in `/etc/crontabs/root` (the boot script restores it), and the `curl` check in that section returns `0`. If the firmware dropped `/etc/kvmd/user/scripts` or the nginx `ssl.conf` no longer reads `/etc/kvmd/user/ssl`, rerun `devices/glkvm/acme/install.sh` and `deploy.sh`.
 
 The update to `V1.10.1 release2` kept `/etc/kvmd/user`, the mass-storage settings in `user/boot.yaml`, and `/etc/kvmd/override.yaml`, but replaced `/etc/kvmd/nginx-kvmd.conf` with the vendor's, which serves only the GLKVM UI on 443.
 
@@ -375,7 +454,7 @@ The repository is the recovery source even if a firmware update wipes both
 
 ### Bootstrap after a wipe
 
-Restore the appliance's network configuration and SSH access through the vendor UI first. Confirm `ssh root@10.32.20.10` works; this firmware uses Dropbear, so the `scp -O` commands in **Apply** are intentional. Then run the complete **Apply** procedure from a repository checkout. It recreates the user directories, installs all three HID tools and their shared `hid_input.py` module, restores the committed appliance override and the installed firmware's stock nginx configuration, and restarts the affected services. Finish with the non-interactive checks and safe live-input test above, then install the [monitoring](#monitoring) export patch.
+Restore the appliance's network configuration and SSH access through the vendor UI first. Confirm `ssh root@10.32.20.10` works; this firmware uses Dropbear, so the `scp -O` commands in **Apply** are intentional. Then run the complete **Apply** procedure from a repository checkout. It recreates the user directories, installs all three HID tools and their shared `hid_input.py` module, restores the committed appliance override and the installed firmware's stock nginx configuration, and restarts the affected services. Finish with the non-interactive checks and safe live-input test above, then install the [monitoring](#monitoring) export patch. Then set the [name and address](#name-and-address) in the GL UI, and reinstall [TLS](#tls): run its installer, install the token and run `renew.sh`. Without the old `lego-state/` this creates a new Let's Encrypt account and orders a new certificate, which is fine.
 
 Do not run `kvmd` itself over SSH, including `kvmd -M` to validate configuration. Unlike upstream PiKVM, firmware `V1.9.1 release1` started another daemon instead of performing a validation-only run.
 
