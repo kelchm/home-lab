@@ -57,14 +57,19 @@ spec:
               # HTTPS redirect, which the probes satisfy with X-Forwarded-Proto.
               APPLICATION_PROTOCOL: https
               WEB_CONCURRENCY: "0"
-              # Worker threads. Read by the worker only.
-              BACKGROUND_PROCESSING_CONCURRENCY: "2"
+              # Worker threads, read by the worker only. Jobs no longer share
+              # the web process, and geocoding is one network call per point,
+              # so more threads mostly wait on Photon. Each takes a database
+              # connection from RAILS_MAX_THREADS (default 10).
+              BACKGROUND_PROCESSING_CONCURRENCY: "5"
               REDIS_URL: redis://127.0.0.1:6379
               # Reverse geocoding through the in-cluster Photon (US index).
               # Coordinates never leave the cluster.
               PHOTON_API_HOST: photon.personal.svc.cluster.local:2322
               PHOTON_API_USE_HTTPS: "false"
-              # One lookup per point; caps a 290k-point backfill at about 3 h.
+              # One lookup per point. A ceiling: the real rate depends on
+              # worker threads and Photon latency, so a 290k-point backfill
+              # takes at least about 3 h.
               REVERSE_GEOCODING_RPS: "25"
               # Discrete variables: the entrypoint's DATABASE_URL parsing does
               # no URL decoding.

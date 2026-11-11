@@ -53,7 +53,7 @@ Currently excluded:
 | Volume | Reason and revisit trigger |
 |---|---|
 | `ai/lemon-manuals-mcp` `search` (100 GiB) | SQLite FTS index built lazily from the read-only `lemon-manuals-k8s-prod` NFS share |
-| `personal/photon` `photon` (50 GiB) | Photon's US geocoding index, downloaded from the photon-docker mirror on start and every 30 days |
+| `personal/photon` `data` (50 GiB) | Photon's US geocoding index, downloaded from the photon-docker mirror on start and every 30 days |
 | `ai/scrobl` `data` (1 GiB; prepared deployment) | Owner-accepted exception: normally detached outside the nightly sync, with detached-volume backups intentionally disabled. History can be fetched again, but `removed` cannot. Revisit when `serve` keeps the claim attached; see [scrobl](scrobl.md). |
 
 ### How to opt a volume out

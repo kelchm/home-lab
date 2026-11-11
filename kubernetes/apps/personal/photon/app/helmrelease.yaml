@@ -15,6 +15,9 @@ spec:
     kind: OCIRepository
     name: photon
   interval: 1h
+  # Helm waits for the Deployment to become ready; the first start downloads
+  # and unpacks the index, so Helm's default 5m would fail the install.
+  timeout: 3h
   values:
     controllers:
       photon:
@@ -77,6 +80,14 @@ spec:
                 # the backfill and adjust.
                 memory: 6Gi
     defaultPodOptions:
+      # ndots:1 resolves the mirror as an absolute name first. With the
+      # default ndots:5 each download starts with three search-suffixed
+      # lookups through Cilium's DNS proxy before the name its toFQDNs rule
+      # matches, as in cloudflare-dns.
+      dnsConfig:
+        options:
+          - name: ndots
+            value: "1"
       securityContext:
         # The image's photon user. Running as it directly skips the
         # entrypoint's root-only ownership changes.
