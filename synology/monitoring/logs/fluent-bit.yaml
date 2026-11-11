@@ -62,4 +62,7 @@ pipeline:
       logs_body_key_attributes: off
       retry_limit: no_limits
       storage.total_limit_size: 256M
-      workers: 1  # NAS-only trial, #1432
+      # Sends from its own thread: the engine thread stalls on synced writes
+      # when the disk is slow, and an output sharing it stops with it. See
+      # "Host delivery and gaps" in docs/runbooks/logging.md.
+      workers: 1
