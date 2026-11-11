@@ -1,10 +1,13 @@
 ---
 # broadsheet — newspaper front-page mirror for wall-mounted e-ink displays.
-# Household-facing (gateway-services); no auth — displays fetch by URL over the
-# LAN. Mirrors public freedomforum.org front pages, so no credentials / Secret.
+# Household-facing (gateway-services); displays fetch by URL over the LAN.
+# Mirrors public freedomforum.org front pages, so no credentials / Secret.
+# Display and image routes are open reads. The management routes that change
+# the catalog or trigger polls (mutating /api/v1 calls and the /admin buttons)
+# are currently unauthenticated on the services gateway.
 #
-# A background reconciler polls upstream and archives PDFs to /data; HTTP
-# handlers are pure reads over that archive. Liveness is /health (up-with-
+# A background reconciler polls upstream and archives PDFs to /data; display
+# handlers are reads over that archive. Liveness is /health (up-with-
 # process); readiness is /healthz, which goes green once at least one edition is
 # archived (a warm PVC is ready at once; a cold start waits for the first poll).
 apiVersion: helm.toolkit.fluxcd.io/v2
