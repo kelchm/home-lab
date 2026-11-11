@@ -38,9 +38,14 @@ Imports queue track building per day of history; a large import leaves thousands
 
 ```sh
 kubectl -n personal exec deploy/dawarich -c app -- bin/rails runner '
-  u = User.sole
-  Tracks::ParallelGeneratorJob.perform_later(u.id, start_at: Time.zone.at(u.points.minimum(:timestamp)), end_at: Time.zone.at(u.points.maximum(:timestamp)), mode: :bulk, untracked_only: true)'
+  User.find_each do |u|
+    first, last = u.points.pick(Arel.sql("MIN(timestamp), MAX(timestamp)"))
+    next unless first
+    Tracks::ParallelGeneratorJob.perform_later(u.id, start_at: Time.zone.at(first), end_at: Time.zone.at(last), mode: :bulk, untracked_only: true)
+  end'
 ```
+
+It runs for every user with points; `untracked_only` makes it a no-op where tracks are complete.
 
 ## Phone tracking
 
