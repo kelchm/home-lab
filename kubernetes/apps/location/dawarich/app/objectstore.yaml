@@ -1,0 +1,23 @@
+---
+# Backup store for dawarich-db: base backups and WAL go to versitygw on Athena
+# (synology/s3-storage), which the off-site job then carries to B2.
+apiVersion: barmancloud.cnpg.io/v1
+kind: ObjectStore
+metadata:
+  name: dawarich-db
+spec:
+  configuration:
+    destinationPath: s3://k8s-prod-dawarich-db/
+    endpointURL: https://s3-storage.home.kelch.io:9000
+    s3Credentials:
+      accessKeyId:
+        name: dawarich-db-backup
+        key: ACCESS_KEY_ID
+      secretAccessKey:
+        name: dawarich-db-backup
+        key: ACCESS_SECRET_KEY
+    wal:
+      compression: gzip
+    data:
+      compression: gzip
+  retentionPolicy: 30d

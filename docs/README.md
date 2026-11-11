@@ -48,6 +48,7 @@ or fixing.
 | [ai-mcp-reliability-and-containment](runbooks/ai-mcp-reliability-and-containment.md) | Post-deploy checks for MCPHub/backend connectivity and Grafana MCP functional monitoring. |
 | [scrobl](runbooks/scrobl.md) | Accepting and observing the nightly Last.fm sync, keeping one writer, and managing its intentionally unbacked database. |
 | [bambuddy-bootstrap](runbooks/bambuddy-bootstrap.md) | Bringing up Bambuddy, validating printer containment and OIDC, and exercising backup recovery. |
+| [dawarich](runbooks/dawarich.md) | Dawarich location history: first-start admin, database backup activation, Google Timeline import and privacy notes. |
 | [trmnl-trials](runbooks/trmnl-trials.md) | Opening, comparing, validating and retiring the isolated TRMNL server trials. |
 | [visionect-migration](runbooks/visionect-migration.md) | Staging, cutting over, validating, and rolling back the Synology-to-k8s Visionect migration. |
 | [host-monitoring](runbooks/host-monitoring.md) | Enrolling, verifying, and removing PVE and DGX Spark hosts in metrics collection; the Proxmox API exporter. |

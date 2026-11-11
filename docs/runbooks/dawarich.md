@@ -1,0 +1,41 @@
+# Dawarich
+
+Dawarich is Matt's private location-history archive ([#1419](https://github.com/kelchm/home-lab/issues/1419)). It runs in `location` at `https://dawarich.home.kelch.io` on `gateway-services`. At home, UniFi resolves the name; away, NetBird's split DNS resolves it and NetBird's existing permit to the household gateway carries the traffic. Nothing is published to the internet, and the network policy gives the pod no internet egress.
+
+The raw Google Timeline export on Athena (`/volume1/homes/kelchm/cloud-backups/google-timeline/`) is the durable archive. Dawarich is the way to view it and to keep collecting new points; it can be replaced without losing the history.
+
+## What runs
+
+| Part | Detail |
+|---|---|
+| App | `freikin/dawarich`, one pod. Background jobs run inside the web process (`SIDEKIQ_EMBEDDED`), so there is no separate worker. Every start runs database migrations and seeds before the server listens. |
+| Valkey | Sidecar on `127.0.0.1:6379` holding the job queue, cache and websocket state. Not persisted: a restart drops queued jobs, so re-run an import that was in flight. |
+| Database | `dawarich-db`, CloudNativePG PostgreSQL 17 with PostGIS, two instances, WAL archiving and daily base backups to Athena bucket `k8s-prod-dawarich-db`. See the [CloudNativePG runbook](cnpg-backup-restore.md). |
+| Files | 20 GiB Longhorn volume at `/var/app/storage` for uploaded imports and exports. `/var/app/public`, `/var/app/tmp` and `/tmp` are scratch. |
+
+## After the first deployment
+
+1. **Replace the seeded admin.** On an empty database, the seeds create the admin `demo@dawarich.app` with password `safepassword`. Change both before anything else. Either sign in and change them under the account settings, or set them from the pod and store the new password in 1Password:
+
+   ```sh
+   kubectl -n location exec deploy/dawarich -c app -- bin/rails runner \
+     'u = User.find_by!(email: "demo@dawarich.app"); u.update!(email: ENV.fetch("NEW_EMAIL"), password: ENV.fetch("NEW_PASSWORD"), password_confirmation: ENV.fetch("NEW_PASSWORD"))'
+   ```
+
+   Pass `NEW_EMAIL` and `NEW_PASSWORD` into the command's environment without writing them to the shell history. Self-registration is off by default (`ALLOW_EMAIL_PASSWORD_REGISTRATION`).
+2. **Accept the database backups** as for the other databases: after the instances are Ready, [take a backup by hand](cnpg-backup-restore.md#take-a-backup-by-hand) and require it to complete, with objects on Athena and a nonzero last-backup metric.
+3. **Switch the database to its permanent bootstrap.** `cluster.yaml` starts with `bootstrap.initdb`, which creates an empty database. Once a base backup has completed, replace it with the `bootstrap.recovery` and `externalClusters` stanzas the other databases use, pointing at `dawarich-db` and `serverName: dawarich-db-pg17`. CloudNativePG reads the bootstrap only when it creates a data directory, so the change does not touch the running database; it makes a rebuild restore the archive instead of starting empty. Do not leave `initdb` in place.
+
+## Import Google Timeline
+
+Use the phone's own export (Google Maps → Settings → Personal content → Export Timeline data). Dawarich detects the format, including the on-device `Timeline.json`, Takeout `Records.json` and Semantic Location History. Upload it under Imports → New from a browser on the LAN; the import runs as a background job. Spot-check a few days you remember against the export.
+
+## Phone tracking
+
+The Dawarich iOS app connects with the server URL and the API key from Account → API access. OwnTracks (`/api/v1/owntracks/points`) and Overland (`/api/v1/overland/batches`) also work with `?api_key=`. Uploads need NetBird connected when away; the app keeps unsent points and retries. Check that the queue survives a phone restart before relying on it, as described in #1419.
+
+## Privacy notes
+
+- Telemetry, analytics and the update check are off on a self-hosted instance. Reverse geocoding is off until a provider is configured.
+- The place search falls back to public Nominatim when no geocoder is configured. The network policy blocks that, so the search returns nothing rather than leaking the query.
+- The browser loads map tiles from `tyles.dwri.xyz` and fonts and sprites from `protomaps.github.io`. Those hosts see which map areas are viewed, not the stored points. Each user can point the map at another tile or style URL in the map settings.

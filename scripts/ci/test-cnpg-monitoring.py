@@ -18,7 +18,7 @@ def yaml_json(path, expression="."):
 
 
 checks = 0
-for namespace, app in [("iot", "visionect"), ("printing", "bambuddy")]:
+for namespace, app in [("iot", "visionect"), ("printing", "bambuddy"), ("location", "dawarich")]:
     directory = ROOT / "kubernetes/apps" / namespace / app / "app"
     cluster = yaml_json(directory / "cluster.yaml")
     database = cluster["metadata"]["name"]

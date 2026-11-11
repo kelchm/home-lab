@@ -1,0 +1,7 @@
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: location
+  annotations:
+    kustomize.toolkit.fluxcd.io/prune: disabled

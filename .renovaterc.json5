@@ -222,7 +222,7 @@
       // A PostgreSQL major upgrade is a data migration, not an image bump.
       description: "CloudNativePG PostgreSQL: offer minor releases only",
       matchDatasources: ["docker"],
-      matchPackageNames: ["ghcr.io/cloudnative-pg/postgresql"],
+      matchPackageNames: ["ghcr.io/cloudnative-pg/postgresql", "ghcr.io/cloudnative-pg/postgis"],
       matchUpdateTypes: ["major"],
       enabled: false,
     },

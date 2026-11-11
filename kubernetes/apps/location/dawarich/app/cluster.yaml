@@ -1,0 +1,63 @@
+---
+# Dedicated PostgreSQL + PostGIS store for Dawarich. Dawarich's own compose
+# runs PostgreSQL 17 with PostGIS 3.5; 3.6 on 17 keeps the tested major. A
+# streaming standby on a separate node provides failover; WAL archiving and
+# volume backups remain DR.
+apiVersion: postgresql.cnpg.io/v1
+kind: Cluster
+metadata:
+  name: dawarich-db
+  annotations:
+    # A rebuilt cluster recovers from, then archives into, the same archive.
+    cnpg.io/skipEmptyWalArchiveCheck: enabled
+spec:
+  instances: 2
+  primaryUpdateMethod: switchover
+  affinity:
+    podAntiAffinityType: required
+  imageName: ghcr.io/cloudnative-pg/postgis:17.11-3.6.4-system-trixie
+  storage:
+    # Room for about 4 days of unarchived WAL while the backup store is down.
+    size: 20Gi
+    storageClass: longhorn
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      memory: 2Gi
+  monitoring:
+    customQueriesConfigMap:
+      - name: dawarich-db-monitoring
+        key: queries
+    enablePodMonitor: true
+  # Backups go out over the storage VLAN.
+  inheritedMetadata:
+    annotations:
+      k8s.v1.cni.cncf.io/networks: cnpg-system/storage-network
+  postgresql:
+    parameters:
+      # A failed standby must not retain WAL indefinitely on this 20 GiB volume.
+      max_slot_wal_keep_size: 2GB
+    # The storage interface is outside Cilium policy. Apps use IPv4; reject all IPv6 clients.
+    pg_hba:
+      - host all all 10.32.25.0/24 reject
+      - host all all ::/0 reject
+  # First start only: an empty database. PostGIS is not a trusted extension,
+  # so the superuser creates it here; Dawarich's migrations then find it.
+  # Once the first base backup completes, replace this with the permanent
+  # bootstrap.recovery stanza used by the other databases (#1419).
+  bootstrap:
+    initdb:
+      database: dawarich
+      owner: dawarich
+      postInitApplicationSQL:
+        - CREATE EXTENSION IF NOT EXISTS postgis
+        - CREATE EXTENSION IF NOT EXISTS pgcrypto
+  plugins:
+    - name: barman-cloud.cloudnative-pg.io
+      isWALArchiver: true
+      parameters:
+        barmanObjectName: dawarich-db
+        # One archive per PostgreSQL major: a major upgrade must change this suffix.
+        serverName: dawarich-db-pg17

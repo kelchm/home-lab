@@ -118,6 +118,16 @@ spec:
         - ports:
             - port: "5055"
               protocol: TCP
+    # Dawarich backend.
+    - toEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: location
+            app.kubernetes.io/name: dawarich
+            io.cilium.k8s.policy.serviceaccount: dawarich
+      toPorts:
+        - ports:
+            - port: "3000"
+              protocol: TCP
     # Host metrics ingestion backend.
     - toEndpoints:
         - matchLabels:
