@@ -9,7 +9,12 @@ log=$dir/renewal.log
 # This firmware starts two crond instances that read the same crontab, so every
 # entry fires twice. Let only one copy run.
 exec 9>"$dir/renew.lock"
-flock -n 9 || exit 0
+# flock exits 1 when another copy holds the lock; any other failure is an error.
+flock -n 9 || { status=$?; [ "$status" = 1 ] && exit 0; exit "$status"; }
+
+if [ -f "$log" ] && [ "$(wc -l <"$log")" -gt 5000 ]; then
+    tail -n 2000 "$log" >"$log.tmp" && mv "$log.tmp" "$log"
+fi
 
 unset CF_API_KEY CLOUDFLARE_API_KEY CF_DNS_API_TOKEN CLOUDFLARE_DNS_API_TOKEN \
     CF_ZONE_API_TOKEN CLOUDFLARE_ZONE_API_TOKEN
@@ -17,10 +22,6 @@ export CF_DNS_API_TOKEN_FILE="$dir/cloudflare-token"
 if [ ! -s "$CF_DNS_API_TOKEN_FILE" ]; then
     echo "== $(date '+%Y-%m-%dT%H:%M:%S%z') no Cloudflare token; skipped" >>"$log"
     exit 1
-fi
-
-if [ -f "$log" ] && [ "$(wc -l <"$log")" -gt 5000 ]; then
-    tail -n 2000 "$log" >"$log.tmp" && mv "$log.tmp" "$log"
 fi
 
 status=0

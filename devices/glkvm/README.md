@@ -76,7 +76,7 @@ op read 'op://Project - home-lab/kvm-acme/credential' |
 Request the first certificate, or retry a failed run, by running the daily job by hand and reading its log:
 
 ```sh
-ssh root@10.32.20.10 '/etc/kvmd/user/acme/renew.sh; echo "exit $?"; tail -n 30 /etc/kvmd/user/acme/renewal.log'
+ssh root@10.32.20.10 '/etc/kvmd/user/acme/renew.sh; status=$?; tail -n 30 /etc/kvmd/user/acme/renewal.log; exit $status'
 ```
 
 Lego saves an issued certificate before running its hook. If the hook failed, a later run that finds the certificate not yet due does not retry it; fix the cause and run `/etc/kvmd/user/acme/deploy.sh kvm-compute-rack.home.kelch.io` by hand.
@@ -94,7 +94,7 @@ To return to the vendor certificate, remove the cron entry and boot script, rest
 
 ## NetBird
 
-The appliance is a NetBird peer so the console is reachable away from home even when the cluster and the PVE-hosted NetBird routers are down. It routes only its own address: the NetBird network for the console names this peer as its router and `10.32.20.10/32` as its resource, so an away client browses to the normal hostname with the trusted certificate. The site's NetBird Cloud objects and policy are recorded in the [NetBird runbook](../../docs/runbooks/netbird-remote-access.md#glkvm-console-added-2026-11-11).
+The appliance is a NetBird peer so the console is reachable away from home without the cluster or the PVE-hosted NetBird routers. It routes only its own address: the NetBird network for the console names this peer as its router and `10.32.20.10/32` as its resource, so an away client browses to the normal hostname with the trusted certificate. Away clients resolve that hostname through the site's `home-dns` resource, which the PVE routers carry. If both routers are down, browse to `https://10.32.20.10/` instead and accept the certificate-name warning; HSTS does not apply to an IP address, and the traffic still goes only through the appliance's own peer. The site's NetBird Cloud objects and policy are recorded in the [NetBird runbook](../../docs/runbooks/netbird-remote-access.md#glkvm-console-added-2026-11-11).
 
 The firmware ships a client and its GL UI integration. Its client (0.74.7 on `V1.10.1 release2`) changes only with firmware, so a pinned upstream client runs in its place:
 
@@ -128,16 +128,19 @@ Enrolled 2026-11-11 as `kvm-compute-rack.netbird.cloud` with a one-off setup key
 
 A routing peer applies NetBird's resource rules to traffic it forwards. Traffic addressed to the appliance itself is local, so NetBird's input chain decides it, and that chain is filled only by a policy whose destination is the appliance's peer group. The site therefore needs both: a resource policy for the route and a peer policy for the ports. Everything else arriving on `wt0` hits NetBird's final drop.
 
-To re-enroll after a wipe, create a new one-off setup key with the same auto-group, then either paste it into the GL UI's NetBird page or run the same steps over SSH, sending the key on standard input so it stays out of the process list:
+To re-enroll after a wipe, create a new one-off setup key with the same auto-group, then either paste it into the GL UI's NetBird page or run the same steps over SSH. The key travels on standard input into a private temporary file that `--setup-key-file` reads, so it stays off both machines' command lines:
 
 ```sh
 printf '%s\n' "$SETUP_KEY" | ssh root@10.32.20.10 '
     set -eu
-    read -r key
+    umask 077
+    keyfile=$(mktemp)
+    trap "rm -f \"$keyfile\"" EXIT
+    cat > "$keyfile"
     printf "{\n    \"enable\": true\n}\n" > /etc/kvmd/user/netbird.json
     /etc/init.d/S99netbird start
     for i in 1 2 3 4 5 6 7 8 9 10; do [ -S /var/run/netbird.sock ] && break; sleep 1; done
-    netbird up --disable-dns --setup-key "$key"
+    netbird up --disable-dns --setup-key-file "$keyfile"
     netbird status
 '
 ```
@@ -313,7 +316,7 @@ What the export provides on this firmware:
 
 The scrape drops `pikvm_atx_*` and `pikvm_gpio_*`. ATX is not wired, so its power state means nothing. The GPIO rows are the retained host-switch command channels, which only pulse a switch sequence; they do not read back the selected port, and the vendor code reports each channel's state under both its `online` and `state` names. The export has no HDMI signal, USB enumeration, selected port, uptime or filesystem metrics, and nothing in it observes the host on the selected port. A blank screen or missing video is not an appliance failure. Load average stays between 8 and 10 because of the SoC's media threads and is not a useful signal.
 
-The scrape addresses the appliance by IP so it does not depend on DNS, and therefore skips certificate verification. Certificate expiry is watched separately; see [TLS](#tls).
+The scrape addresses the appliance by IP so it does not depend on DNS, and therefore skips certificate verification. Nothing currently alerts on certificate expiry; see [TLS](#tls).
 
 | Alert | Fires when |
 |---|---|
@@ -497,7 +500,7 @@ After the update:
    channel switch.
 6. Recheck the [monitoring](#monitoring) patch against the new firmware's `export.pyc` before reinstalling it. The installed copy steps aside on its own when that file changes, and its install refuses a module it was not verified against.
 7. Confirm the [name and address](#name-and-address) survived: `hostname` prints `kvm-compute-rack` and connman still reports the static address (`connmanctl services ethernet_9483c4c499d7_cable | grep IPv4`).
-8. Confirm [TLS](#tls) survived: the renewal entry is in `/etc/crontabs/root` (the boot script restores it), and the `curl` check in that section returns `0`. If the firmware dropped `/etc/kvmd/user/scripts` or the nginx `ssl.conf` no longer reads `/etc/kvmd/user/ssl`, rerun `devices/glkvm/acme/install.sh` and `deploy.sh`.
+8. Confirm [TLS](#tls) survived: the renewal entry is in `/etc/crontabs/root` (the boot script restores it), and the `curl` check in that section returns `0`. If the firmware dropped `/etc/kvmd/user/scripts` or the cron entry, rerun `devices/glkvm/acme/install.sh`, then reinstall the current certificate with `ssh root@10.32.20.10 /etc/kvmd/user/acme/deploy.sh kvm-compute-rack.home.kelch.io`. If nginx's `ssl.conf` no longer reads `/etc/kvmd/user/ssl`, stop: update the path in `acme/deploy.sh` to match the new firmware before installing or deploying, because the hook writes only to that directory.
 9. Confirm [NetBird](#netbird) survived: `netbird status` shows Management connected and `Networks: 10.32.20.10/32`, and `netbird version` reports the pinned version or a newer firmware one. If `/etc/kvmd/user/scripts/S40netbird-binary` or the pinned binary is gone, rerun `devices/glkvm/netbird/install.sh`.
 
 The update to `V1.10.1 release2` kept `/etc/kvmd/user`, the mass-storage settings in `user/boot.yaml`, and `/etc/kvmd/override.yaml`, but replaced `/etc/kvmd/nginx-kvmd.conf` with the vendor's, which serves only the GLKVM UI on 443.
@@ -507,7 +510,7 @@ The repository is the recovery source even if a firmware update wipes both
 
 ### Bootstrap after a wipe
 
-Restore the appliance's network configuration and SSH access through the vendor UI first. Confirm `ssh root@10.32.20.10` works; this firmware uses Dropbear, so the `scp -O` commands in **Apply** are intentional. Then run the complete **Apply** procedure from a repository checkout. It recreates the user directories, installs all three HID tools and their shared `hid_input.py` module, restores the committed appliance override and the installed firmware's stock nginx configuration, and restarts the affected services. Finish with the non-interactive checks and safe live-input test above, then install the [monitoring](#monitoring) export patch. Then set the [name and address](#name-and-address) in the GL UI, and reinstall [TLS](#tls): run its installer, install the token and run `renew.sh`. Without the old `lego-state/` this creates a new Let's Encrypt account and orders a new certificate, which is fine.
+Restore the appliance's network configuration and SSH access through the vendor UI first. Confirm `ssh root@10.32.20.10` works; this firmware uses Dropbear, so the `scp -O` commands in **Apply** are intentional. Then run the complete **Apply** procedure from a repository checkout. It recreates the user directories, installs all three HID tools and their shared `hid_input.py` module, restores the committed appliance override and the installed firmware's stock nginx configuration, and restarts the affected services. Finish with the non-interactive checks and safe live-input test above, then install the [monitoring](#monitoring) export patch. Then set the [name and address](#name-and-address) in the GL UI, and reinstall [TLS](#tls): run its installer, install the token and run `renew.sh`. Without the old `lego-state/` this creates a new Let's Encrypt account and orders a new certificate, which is fine. Finally restore [NetBird](#netbird): run `devices/glkvm/netbird/install.sh`, re-enroll with a new one-off setup key as described there, confirm `netbird status` shows Management connected and `Networks: 10.32.20.10/32`, and remove the old peer from NetBird Cloud.
 
 Do not run `kvmd` itself over SSH, including `kvmd -M` to validate configuration. Unlike upstream PiKVM, firmware `V1.9.1 release1` started another daemon instead of performing a validation-only run.
 

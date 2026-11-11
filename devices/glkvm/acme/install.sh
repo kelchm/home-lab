@@ -51,7 +51,7 @@ COPYFILE_DISABLE=1 tar -C "$stage" -cf - lego lego.yml renew.sh deploy.sh S50acm
         /etc/kvmd/user/scripts/S50acme-renewal start
         "$acme/bin/lego" --version
         grep -F "$acme/renew.sh" /etc/crontabs/root
-        if [ -f "$acme/cloudflare-token" ]; then
+        if [ -s "$acme/cloudflare-token" ]; then
             echo "Cloudflare token present"
         else
             echo "Cloudflare token missing: install it before the first renewal" >&2
