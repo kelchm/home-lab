@@ -7,9 +7,10 @@ apiVersion: postgresql.cnpg.io/v1
 kind: Cluster
 metadata:
   name: dawarich-db
-  annotations:
-    # A rebuilt cluster recovers from, then archives into, the same archive.
-    cnpg.io/skipEmptyWalArchiveCheck: enabled
+  # No skipEmptyWalArchiveCheck yet: while the bootstrap is initdb, a rebuild
+  # would start an empty database, and CloudNativePG's check is what stops it
+  # archiving over the existing backups. Add the annotation together with
+  # bootstrap.recovery, as the other databases have it.
 spec:
   instances: 2
   primaryUpdateMethod: switchover

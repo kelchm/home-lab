@@ -144,7 +144,11 @@ spec:
               - ""
               - --appendonly
               - "no"
-              # Sidekiq needs every job kept; never evict.
+              # Sidekiq needs every job kept: refuse writes at the cap rather
+              # than evict, and stay under the container limit so a full
+              # queue errors instead of being OOM-killed.
+              - --maxmemory
+              - 200mb
               - --maxmemory-policy
               - noeviction
             probes:
@@ -199,15 +203,19 @@ spec:
             app:
               - path: /var/app/public
       # PID file, cache, and import/export working files; kept on disk so a
-      # large import does not count against memory.
+      # large import does not count against memory. Dawarich caps an
+      # extracted ZIP at 2 GB; the limit evicts this pod, not the node.
       app-tmp:
         type: emptyDir
+        sizeLimit: 10Gi
         advancedMounts:
           dawarich:
             app:
               - path: /var/app/tmp
+      # Rack spools uploads here, so a Timeline upload lands in /tmp first.
       tmp:
         type: emptyDir
+        sizeLimit: 5Gi
         advancedMounts:
           dawarich:
             tmp-permissions:

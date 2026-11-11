@@ -85,6 +85,8 @@ Before merging, all on Athena and in UniFi:
 
    Check it: `ssh kelchm@10.32.20.5 'ls -ld /volume1/object-storage/data/* /volume1/object-storage/meta'` lists all three directories.
 
+   A database added later gets its bucket the same way: `sudo mkdir /volume1/object-storage/data/<bucket>`, then step 5 for its account. `k8s-prod-dawarich-db` was added this way on 2026-11-10. On a rebuilt NAS, create every bucket in the [table above](#what-is-where).
+
 2. Confirm nothing on Athena already listens on `10.32.25.5:9000`.
 3. Add a static record `s3-storage.home.kelch.io` → `10.32.25.5` in UniFi. Without it the name resolves to the `*.home.kelch.io` wildcard.
 4. Create the Cloudflare token described under [Credentials](#credentials) and a random root key pair, store them in 1Password, and encrypt them into `traefik.sops.env` and `versitygw.sops.env`.
