@@ -439,7 +439,7 @@
       ]
     },
     {
-      "name": "Existing 36-hour boundary and hold remain; DSM never duplicates into the generic rule",
+      "name": "Existing 36-hour boundary and hold remain; host-renewed certificates never duplicate into the generic rule",
       "interval": "1m",
       "input_series": [
         {
@@ -465,6 +465,30 @@
         {
           "series": "probe_ssl_earliest_cert_expiry{job=\"pi-blackbox\",instance=\"ups-compute-rack\",platform=\"pi\",probe=\"grafana\",target=\"https://grafana.home.kelch.io/\",module=\"http_redirect\"}",
           "values": "133200+0x121"
+        },
+        {
+          "series": "up{job=\"pi-blackbox\",instance=\"ups-compute-rack\",platform=\"pi\",probe=\"kvm-compute-rack\",target=\"https://kvm-compute-rack.home.kelch.io/\",module=\"http_2xx\"}",
+          "values": "1+0x121"
+        },
+        {
+          "series": "probe_success{job=\"pi-blackbox\",instance=\"ups-compute-rack\",platform=\"pi\",probe=\"kvm-compute-rack\",target=\"https://kvm-compute-rack.home.kelch.io/\",module=\"http_2xx\"}",
+          "values": "1+0x121"
+        },
+        {
+          "series": "probe_ssl_earliest_cert_expiry{job=\"pi-blackbox\",instance=\"ups-compute-rack\",platform=\"pi\",probe=\"kvm-compute-rack\",target=\"https://kvm-compute-rack.home.kelch.io/\",module=\"http_2xx\"}",
+          "values": "133200+0x121"
+        },
+        {
+          "series": "up{job=\"pi-blackbox\",instance=\"ups-compute-rack\",platform=\"pi\",probe=\"unifi-console\",target=\"https://unifi.home.kelch.io/\",module=\"http_2xx\"}",
+          "values": "1+0x121"
+        },
+        {
+          "series": "probe_success{job=\"pi-blackbox\",instance=\"ups-compute-rack\",platform=\"pi\",probe=\"unifi-console\",target=\"https://unifi.home.kelch.io/\",module=\"http_2xx\"}",
+          "values": "1+0x121"
+        },
+        {
+          "series": "probe_ssl_earliest_cert_expiry{job=\"pi-blackbox\",instance=\"ups-compute-rack\",platform=\"pi\",probe=\"unifi-console\",target=\"https://unifi.home.kelch.io/\",module=\"http_2xx\"}",
+          "values": "133200+0x121"
         }
       ],
       "promql_expr_test": [
@@ -479,6 +503,14 @@
           "exp_samples": [
             {
               "labels": "{probe=\"athena-dsm\",severity=\"warning\"}",
+              "value": 1
+            },
+            {
+              "labels": "{probe=\"kvm-compute-rack\",severity=\"warning\"}",
+              "value": 1
+            },
+            {
+              "labels": "{probe=\"unifi-console\",severity=\"warning\"}",
               "value": 1
             }
           ]
@@ -514,6 +546,14 @@
           "exp_samples": [
             {
               "labels": "{probe=\"athena-dsm\",severity=\"warning\"}",
+              "value": 1
+            },
+            {
+              "labels": "{probe=\"kvm-compute-rack\",severity=\"warning\"}",
+              "value": 1
+            },
+            {
+              "labels": "{probe=\"unifi-console\",severity=\"warning\"}",
               "value": 1
             }
           ]
