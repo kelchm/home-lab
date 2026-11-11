@@ -133,7 +133,7 @@ fi
 # synced writes to its scrubbing RAID stalled the engine thread, and the output
 # shared it. Only that marked line may differ. Remove the exception when #1432
 # settles whether every host gets the worker.
-if ! diff -r -q -I '# NAS-only trial, #1432$' "${ROOT_DIR}/proxmox/monitoring/logs" "${ROOT_DIR}/synology/monitoring/logs" >/dev/null; then
+if ! diff -r -q -I '^      workers: 1  # NAS-only trial, #1432$' "${ROOT_DIR}/proxmox/monitoring/logs" "${ROOT_DIR}/synology/monitoring/logs" >/dev/null; then
     violation "proxmox/monitoring/logs and synology/monitoring/logs must be identical"
 fi
 
