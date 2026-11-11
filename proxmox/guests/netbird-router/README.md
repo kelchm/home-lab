@@ -13,7 +13,7 @@ Read back on 2026-11-08 after the stage-2 rename and upgrade, with unattended ho
 | Boot | `onboot: 1`, `startup: order=10,up=30`; unattended host startup verified on 2026-11-11, about 23 seconds after host boot ([evidence](local-startup.md#accepted-host-boot-2026-11-11), #1096). |
 | Protection, backup, HA | `protection: 1` and covered by `daily-backups`, both since 2026-10-28. Not a PVE HA resource. |
 | OS | Debian 13, kernel 6.12.116 after the renamed instance's first boot on 2026-11-08 |
-| NetBird | 0.82.0 from the `pkgs.netbird.io` `stable` repository, set by [`upgrade-routers.sh`](upgrade-routers.sh); kernel WireGuard on `wt0`, UDP 51820; client routes and DNS disabled, all other client settings default |
+| NetBird | 0.82.1 (since 2026-11-11) from the `pkgs.netbird.io` `stable` repository, set by [`upgrade-routers.sh`](upgrade-routers.sh); kernel WireGuard on `wt0`, UDP 51820; client routes and DNS disabled, all other client settings default |
 | Tags and description | `netbird;remote-access`; "NetBird routing peer 1; VLAN 19; Debian 13 genericcloud" |
 
 Main cannot reach the VM's SSH. Manage it with `qm guest exec 103` from `pve-sbx-1`, as the runbook describes.

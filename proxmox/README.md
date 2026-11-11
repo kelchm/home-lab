@@ -75,7 +75,7 @@ VM 103's boot disk, EFI disk and cloud-init drive are local. The [node-local sta
 
 ## Second routing peer
 
-[VM 104 `netbird-router-2`](guests/netbird-router-2/README.md) at `10.32.19.104` on `pve-sbx-2` was installed and enrolled on 2026-11-08 (#1097). It has local root/EFI/cloud-init disks and a node-local snippet on `pve-sbx-2`, `onboot=1` and `protection=1`. It is covered by `daily-backups`; its first post-enrollment archive is due on 2026-11-09 and has not been verified. Both routers run NetBird 0.82.0, set by [`upgrade-routers.sh`](guests/netbird-router/upgrade-routers.sh), which Renovate keeps current. Away clients moved between the routers without help during the 2026-11-08 upgrades; failover timing was not measured. VMIDs and addresses 101/102 remain reserved.
+[VM 104 `netbird-router-2`](guests/netbird-router-2/README.md) at `10.32.19.104` on `pve-sbx-2` was installed and enrolled on 2026-11-08 (#1097). It has local root/EFI/cloud-init disks and a node-local snippet on `pve-sbx-2`, `onboot=1` and `protection=1`. It is covered by `daily-backups`; its first post-enrollment archive is due on 2026-11-09 and has not been verified. Both routers run NetBird 0.82.1 since 2026-11-11, set by [`upgrade-routers.sh`](guests/netbird-router/upgrade-routers.sh), which Renovate keeps current. Away clients moved between the routers without help during the 2026-11-08 upgrades; failover timing was not measured. VMIDs and addresses 101/102 remain reserved.
 
 ## Retired guests
 
