@@ -47,12 +47,21 @@ kubectl -n personal exec deploy/dawarich -c app -- bin/rails runner '
 
 It runs for every user with points; `untracked_only` makes it a no-op where tracks are complete.
 
+## Reverse geocoding
+
+[Photon](https://github.com/komoot/photon), from `rtuszik/photon-docker`, runs beside Dawarich in `personal` with the prebuilt US index (`REGION=usa`, about 10.6 GB compressed, rebuilt weekly upstream). Dawarich reaches it at `photon.personal.svc.cluster.local:2322`, capped at 25 lookups per second. Every location in the archive is in the US; a trip abroad needs a larger region, such as `north-america` or `planet`.
+
+- **First start** downloads and unpacks the index before Photon listens, so the pod can take an hour or more to become Ready. Lookups made meanwhile fail and are retried by Dawarich's nightly geocoding job.
+- **Updates**: photon-docker checks every 30 days and, with `UPDATE_STRATEGY=PARALLEL`, downloads the new index beside the current one before swapping, so lookups continue. The 50 GiB volume holds two indexes and the compressed download. It is excluded from Longhorn backups because the index can be downloaded again.
+- **Backfill**: Dawarich looks up each point once and stores the result. To geocode existing points, use Settings → Background jobs → **Continue reverse geocoding**, or let the nightly job at 01:15 queue them. Either queues one job per point, about 290k for the imported history, which is why Valkey's cap is 768 MB. At 25 per second that takes about 3 hours.
+- **Re-geocoding** already geocoded points after an index update is optional and manual (**Start reverse geocoding**); it redoes every point.
+
 ## Phone tracking
 
 The Dawarich iOS app connects with the server URL and the API key from Account → API access. Dawarich accepts the key as an `Authorization: Bearer` header or as `?api_key=`. Prefer a client that sends the header: the services gateway's access log keeps query strings, so a key in the URL is stored in VictoriaLogs until [#1422](https://github.com/kelchm/home-lab/issues/1422) redacts it. Confirm which form the iOS app uses from its first requests before relying on it. OwnTracks (`/api/v1/owntracks/points`) and Overland (`/api/v1/overland/batches`) also work. Uploads need NetBird connected when away; the app keeps unsent points and retries. Check that the queue survives a phone restart before relying on it, as described in #1419.
 
 ## Privacy notes
 
-- Telemetry, analytics and the update check are off on a self-hosted instance. Reverse geocoding is off until a provider is configured.
-- The place search falls back to public Nominatim when no geocoder is configured. The network policy blocks that, so the search returns nothing rather than leaking the query.
+- Telemetry, analytics and the update check are off on a self-hosted instance.
+- Reverse geocoding and place search go to the in-cluster Photon only. Dawarich still has no internet egress, so a misconfigured geocoder fails closed rather than falling back to public Nominatim.
 - The browser loads map tiles from `tyles.dwri.xyz` and fonts and sprites from `protomaps.github.io`. Those hosts see which map areas are viewed, not the stored points. Each user can point the map at another tile or style URL in the map settings.

@@ -60,6 +60,12 @@ spec:
               # Worker threads. Read by the worker only.
               BACKGROUND_PROCESSING_CONCURRENCY: "2"
               REDIS_URL: redis://127.0.0.1:6379
+              # Reverse geocoding through the in-cluster Photon (US index).
+              # Coordinates never leave the cluster.
+              PHOTON_API_HOST: photon.personal.svc.cluster.local:2322
+              PHOTON_API_USE_HTTPS: "false"
+              # One lookup per point; caps a 290k-point backfill at about 3 h.
+              REVERSE_GEOCODING_RPS: "25"
               # Discrete variables: the entrypoint's DATABASE_URL parsing does
               # no URL decoding.
               DATABASE_HOST:
@@ -176,9 +182,10 @@ spec:
               - "no"
               # Sidekiq needs every job kept: refuse writes at the cap rather
               # than evict, and stay under the container limit so a full
-              # queue errors instead of being OOM-killed.
+              # queue errors instead of being OOM-killed. Geocoding queues one
+              # job per ungeocoded point at once, about 290k on a backfill.
               - --maxmemory
-              - 200mb
+              - 768mb
               - --maxmemory-policy
               - noeviction
             probes:
@@ -198,7 +205,7 @@ spec:
                 cpu: 10m
                 memory: 32Mi
               limits:
-                memory: 256Mi
+                memory: 1Gi
     defaultPodOptions:
       securityContext:
         # The image declares no USER; Dawarich documents running as 1000.
