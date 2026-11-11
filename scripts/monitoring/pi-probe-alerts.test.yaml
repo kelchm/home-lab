@@ -494,6 +494,584 @@
           "exp_samples": []
         }
       ]
+    },
+    {
+      "name": "All ten expected probes report: no missing alerts",
+      "interval": "1m",
+      "input_series": [
+        {
+          "series": "up{job=\"pi-blackbox-exporter\",instance=\"ups-compute-rack\",platform=\"pi\"}",
+          "values": "1x25"
+        },
+        {
+          "series": "probe_success{job=\"pi-blackbox\",instance=\"ups-compute-rack\",platform=\"pi\",probe=\"gateway-admin\"}",
+          "values": "1x25"
+        },
+        {
+          "series": "probe_success{job=\"pi-blackbox\",instance=\"ups-compute-rack\",platform=\"pi\",probe=\"gateway-services\"}",
+          "values": "1x25"
+        },
+        {
+          "series": "probe_success{job=\"pi-blackbox\",instance=\"ups-compute-rack\",platform=\"pi\",probe=\"kanidm\"}",
+          "values": "1x25"
+        },
+        {
+          "series": "probe_success{job=\"pi-blackbox\",instance=\"ups-compute-rack\",platform=\"pi\",probe=\"jellyfin\"}",
+          "values": "1x25"
+        },
+        {
+          "series": "probe_success{job=\"pi-blackbox\",instance=\"ups-compute-rack\",platform=\"pi\",probe=\"grafana\"}",
+          "values": "1x25"
+        },
+        {
+          "series": "probe_success{job=\"pi-blackbox\",instance=\"ups-compute-rack\",platform=\"pi\",probe=\"homepage\"}",
+          "values": "1x25"
+        },
+        {
+          "series": "probe_success{job=\"pi-blackbox\",instance=\"ups-compute-rack\",platform=\"pi\",probe=\"cloudflare-tunnel\"}",
+          "values": "1x25"
+        },
+        {
+          "series": "probe_success{job=\"pi-blackbox\",instance=\"ups-compute-rack\",platform=\"pi\",probe=\"athena-dsm\"}",
+          "values": "1x25"
+        },
+        {
+          "series": "probe_success{job=\"pi-blackbox\",instance=\"ups-compute-rack\",platform=\"pi\",probe=\"k8s-gateway\"}",
+          "values": "1x25"
+        },
+        {
+          "series": "probe_success{job=\"pi-blackbox\",instance=\"ups-compute-rack\",platform=\"pi\",probe=\"unifi-gateway\"}",
+          "values": "1x25"
+        }
+      ],
+      "promql_expr_test": [
+        {
+          "expr": "count by (probe, instance, severity) (ALERTS{alertname=\"ProbeMetricsMissing\",alertstate=\"firing\"})",
+          "eval_time": "21m",
+          "exp_samples": []
+        }
+      ]
+    },
+    {
+      "name": "Probe disappears, waits for missing window and hold, then recovers",
+      "interval": "1m",
+      "input_series": [
+        {
+          "series": "up{job=\"pi-blackbox-exporter\",instance=\"ups-compute-rack\",platform=\"pi\"}",
+          "values": "1x25"
+        },
+        {
+          "series": "probe_success{job=\"pi-blackbox\",instance=\"ups-compute-rack\",platform=\"pi\",probe=\"gateway-admin\"}",
+          "values": "1x25"
+        },
+        {
+          "series": "probe_success{job=\"pi-blackbox\",instance=\"ups-compute-rack\",platform=\"pi\",probe=\"gateway-services\"}",
+          "values": "1x25"
+        },
+        {
+          "series": "probe_success{job=\"pi-blackbox\",instance=\"ups-compute-rack\",platform=\"pi\",probe=\"kanidm\"}",
+          "values": "1x25"
+        },
+        {
+          "series": "probe_success{job=\"pi-blackbox\",instance=\"ups-compute-rack\",platform=\"pi\",probe=\"jellyfin\"}",
+          "values": "1x25"
+        },
+        {
+          "series": "probe_success{job=\"pi-blackbox\",instance=\"ups-compute-rack\",platform=\"pi\",probe=\"homepage\"}",
+          "values": "1x25"
+        },
+        {
+          "series": "probe_success{job=\"pi-blackbox\",instance=\"ups-compute-rack\",platform=\"pi\",probe=\"cloudflare-tunnel\"}",
+          "values": "1x25"
+        },
+        {
+          "series": "probe_success{job=\"pi-blackbox\",instance=\"ups-compute-rack\",platform=\"pi\",probe=\"athena-dsm\"}",
+          "values": "1x25"
+        },
+        {
+          "series": "probe_success{job=\"pi-blackbox\",instance=\"ups-compute-rack\",platform=\"pi\",probe=\"k8s-gateway\"}",
+          "values": "1x25"
+        },
+        {
+          "series": "probe_success{job=\"pi-blackbox\",instance=\"ups-compute-rack\",platform=\"pi\",probe=\"unifi-gateway\"}",
+          "values": "1x25"
+        },
+        {
+          "series": "probe_success{job=\"pi-blackbox\",instance=\"ups-compute-rack\",platform=\"pi\",probe=\"grafana\"}",
+          "values": "1x4 stale _x12 1x7"
+        }
+      ],
+      "promql_expr_test": [
+        {
+          "expr": "count by (probe, instance, severity) (ALERTS{alertname=\"ProbeMetricsMissing\",alertstate=\"firing\"})",
+          "eval_time": "8m",
+          "exp_samples": []
+        },
+        {
+          "expr": "count by (probe, instance, severity) (ALERTS{alertname=\"ProbeMetricsMissing\",alertstate=\"firing\"})",
+          "eval_time": "13m",
+          "exp_samples": []
+        },
+        {
+          "expr": "count by (probe, instance, severity) (ALERTS{alertname=\"ProbeMetricsMissing\",alertstate=\"firing\"})",
+          "eval_time": "14m",
+          "exp_samples": [
+            {
+              "labels": "{probe=\"grafana\",instance=\"ups-compute-rack\",severity=\"info\"}",
+              "value": 1
+            }
+          ]
+        },
+        {
+          "expr": "count by (probe, instance, severity) (ALERTS{alertname=\"ProbeMetricsMissing\",alertstate=\"firing\"})",
+          "eval_time": "17m",
+          "exp_samples": [
+            {
+              "labels": "{probe=\"grafana\",instance=\"ups-compute-rack\",severity=\"info\"}",
+              "value": 1
+            }
+          ]
+        },
+        {
+          "expr": "count by (probe, instance, severity) (ALERTS{alertname=\"ProbeMetricsMissing\",alertstate=\"firing\"})",
+          "eval_time": "18m",
+          "exp_samples": []
+        }
+      ]
+    },
+    {
+      "name": "Expected probe never appeared: name and severity retained",
+      "interval": "1m",
+      "input_series": [
+        {
+          "series": "up{job=\"pi-blackbox-exporter\",instance=\"ups-compute-rack\",platform=\"pi\"}",
+          "values": "1x25"
+        },
+        {
+          "series": "probe_success{job=\"pi-blackbox\",instance=\"ups-compute-rack\",platform=\"pi\",probe=\"gateway-admin\"}",
+          "values": "1x25"
+        },
+        {
+          "series": "probe_success{job=\"pi-blackbox\",instance=\"ups-compute-rack\",platform=\"pi\",probe=\"gateway-services\"}",
+          "values": "1x25"
+        },
+        {
+          "series": "probe_success{job=\"pi-blackbox\",instance=\"ups-compute-rack\",platform=\"pi\",probe=\"kanidm\"}",
+          "values": "1x25"
+        },
+        {
+          "series": "probe_success{job=\"pi-blackbox\",instance=\"ups-compute-rack\",platform=\"pi\",probe=\"jellyfin\"}",
+          "values": "1x25"
+        },
+        {
+          "series": "probe_success{job=\"pi-blackbox\",instance=\"ups-compute-rack\",platform=\"pi\",probe=\"homepage\"}",
+          "values": "1x25"
+        },
+        {
+          "series": "probe_success{job=\"pi-blackbox\",instance=\"ups-compute-rack\",platform=\"pi\",probe=\"cloudflare-tunnel\"}",
+          "values": "1x25"
+        },
+        {
+          "series": "probe_success{job=\"pi-blackbox\",instance=\"ups-compute-rack\",platform=\"pi\",probe=\"athena-dsm\"}",
+          "values": "1x25"
+        },
+        {
+          "series": "probe_success{job=\"pi-blackbox\",instance=\"ups-compute-rack\",platform=\"pi\",probe=\"k8s-gateway\"}",
+          "values": "1x25"
+        },
+        {
+          "series": "probe_success{job=\"pi-blackbox\",instance=\"ups-compute-rack\",platform=\"pi\",probe=\"unifi-gateway\"}",
+          "values": "1x25"
+        }
+      ],
+      "promql_expr_test": [
+        {
+          "expr": "count by (probe, instance, severity) (ALERTS{alertname=\"ProbeMetricsMissing\",alertstate=\"firing\"})",
+          "eval_time": "4m",
+          "exp_samples": []
+        },
+        {
+          "expr": "count by (probe, instance, severity) (ALERTS{alertname=\"ProbeMetricsMissing\",alertstate=\"firing\"})",
+          "eval_time": "5m",
+          "exp_samples": [
+            {
+              "labels": "{probe=\"grafana\",instance=\"ups-compute-rack\",severity=\"info\"}",
+              "value": 1
+            }
+          ]
+        },
+        {
+          "expr": "count by (probe, instance, severity) (ALERTS{alertname=\"ProbeMetricsMissing\",alertstate=\"firing\"})",
+          "eval_time": "15m",
+          "exp_samples": [
+            {
+              "labels": "{probe=\"grafana\",instance=\"ups-compute-rack\",severity=\"info\"}",
+              "value": 1
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Brief probe gap stays quiet",
+      "interval": "1m",
+      "input_series": [
+        {
+          "series": "up{job=\"pi-blackbox-exporter\",instance=\"ups-compute-rack\",platform=\"pi\"}",
+          "values": "1x25"
+        },
+        {
+          "series": "probe_success{job=\"pi-blackbox\",instance=\"ups-compute-rack\",platform=\"pi\",probe=\"gateway-admin\"}",
+          "values": "1x25"
+        },
+        {
+          "series": "probe_success{job=\"pi-blackbox\",instance=\"ups-compute-rack\",platform=\"pi\",probe=\"gateway-services\"}",
+          "values": "1x25"
+        },
+        {
+          "series": "probe_success{job=\"pi-blackbox\",instance=\"ups-compute-rack\",platform=\"pi\",probe=\"kanidm\"}",
+          "values": "1x25"
+        },
+        {
+          "series": "probe_success{job=\"pi-blackbox\",instance=\"ups-compute-rack\",platform=\"pi\",probe=\"jellyfin\"}",
+          "values": "1x25"
+        },
+        {
+          "series": "probe_success{job=\"pi-blackbox\",instance=\"ups-compute-rack\",platform=\"pi\",probe=\"homepage\"}",
+          "values": "1x25"
+        },
+        {
+          "series": "probe_success{job=\"pi-blackbox\",instance=\"ups-compute-rack\",platform=\"pi\",probe=\"cloudflare-tunnel\"}",
+          "values": "1x25"
+        },
+        {
+          "series": "probe_success{job=\"pi-blackbox\",instance=\"ups-compute-rack\",platform=\"pi\",probe=\"athena-dsm\"}",
+          "values": "1x25"
+        },
+        {
+          "series": "probe_success{job=\"pi-blackbox\",instance=\"ups-compute-rack\",platform=\"pi\",probe=\"k8s-gateway\"}",
+          "values": "1x25"
+        },
+        {
+          "series": "probe_success{job=\"pi-blackbox\",instance=\"ups-compute-rack\",platform=\"pi\",probe=\"unifi-gateway\"}",
+          "values": "1x25"
+        },
+        {
+          "series": "probe_success{job=\"pi-blackbox\",instance=\"ups-compute-rack\",platform=\"pi\",probe=\"grafana\"}",
+          "values": "1x4 stale _x2 1x17"
+        }
+      ],
+      "promql_expr_test": [
+        {
+          "expr": "count by (probe, instance, severity) (ALERTS{alertname=\"ProbeMetricsMissing\",alertstate=\"firing\"})",
+          "eval_time": "7m",
+          "exp_samples": []
+        },
+        {
+          "expr": "count by (probe, instance, severity) (ALERTS{alertname=\"ProbeMetricsMissing\",alertstate=\"firing\"})",
+          "eval_time": "15m",
+          "exp_samples": []
+        }
+      ]
+    },
+    {
+      "name": "Missing probe while exporter down stays quiet",
+      "interval": "1m",
+      "input_series": [
+        {
+          "series": "up{job=\"pi-blackbox-exporter\",instance=\"ups-compute-rack\",platform=\"pi\"}",
+          "values": "0x25"
+        },
+        {
+          "series": "probe_success{job=\"pi-blackbox\",instance=\"ups-compute-rack\",platform=\"pi\",probe=\"gateway-admin\"}",
+          "values": "1x25"
+        },
+        {
+          "series": "probe_success{job=\"pi-blackbox\",instance=\"ups-compute-rack\",platform=\"pi\",probe=\"gateway-services\"}",
+          "values": "1x25"
+        },
+        {
+          "series": "probe_success{job=\"pi-blackbox\",instance=\"ups-compute-rack\",platform=\"pi\",probe=\"kanidm\"}",
+          "values": "1x25"
+        },
+        {
+          "series": "probe_success{job=\"pi-blackbox\",instance=\"ups-compute-rack\",platform=\"pi\",probe=\"jellyfin\"}",
+          "values": "1x25"
+        },
+        {
+          "series": "probe_success{job=\"pi-blackbox\",instance=\"ups-compute-rack\",platform=\"pi\",probe=\"homepage\"}",
+          "values": "1x25"
+        },
+        {
+          "series": "probe_success{job=\"pi-blackbox\",instance=\"ups-compute-rack\",platform=\"pi\",probe=\"cloudflare-tunnel\"}",
+          "values": "1x25"
+        },
+        {
+          "series": "probe_success{job=\"pi-blackbox\",instance=\"ups-compute-rack\",platform=\"pi\",probe=\"athena-dsm\"}",
+          "values": "1x25"
+        },
+        {
+          "series": "probe_success{job=\"pi-blackbox\",instance=\"ups-compute-rack\",platform=\"pi\",probe=\"k8s-gateway\"}",
+          "values": "1x25"
+        },
+        {
+          "series": "probe_success{job=\"pi-blackbox\",instance=\"ups-compute-rack\",platform=\"pi\",probe=\"unifi-gateway\"}",
+          "values": "1x25"
+        }
+      ],
+      "promql_expr_test": [
+        {
+          "expr": "count by (probe, instance, severity) (ALERTS{alertname=\"ProbeMetricsMissing\",alertstate=\"firing\"})",
+          "eval_time": "15m",
+          "exp_samples": []
+        }
+      ]
+    },
+    {
+      "name": "Missing exporter series suppresses missing probes",
+      "interval": "1m",
+      "input_series": [
+        {
+          "series": "probe_success{job=\"pi-blackbox\",instance=\"ups-compute-rack\",platform=\"pi\",probe=\"gateway-admin\"}",
+          "values": "1x25"
+        },
+        {
+          "series": "probe_success{job=\"pi-blackbox\",instance=\"ups-compute-rack\",platform=\"pi\",probe=\"gateway-services\"}",
+          "values": "1x25"
+        },
+        {
+          "series": "probe_success{job=\"pi-blackbox\",instance=\"ups-compute-rack\",platform=\"pi\",probe=\"kanidm\"}",
+          "values": "1x25"
+        },
+        {
+          "series": "probe_success{job=\"pi-blackbox\",instance=\"ups-compute-rack\",platform=\"pi\",probe=\"jellyfin\"}",
+          "values": "1x25"
+        },
+        {
+          "series": "probe_success{job=\"pi-blackbox\",instance=\"ups-compute-rack\",platform=\"pi\",probe=\"homepage\"}",
+          "values": "1x25"
+        },
+        {
+          "series": "probe_success{job=\"pi-blackbox\",instance=\"ups-compute-rack\",platform=\"pi\",probe=\"cloudflare-tunnel\"}",
+          "values": "1x25"
+        },
+        {
+          "series": "probe_success{job=\"pi-blackbox\",instance=\"ups-compute-rack\",platform=\"pi\",probe=\"athena-dsm\"}",
+          "values": "1x25"
+        },
+        {
+          "series": "probe_success{job=\"pi-blackbox\",instance=\"ups-compute-rack\",platform=\"pi\",probe=\"k8s-gateway\"}",
+          "values": "1x25"
+        },
+        {
+          "series": "probe_success{job=\"pi-blackbox\",instance=\"ups-compute-rack\",platform=\"pi\",probe=\"unifi-gateway\"}",
+          "values": "1x25"
+        }
+      ],
+      "promql_expr_test": [
+        {
+          "expr": "count by (probe, instance, severity) (ALERTS{alertname=\"ProbeMetricsMissing\",alertstate=\"firing\"})",
+          "eval_time": "15m",
+          "exp_samples": []
+        }
+      ]
+    },
+    {
+      "name": "Failed scrape is owned by ProbeFailed",
+      "interval": "1m",
+      "input_series": [
+        {
+          "series": "up{job=\"pi-blackbox-exporter\",instance=\"ups-compute-rack\",platform=\"pi\"}",
+          "values": "1x25"
+        },
+        {
+          "series": "probe_success{job=\"pi-blackbox\",instance=\"ups-compute-rack\",platform=\"pi\",probe=\"gateway-admin\"}",
+          "values": "1x25"
+        },
+        {
+          "series": "probe_success{job=\"pi-blackbox\",instance=\"ups-compute-rack\",platform=\"pi\",probe=\"gateway-services\"}",
+          "values": "1x25"
+        },
+        {
+          "series": "probe_success{job=\"pi-blackbox\",instance=\"ups-compute-rack\",platform=\"pi\",probe=\"kanidm\"}",
+          "values": "1x25"
+        },
+        {
+          "series": "probe_success{job=\"pi-blackbox\",instance=\"ups-compute-rack\",platform=\"pi\",probe=\"jellyfin\"}",
+          "values": "1x25"
+        },
+        {
+          "series": "probe_success{job=\"pi-blackbox\",instance=\"ups-compute-rack\",platform=\"pi\",probe=\"homepage\"}",
+          "values": "1x25"
+        },
+        {
+          "series": "probe_success{job=\"pi-blackbox\",instance=\"ups-compute-rack\",platform=\"pi\",probe=\"cloudflare-tunnel\"}",
+          "values": "1x25"
+        },
+        {
+          "series": "probe_success{job=\"pi-blackbox\",instance=\"ups-compute-rack\",platform=\"pi\",probe=\"athena-dsm\"}",
+          "values": "1x25"
+        },
+        {
+          "series": "probe_success{job=\"pi-blackbox\",instance=\"ups-compute-rack\",platform=\"pi\",probe=\"k8s-gateway\"}",
+          "values": "1x25"
+        },
+        {
+          "series": "probe_success{job=\"pi-blackbox\",instance=\"ups-compute-rack\",platform=\"pi\",probe=\"unifi-gateway\"}",
+          "values": "1x25"
+        },
+        {
+          "series": "up{job=\"pi-blackbox\",instance=\"ups-compute-rack\",platform=\"pi\",probe=\"grafana\"}",
+          "values": "0x25"
+        }
+      ],
+      "promql_expr_test": [
+        {
+          "expr": "count by (probe, instance, severity) (ALERTS{alertname=\"ProbeMetricsMissing\",alertstate=\"firing\"})",
+          "eval_time": "15m",
+          "exp_samples": []
+        }
+      ]
+    },
+    {
+      "name": "Unsuccessful probe is present, not missing",
+      "interval": "1m",
+      "input_series": [
+        {
+          "series": "up{job=\"pi-blackbox-exporter\",instance=\"ups-compute-rack\",platform=\"pi\"}",
+          "values": "1x25"
+        },
+        {
+          "series": "probe_success{job=\"pi-blackbox\",instance=\"ups-compute-rack\",platform=\"pi\",probe=\"gateway-admin\"}",
+          "values": "1x25"
+        },
+        {
+          "series": "probe_success{job=\"pi-blackbox\",instance=\"ups-compute-rack\",platform=\"pi\",probe=\"gateway-services\"}",
+          "values": "1x25"
+        },
+        {
+          "series": "probe_success{job=\"pi-blackbox\",instance=\"ups-compute-rack\",platform=\"pi\",probe=\"kanidm\"}",
+          "values": "1x25"
+        },
+        {
+          "series": "probe_success{job=\"pi-blackbox\",instance=\"ups-compute-rack\",platform=\"pi\",probe=\"jellyfin\"}",
+          "values": "1x25"
+        },
+        {
+          "series": "probe_success{job=\"pi-blackbox\",instance=\"ups-compute-rack\",platform=\"pi\",probe=\"homepage\"}",
+          "values": "1x25"
+        },
+        {
+          "series": "probe_success{job=\"pi-blackbox\",instance=\"ups-compute-rack\",platform=\"pi\",probe=\"cloudflare-tunnel\"}",
+          "values": "1x25"
+        },
+        {
+          "series": "probe_success{job=\"pi-blackbox\",instance=\"ups-compute-rack\",platform=\"pi\",probe=\"athena-dsm\"}",
+          "values": "1x25"
+        },
+        {
+          "series": "probe_success{job=\"pi-blackbox\",instance=\"ups-compute-rack\",platform=\"pi\",probe=\"k8s-gateway\"}",
+          "values": "1x25"
+        },
+        {
+          "series": "probe_success{job=\"pi-blackbox\",instance=\"ups-compute-rack\",platform=\"pi\",probe=\"unifi-gateway\"}",
+          "values": "1x25"
+        },
+        {
+          "series": "probe_success{job=\"pi-blackbox\",instance=\"ups-compute-rack\",platform=\"pi\",probe=\"grafana\"}",
+          "values": "0x25"
+        }
+      ],
+      "promql_expr_test": [
+        {
+          "expr": "count by (probe, instance, severity) (ALERTS{alertname=\"ProbeMetricsMissing\",alertstate=\"firing\"})",
+          "eval_time": "15m",
+          "exp_samples": []
+        }
+      ]
+    },
+    {
+      "name": "Exporter outage clears missing alert and resets hold on recovery",
+      "interval": "1m",
+      "input_series": [
+        {
+          "series": "up{job=\"pi-blackbox-exporter\",instance=\"ups-compute-rack\",platform=\"pi\"}",
+          "values": "1x10 0x4 1x10"
+        },
+        {
+          "series": "probe_success{job=\"pi-blackbox\",instance=\"ups-compute-rack\",platform=\"pi\",probe=\"gateway-admin\"}",
+          "values": "1x25"
+        },
+        {
+          "series": "probe_success{job=\"pi-blackbox\",instance=\"ups-compute-rack\",platform=\"pi\",probe=\"gateway-services\"}",
+          "values": "1x25"
+        },
+        {
+          "series": "probe_success{job=\"pi-blackbox\",instance=\"ups-compute-rack\",platform=\"pi\",probe=\"kanidm\"}",
+          "values": "1x25"
+        },
+        {
+          "series": "probe_success{job=\"pi-blackbox\",instance=\"ups-compute-rack\",platform=\"pi\",probe=\"jellyfin\"}",
+          "values": "1x25"
+        },
+        {
+          "series": "probe_success{job=\"pi-blackbox\",instance=\"ups-compute-rack\",platform=\"pi\",probe=\"homepage\"}",
+          "values": "1x25"
+        },
+        {
+          "series": "probe_success{job=\"pi-blackbox\",instance=\"ups-compute-rack\",platform=\"pi\",probe=\"cloudflare-tunnel\"}",
+          "values": "1x25"
+        },
+        {
+          "series": "probe_success{job=\"pi-blackbox\",instance=\"ups-compute-rack\",platform=\"pi\",probe=\"athena-dsm\"}",
+          "values": "1x25"
+        },
+        {
+          "series": "probe_success{job=\"pi-blackbox\",instance=\"ups-compute-rack\",platform=\"pi\",probe=\"k8s-gateway\"}",
+          "values": "1x25"
+        },
+        {
+          "series": "probe_success{job=\"pi-blackbox\",instance=\"ups-compute-rack\",platform=\"pi\",probe=\"unifi-gateway\"}",
+          "values": "1x25"
+        }
+      ],
+      "promql_expr_test": [
+        {
+          "expr": "count by (probe, instance, severity) (ALERTS{alertname=\"ProbeMetricsMissing\",alertstate=\"firing\"})",
+          "eval_time": "10m",
+          "exp_samples": [
+            {
+              "labels": "{probe=\"grafana\",instance=\"ups-compute-rack\",severity=\"info\"}",
+              "value": 1
+            }
+          ]
+        },
+        {
+          "expr": "count by (probe, instance, severity) (ALERTS{alertname=\"ProbeMetricsMissing\",alertstate=\"firing\"})",
+          "eval_time": "11m",
+          "exp_samples": []
+        },
+        {
+          "expr": "count by (probe, instance, severity) (ALERTS{alertname=\"ProbeMetricsMissing\",alertstate=\"firing\"})",
+          "eval_time": "15m",
+          "exp_samples": []
+        },
+        {
+          "expr": "count by (probe, instance, severity) (ALERTS{alertname=\"ProbeMetricsMissing\",alertstate=\"firing\"})",
+          "eval_time": "19m",
+          "exp_samples": []
+        },
+        {
+          "expr": "count by (probe, instance, severity) (ALERTS{alertname=\"ProbeMetricsMissing\",alertstate=\"firing\"})",
+          "eval_time": "21m",
+          "exp_samples": [
+            {
+              "labels": "{probe=\"grafana\",instance=\"ups-compute-rack\",severity=\"info\"}",
+              "value": 1
+            }
+          ]
+        }
+      ]
     }
   ]
 }

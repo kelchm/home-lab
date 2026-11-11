@@ -15,7 +15,7 @@ MetaMCP and MarkItDown were retired in September 2026. MCPHub is the remaining g
 | Grafana MCP | Grafana pods in `observability` | TCP 3000 | Read-only Grafana API |
 | LEMON manuals MCP | `lemon-website` pods in `lemon-manuals` | TCP 8080 | Self-hosted manual page retrieval |
 | Kubernetes/Flux MCP | Cilium `kube-apiserver` entity | API server ports | Read-only cluster APIs |
-| Grafana functional probe | Grafana MCP pods | TCP 8000 | Initialize, tool call, and session cleanup |
+| Grafana functional probe | Admin Traefik pods in `network` | TCP 8443 (Service 443) | HTTPS gateway, scoped bearer auth, tool call and session cleanup |
 | Weather, news, and parts MCPs | Public IPv4 only | TCP 80/443 | Untrusted web/API fetches |
 
 The public-egress rule explicitly excludes pod/Service space, all RFC 1918
@@ -27,11 +27,9 @@ MCPHub egress names the exact backend pod identities and ports; each backend's i
 
 ## Functional checks
 
-The `grafana-mcp-functional-probe` CronJob runs every five minutes. It uses the
-direct Grafana MCP Service URL, initializes MCP, calls `list_datasources`
-(which must reach Grafana), verifies the response, and deletes the MCP session.
-A TCP-only success cannot satisfy the check. Session-lifetime policy is
-intentionally outside this probe.
+The `grafana-mcp-functional-probe` CronJob runs every five minutes through `https://mcphub.home.kelch.io/mcp/homelab-read`, following the admin gateway's HTTPS route into MCPHub. It initializes MCP, calls `grafana__list_datasources` (which must reach Grafana), validates the datasource list and deletes the MCP session when one was issued. Its own SOPS Secret supplies a dedicated system bearer key scoped to `homelab-read`; a key-specific tool policy permits only Grafana's `list_datasources`. It cannot reach the Grafana MCP backend directly. A TCP-only success cannot satisfy the check. Session-lifetime policy is intentionally outside this probe.
+
+Changing MCPHub's settings Secret triggers Stakater Reloader and a single-pod `Recreate` rollout; clients briefly lose their in-memory sessions and must reconnect. The new key and tool policy leave existing principals and groups unchanged. After rollout, wait for the next scheduled probe to succeed and confirm existing clients can still list their normal tools. The new key and in-cluster gateway policy need this post-merge acceptance; a workstation check cannot prove pod egress.
 
 After rollout:
 
@@ -77,4 +75,4 @@ kubectl -n ai delete job grafana-mcp-manual-probe
 
 ## Alerts and memory monitoring
 
-`ai-mcp-reliability` alerts on a failed/stale functional probe or twelve minutes with no probe success metric. `GrafanaMCPFunctionalProbeFailed` and `GrafanaMCPFunctionalProbeMissing` route through VMAlertmanager, which vmalert delivers to. Use the [alerting runbook](alerting.md) to test or troubleshoot the notification path.
+`ai-mcp-reliability` reports a failed/stale gateway check or twelve minutes with no probe success metric. `GrafanaMCPFunctionalProbeFailed` and `GrafanaMCPFunctionalProbeMissing` are `info`: visible on Home and in Alertmanager, with no Pushover notification. Inspect the scheduled Job logs, bearer Secret, gateway route and MCPHub backend connection when one appears.

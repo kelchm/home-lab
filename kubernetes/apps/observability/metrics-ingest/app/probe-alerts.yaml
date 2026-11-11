@@ -25,6 +25,36 @@ spec:
             description: "{{ $labels.target }} failed the {{ $labels.module }} probe. Check the destination, DNS and the routed path from VLAN 20."
             runbook_url: https://github.com/kelchm/home-lab/blob/main/docs/runbooks/host-monitoring.md#service-probes
 
+        # Expected inventory from rpi-nixos hosts/ups-compute-rack/probes.nix.
+        # Update this list with intentional target additions/removals there.
+        # A failed scrape belongs to ProbeFailed; an exporter outage belongs
+        # to NodeCollectorDown. Neither should also report a vanished probe.
+        - alert: ProbeMetricsMissing
+          expr: |
+            (
+              absent_over_time(probe_success{job="pi-blackbox",instance="ups-compute-rack",platform="pi",probe="gateway-admin"}[5m])
+              or absent_over_time(probe_success{job="pi-blackbox",instance="ups-compute-rack",platform="pi",probe="gateway-services"}[5m])
+              or absent_over_time(probe_success{job="pi-blackbox",instance="ups-compute-rack",platform="pi",probe="kanidm"}[5m])
+              or absent_over_time(probe_success{job="pi-blackbox",instance="ups-compute-rack",platform="pi",probe="jellyfin"}[5m])
+              or absent_over_time(probe_success{job="pi-blackbox",instance="ups-compute-rack",platform="pi",probe="grafana"}[5m])
+              or absent_over_time(probe_success{job="pi-blackbox",instance="ups-compute-rack",platform="pi",probe="homepage"}[5m])
+              or absent_over_time(probe_success{job="pi-blackbox",instance="ups-compute-rack",platform="pi",probe="cloudflare-tunnel"}[5m])
+              or absent_over_time(probe_success{job="pi-blackbox",instance="ups-compute-rack",platform="pi",probe="athena-dsm"}[5m])
+              or absent_over_time(probe_success{job="pi-blackbox",instance="ups-compute-rack",platform="pi",probe="k8s-gateway"}[5m])
+              or absent_over_time(probe_success{job="pi-blackbox",instance="ups-compute-rack",platform="pi",probe="unifi-gateway"}[5m])
+            )
+            unless on (instance, platform, probe)
+            (up{job="pi-blackbox"} == 0)
+            and on (instance, platform)
+            (up{job="pi-blackbox-exporter"} == 1)
+          for: 5m
+          labels:
+            severity: info
+          annotations:
+            summary: "Probe {{ $labels.probe }} stopped reporting from {{ $labels.instance }}"
+            description: "No probe_success samples arrived for {{ $labels.probe }} for at least ten minutes and the Pi exporter is up. Check this Pi's vmagent target list and blackbox probe configuration in rpi-nixos."
+            runbook_url: https://github.com/kelchm/home-lab/blob/main/docs/runbooks/host-monitoring.md#service-probes
+
         - alert: ProbeSlow
           expr: |
             (avg_over_time(probe_duration_seconds{job="pi-blackbox"}[5m]) > 2)

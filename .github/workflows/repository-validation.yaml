@@ -69,6 +69,7 @@ jobs:
               - 'scripts/ci/validate-longhorn-alerts.sh'
               - 'scripts/ci/validate-pi-probe-alerts.sh'
               - 'scripts/monitoring/pi-probe-alerts.test.yaml'
+              - 'scripts/monitoring/test-mcp-probe.py'
               - 'scripts/ci/validate-drive-alerts.sh'
               - 'scripts/monitoring/drive-alerts.test.yaml'
               - 'scripts/monitoring/longhorn-alerts.test.yaml'
@@ -324,6 +325,10 @@ jobs:
       - name: Validate the NTP dashboard against its generator
         if: needs.pre-job.outputs.kubernetes_changed == 'true'
         run: python3 scripts/grafana/render-ntp.py --check
+
+      - name: Validate MCP gateway probe
+        if: needs.pre-job.outputs.kubernetes_changed == 'true'
+        run: PYTHONDONTWRITEBYTECODE=1 python3 scripts/monitoring/test-mcp-probe.py
 
       - name: Validate Pi probe alerts
         if: needs.pre-job.outputs.kubernetes_changed == 'true'
