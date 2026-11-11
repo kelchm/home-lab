@@ -25,7 +25,7 @@ The raw Google Timeline export on Athena (`/volume1/homes/kelchm/cloud-backups/g
    ```
 
    Self-registration is off by default (`ALLOW_EMAIL_PASSWORD_REGISTRATION`).
-2. **Accept the database backups** as for the other databases: after the instances are Ready, [take a backup by hand](cnpg-backup-restore.md#take-a-backup-by-hand) and require it to complete, with objects on Athena and a nonzero last-backup metric.
+2. **Accept the database backups** as for the other databases: after the instances are Ready, [take a backup by hand](cnpg-backup-restore.md#take-a-backup-by-hand) and require it to complete, with objects on Athena and a nonzero last-backup metric. A base backup alone does not prove later changes are saved: also require WAL objects under `k8s-prod-dawarich-db` to keep advancing and `cnpg_collector_pg_wal_archive_status{namespace="location", value="ready"}` to stay at 0 for at least 15 minutes, as in the [activation checks](cnpg-backup-restore.md#turn-backups-on). [WAL archiving is stalled](cnpg-backup-restore.md#wal-archiving-is-stalled) covers a failure.
 3. **Switch the database to its permanent bootstrap.** `cluster.yaml` starts with `bootstrap.initdb`, which creates an empty database. Once a base backup has completed, replace it with the `bootstrap.recovery` and `externalClusters` stanzas the other databases use, pointing at `dawarich-db` and `serverName: dawarich-db-pg17`, and add the `cnpg.io/skipEmptyWalArchiveCheck: enabled` annotation with it. The annotation is left off until then because, with `initdb`, CloudNativePG's empty-archive check is what stops a rebuilt empty database from archiving over the existing backups. CloudNativePG reads the bootstrap only when it creates a data directory, so the change does not touch the running database; it makes a rebuild restore the archive instead of starting empty. Do not leave `initdb` in place.
 
 ## Import Google Timeline
@@ -34,7 +34,7 @@ Use the phone's own export (Google Maps → Settings → Personal content → Ex
 
 ## Phone tracking
 
-The Dawarich iOS app connects with the server URL and the API key from Account → API access. OwnTracks (`/api/v1/owntracks/points`) and Overland (`/api/v1/overland/batches`) also work with `?api_key=`. Uploads need NetBird connected when away; the app keeps unsent points and retries. Check that the queue survives a phone restart before relying on it, as described in #1419.
+The Dawarich iOS app connects with the server URL and the API key from Account → API access. Dawarich accepts the key as an `Authorization: Bearer` header or as `?api_key=`. Prefer a client that sends the header: the services gateway's access log keeps query strings, so a key in the URL is stored in VictoriaLogs until [#1422](https://github.com/kelchm/home-lab/issues/1422) redacts it. Confirm which form the iOS app uses from its first requests before relying on it. OwnTracks (`/api/v1/owntracks/points`) and Overland (`/api/v1/overland/batches`) also work. Uploads need NetBird connected when away; the app keeps unsent points and retries. Check that the queue survives a phone restart before relying on it, as described in #1419.
 
 ## Privacy notes
 
