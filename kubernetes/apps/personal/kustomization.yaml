@@ -9,3 +9,4 @@ components:
 resources:
   - ./namespace.yaml
   - ./dawarich/ks.yaml
+  - ./photon/ks.yaml

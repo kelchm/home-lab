@@ -1,6 +1,7 @@
 ---
 # Default-deny policy for Dawarich. Inbound is only the household gateway.
-# Outbound is DNS and its own database: no internet. With nothing configured,
+# Outbound is DNS, its own database and the in-cluster Photon geocoder: no
+# internet. With nothing configured,
 # Dawarich's place search would fall back to public Nominatim and send the
 # query there; this policy keeps every location lookup inside the lab.
 apiVersion: cilium.io/v2
@@ -39,6 +40,14 @@ spec:
       toPorts:
         - ports:
             - port: "5432"
+              protocol: TCP
+    - toEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: personal
+            app.kubernetes.io/name: photon
+      toPorts:
+        - ports:
+            - port: "2322"
               protocol: TCP
 ---
 # CNPG is reachable only from Dawarich, the CNPG operator, and the established
