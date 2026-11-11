@@ -1,6 +1,6 @@
 # Dawarich
 
-Dawarich is Matt's private location-history archive ([#1419](https://github.com/kelchm/home-lab/issues/1419)). It runs in `location` at `https://dawarich.home.kelch.io` on `gateway-services`. At home, UniFi resolves the name; away, NetBird's split DNS resolves it and NetBird's existing permit to the household gateway carries the traffic. Nothing is published to the internet, and the network policy gives the pod no internet egress.
+Dawarich is Matt's private location-history archive ([#1419](https://github.com/kelchm/home-lab/issues/1419)). It runs in `personal`, a namespace for personal-data apps, at `https://dawarich.home.kelch.io` on `gateway-services`. At home, UniFi resolves the name; away, NetBird's split DNS resolves it and NetBird's existing permit to the household gateway carries the traffic. Nothing is published to the internet, and the network policy gives the pod no internet egress.
 
 The raw Google Timeline export on Athena (`/volume1/homes/kelchm/cloud-backups/google-timeline/`) is the durable archive. Dawarich is the way to view it and to keep collecting new points; it can be replaced without losing the history.
 
@@ -19,13 +19,13 @@ The raw Google Timeline export on Athena (`/volume1/homes/kelchm/cloud-backups/g
 
    ```sh
    printf '%s\n%s\n' 'you@example.com' "$(op read 'op://<vault>/<item>/password')" |
-     kubectl -n location exec -i deploy/dawarich -c app -- bin/rails runner '
+     kubectl -n personal exec -i deploy/dawarich -c app -- bin/rails runner '
        email, password = $stdin.read.split("\n").first(2)
        User.find_by!(email: "demo@dawarich.app").update!(email: email, password: password, password_confirmation: password)'
    ```
 
    Self-registration is off by default (`ALLOW_EMAIL_PASSWORD_REGISTRATION`).
-2. **Accept the database backups** as for the other databases: after the instances are Ready, [take a backup by hand](cnpg-backup-restore.md#take-a-backup-by-hand) and require it to complete, with objects on Athena and a nonzero last-backup metric. A base backup alone does not prove later changes are saved: also require WAL objects under `k8s-prod-dawarich-db` to keep advancing and `cnpg_collector_pg_wal_archive_status{namespace="location", value="ready"}` to stay at 0 for at least 15 minutes, as in the [activation checks](cnpg-backup-restore.md#turn-backups-on). [WAL archiving is stalled](cnpg-backup-restore.md#wal-archiving-is-stalled) covers a failure.
+2. **Accept the database backups** as for the other databases: after the instances are Ready, [take a backup by hand](cnpg-backup-restore.md#take-a-backup-by-hand) and require it to complete, with objects on Athena and a nonzero last-backup metric. A base backup alone does not prove later changes are saved: also require WAL objects under `k8s-prod-dawarich-db` to keep advancing and `cnpg_collector_pg_wal_archive_status{namespace="personal", value="ready"}` to stay at 0 for at least 15 minutes, as in the [activation checks](cnpg-backup-restore.md#turn-backups-on). [WAL archiving is stalled](cnpg-backup-restore.md#wal-archiving-is-stalled) covers a failure.
 3. **Switch the database to its permanent bootstrap.** `cluster.yaml` starts with `bootstrap.initdb`, which creates an empty database. Once a base backup has completed, replace it with the `bootstrap.recovery` and `externalClusters` stanzas the other databases use, pointing at `dawarich-db` and `serverName: dawarich-db-pg17`, and add the `cnpg.io/skipEmptyWalArchiveCheck: enabled` annotation with it. The annotation is left off until then because, with `initdb`, CloudNativePG's empty-archive check is what stops a rebuilt empty database from archiving over the existing backups. CloudNativePG reads the bootstrap only when it creates a data directory, so the change does not touch the running database; it makes a rebuild restore the archive instead of starting empty. Do not leave `initdb` in place.
 
 ## Import Google Timeline

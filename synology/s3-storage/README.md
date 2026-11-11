@@ -34,7 +34,7 @@ The share is not tied to one system. A bucket is named `<system>-<workload>` and
 |---|---|---|
 | `k8s-prod-visionect-db` | `k8s-prod-visionect-db` | `iot/visionect-db` |
 | `k8s-prod-bambuddy-db` | `k8s-prod-bambuddy-db` | `printing/bambuddy-db` |
-| `k8s-prod-dawarich-db` | `k8s-prod-dawarich-db` | `location/dawarich-db` |
+| `k8s-prod-dawarich-db` | `k8s-prod-dawarich-db` | `personal/dawarich-db` |
 
 versitygw is not published. Only Traefik listens, and it forwards to the gateway over the project's private network. The gateway's admin API listens on the container's loopback, so it is reachable only with `docker exec`.
 

@@ -16,31 +16,31 @@ spec:
           annotations:
             summary: CNPG Cluster has no running instances!
             description: |-
-              CloudNativePG Cluster "location/dawarich-db" has no ready instances.
+              CloudNativePG Cluster "personal/dawarich-db" has no ready instances.
 
               Having an offline cluster means your applications will not be able to access the database, leading to
               potential service disruption and/or data loss.
             runbook_url: https://github.com/cloudnative-pg/charts/blob/main/charts/cluster/docs/runbooks/CNPGClusterOffline.md
           expr: |
-            (count(cnpg_collector_up{cluster="k8s-prod",namespace="location",pod=~"dawarich-db-([1-9][0-9]*)$"} == 1) OR on() vector(0)) == 0
+            (count(cnpg_collector_up{cluster="k8s-prod",namespace="personal",pod=~"dawarich-db-([1-9][0-9]*)$"} == 1) OR on() vector(0)) == 0
           for: 5m
           labels:
             severity: critical
-            namespace: location
+            namespace: personal
             cnpg_cluster: dawarich-db
         # spec.instances=2 requires one streaming standby. CI checks this expectation.
         # The primary-only query confirms streaming; aggregate exporters to one database alert.
         - alert: CNPGStreamingStandbyMissing
           expr: |
-            max by (cluster, namespace) (cnpg_collector_up{cluster="k8s-prod",namespace="location",pod=~"dawarich-db-([1-9][0-9]*)$"} == 1)
+            max by (cluster, namespace) (cnpg_collector_up{cluster="k8s-prod",namespace="personal",pod=~"dawarich-db-([1-9][0-9]*)$"} == 1)
             unless on (cluster, namespace)
-            max by (cluster, namespace) (cnpg_ha_streaming_replicas{cluster="k8s-prod",namespace="location",pod=~"dawarich-db-([1-9][0-9]*)$"} >= 1)
+            max by (cluster, namespace) (cnpg_ha_streaming_replicas{cluster="k8s-prod",namespace="personal",pod=~"dawarich-db-([1-9][0-9]*)$"} >= 1)
           for: 10m
           labels:
             severity: warning
-            namespace: location
+            namespace: personal
             cnpg_cluster: dawarich-db
           annotations:
-            summary: Database location/dawarich-db has no confirmed streaming standby
+            summary: Database personal/dawarich-db has no confirmed streaming standby
             description: A database instance is reporting up without confirmation of a streaming standby for 10 minutes. Check replication and exporter health before maintenance; another database failure could interrupt the application or lose unreceived transactions.
             runbook_url: https://github.com/kelchm/home-lab/blob/main/docs/runbooks/cnpg-backup-restore.md#streaming-standby-is-missing

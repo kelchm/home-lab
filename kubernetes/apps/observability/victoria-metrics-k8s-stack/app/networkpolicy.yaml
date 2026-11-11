@@ -117,7 +117,7 @@ spec:
     # Dawarich database metrics.
     - toEndpoints:
         - matchLabels:
-            k8s:io.kubernetes.pod.namespace: location
+            k8s:io.kubernetes.pod.namespace: personal
       toPorts:
         - ports:
             # dawarich-db postgres metrics

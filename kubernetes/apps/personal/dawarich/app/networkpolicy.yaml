@@ -34,7 +34,7 @@ spec:
               protocol: TCP
     - toEndpoints:
         - matchLabels:
-            k8s:io.kubernetes.pod.namespace: location
+            k8s:io.kubernetes.pod.namespace: personal
             cnpg.io/cluster: dawarich-db
       toPorts:
         - ports:
@@ -56,7 +56,7 @@ spec:
   ingress:
     - fromEndpoints:
         - matchLabels:
-            k8s:io.kubernetes.pod.namespace: location
+            k8s:io.kubernetes.pod.namespace: personal
             app.kubernetes.io/name: dawarich
       toPorts:
         - ports:
@@ -75,7 +75,7 @@ spec:
               protocol: TCP
     - fromEndpoints:
         - matchLabels:
-            k8s:io.kubernetes.pod.namespace: location
+            k8s:io.kubernetes.pod.namespace: personal
             cnpg.io/cluster: dawarich-db
       toPorts:
         - ports:
@@ -113,7 +113,7 @@ spec:
               protocol: TCP
     - toEndpoints:
         - matchLabels:
-            k8s:io.kubernetes.pod.namespace: location
+            k8s:io.kubernetes.pod.namespace: personal
             cnpg.io/cluster: dawarich-db
       toPorts:
         - ports:

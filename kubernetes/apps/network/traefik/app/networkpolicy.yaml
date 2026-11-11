@@ -121,7 +121,7 @@ spec:
     # Dawarich backend.
     - toEndpoints:
         - matchLabels:
-            k8s:io.kubernetes.pod.namespace: location
+            k8s:io.kubernetes.pod.namespace: personal
             app.kubernetes.io/name: dawarich
             io.cilium.k8s.policy.serviceaccount: dawarich
       toPorts:
