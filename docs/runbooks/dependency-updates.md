@@ -150,7 +150,7 @@ Don't add a tag only to silence the warning. That turns a lock into a tracked de
 
 The [Renovate Problems workflow](../../.github/workflows/renovate-problems.yaml) reads the [Renovate Dashboard](https://github.com/kelchm/home-lab/issues/2) daily at 13:17 UTC with the workflow's `GITHUB_TOKEN`. A failed run is the alert: GitHub sends its workflow-failure notification to whoever last changed the cron line, provided that account has Actions notifications enabled. A persisting failure notifies on every run.
 
-The result says whether the current dashboard lists problems, not that Renovate is running. A passing run on a stalled Renovate reads the last dashboard it wrote. Missed-run detection needs a trustworthy hosted-run signal and remains open in [#1017](https://github.com/kelchm/home-lab/issues/1017).
+The result says whether the current dashboard lists problems, not that Renovate is running. A passing run on a stalled Renovate reads the last dashboard it wrote. Missed-run detection is an accepted limit ([#1017](https://github.com/kelchm/home-lab/issues/1017)): the hosted Mend app exposes no trustworthy per-run signal. Reconsider it only if one becomes available.
 
 | Annotation | Meaning | Response |
 | --- | --- | --- |
@@ -169,6 +169,6 @@ When a lock's trigger fires, or work touches the component that owns it, review 
 
 Each mod is a reviewed snapshot: an upstream change gets a new versioned mod and recipe, and the current one stays as the rollback ([Update a pinned mod](../../sparks/inference/sparkrun/README.md#update-a-pinned-mod)). The `mod_files` checksums in `upstream.lock.json` verify the listed files, including `build/Dockerfile` in mods that have one. They don't decide when to update, and are never rewritten to clear a failure. For a mod with a custom image build, the base takes a content lock, either a digest-only `FROM` or a build argument supplied from the lock, since a Renovate edit in place would fail `prepare.py --check`. The SparkRun README records the current base's rationale.
 
-The lock manifest is itself a reviewed input, not covered by its own file hashes. Review its changes alongside the code and recipe. [CI runs the existing integrity and contract checks](../repository-validation.md#sparkrun-locks-and-contracts); semantic validation of all manifest fields remains separate work in [#1052](https://github.com/kelchm/home-lab/issues/1052).
+The lock manifest is itself a reviewed input, not covered by its own file hashes. Review its changes alongside the code and recipe. [CI runs the integrity and contract checks](../repository-validation.md#sparkrun-locks-and-contracts), including the semantic pin and recipe-consistency validator from [#1052](https://github.com/kelchm/home-lab/issues/1052). That validator checks the manifest's consistency, not source authentication or historical immutability, so provenance review of manifest changes still applies.
 
 A rebuild is a candidate artifact until its identity and profile qualification establish that it can be adopted. Retain the qualified image for rollback; source and base-image pins alone do not prove that a fresh build is equivalent.

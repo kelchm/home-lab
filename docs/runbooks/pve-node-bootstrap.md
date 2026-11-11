@@ -43,7 +43,7 @@ The owner-confirmed physical pattern places each PVE block immediately before th
 | `pve-sbx-2` | Lab Switch port 2 | Lab Switch port 14 |
 | `pve-sbx-3` | Lab Switch port 3 | Lab Switch port 15 |
 
-Ports 1–3 use the VLAN 20 access profile. Ports 13–15 use `pve-guest-trunk`, tagged for VLANs 10, 21, 25, and 90 with no native VLAN. The neighboring `k8s-prod-{1,2,3}` blocks are ports 4–6 and 16–18 respectively; do not modify those production ports while commissioning PVE.
+Ports 1–3 use the VLAN 20 access profile. Ports 13–15 use `pve-guest-trunk`, tagged for VLANs 10, 19, 21, 25, and 90 with no native VLAN. The neighboring `k8s-prod-{1,2,3}` blocks are ports 4–6 and 16–18 respectively; do not modify those production ports while commissioning PVE.
 
 ## Preflight
 
