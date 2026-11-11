@@ -47,6 +47,21 @@ The original `Automation` admin service user, whose token expired on 2026-10-27,
 
 The peers are `netbird-router-1` and `netbird-router-2` (Debian 13, NetBird 0.82.1), `Hyperion`, `iPhone-kelchm` and `Persephone`. `Persephone`, Matt's older personal MacBook Pro, joined `clients` on 2026-11-08 so that all his personal machines have the same access, and passed an away check that day. Its stored per-peer login-expiration flag is still set but has no effect while the account-level setting is off.
 
+### GLKVM console, added 2026-11-11
+
+The recovery console at `10.32.20.10` is reachable away from home without the PVE routers: the appliance is its own NetBird peer and routes only its own address. The appliance side is in the [GLKVM runbook](../../devices/glkvm/README.md#netbird). Read back with the Auditor export after creation:
+
+| Kind | Name | Definition |
+|---|---|---|
+| Group | `kvm` | Peer `kvm-compute-rack` |
+| Group | `kvm-resources` | Resource `kvm-console`; no policy names this group |
+| Network | `kvm` | Routed by group `kvm`, metric 9999, masquerade |
+| Resource | `kvm-console` | `10.32.20.10/32` |
+| Policy | `kvm-console` | `clients` → resource `kvm-console`, TCP 443 and 22, with the posture check |
+| Setup key | `kvm-compute-rack` | One-off, auto-group `kvm`, used once on 2026-11-11; revoked |
+
+Peer `kvm-compute-rack` (`kvm-compute-rack.netbird.cloud`) runs the firmware's NetBird client with kernel WireGuard; it is in `All` and `kvm`, with login expiration and NetBird SSH off. Away clients resolve `kvm-compute-rack.home.kelch.io` through the `home-dns` resource, which the PVE routers carry; if both are down, browse to `https://10.32.20.10/` instead, which still routes through the appliance itself.
+
 Every enabled resource policy names its resource directly, and no policy names a resource group. NetBird therefore grants clients only TCP 443 to `10.32.140.1` and `10.32.130.1` and port 53 to `10.32.30.1`; nothing grants TCP 443 to the UniFi console on `10.32.30.1`. VM 103 itself can reach that port, so the routing peer's per-port filter is what blocks clients, and #625's I1 check verified that from the iPhone away from home on 2026-11-08. The 0.82.0 routers no longer show NetBird's rules in iptables, so the filter was rechecked from a client after the upgrade: on 2026-11-10 Persephone, away from home, got no answer from `10.32.30.1:443`, `10.32.140.1:80` or `10.32.20.21:8006`, while Jellyfin on `10.32.140.1:443` answered. `home-resources` holds both the household-services and DNS resources, so a policy naming that group would open its ports on both addresses, the console included. Target resources directly.
 
 ## Read back NetBird Cloud

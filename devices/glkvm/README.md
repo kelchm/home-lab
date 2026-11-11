@@ -92,6 +92,40 @@ A `0` verify result means the chain and name check passed.
 
 To return to the vendor certificate, remove the cron entry and boot script, restore `/etc/kvmd/user/backups/ssl-vendor/server.{crt,key}` into `/etc/kvmd/user/ssl/`, and reload nginx. Browsers that recorded HSTS for the hostname will then refuse it until their HSTS entry expires; use the IP address.
 
+## NetBird
+
+The appliance is a NetBird peer so the console is reachable away from home even when the cluster and the PVE-hosted NetBird routers are down. It routes only its own address: the NetBird network for the console names this peer as its router and `10.32.20.10/32` as its resource, so an away client browses to the normal hostname with the trusted certificate. The site's NetBird Cloud objects and policy are recorded in the [NetBird runbook](../../docs/runbooks/netbird-remote-access.md#glkvm-console-added-2026-11-11).
+
+The firmware ships the client and its GL UI integration:
+
+| Piece | Behavior |
+|---|---|
+| `/usr/bin/netbird` | Firmware's client, 0.74.7 on `V1.10.1 release2`; updated only with firmware |
+| `/etc/init.d/S99netbird` | Starts `netbird service run --daemon-addr unix:///var/run/netbird.sock` when `/etc/kvmd/user/netbird.json` has `"enable": true`; also sets IP forwarding in `/etc/sysctl.conf` |
+| `/etc/kvmd/user/netbird.json` | `enable` and optional `management_url`, written by the GL UI |
+| `/etc/kvmd/user/netbird/` | Peer key and state (`/var/lib/netbird` links here). Secret; kept by the firmware's update backup |
+| GL UI NetBird page | Calls `netbird up --disable-dns --setup-key …`, `netbird logout` and reads status from the daemon socket |
+
+`--disable-dns` means the appliance never uses NetBird's DNS, which it doesn't need. The appliance's kernel has WireGuard, so the client runs in kernel mode.
+
+Enrolled 2026-11-11 as `kvm-compute-rack.netbird.cloud` with a one-off setup key whose auto-group is the console's router group; the key was revoked after its single use. The peer reported Management, Signal and Relay connected and `Networks: 10.32.20.10/32`. Access from an away client has not yet been verified.
+
+To re-enroll after a wipe, create a new one-off setup key with the same auto-group, then either paste it into the GL UI's NetBird page or run the same steps over SSH, sending the key on standard input so it stays out of the process list:
+
+```sh
+printf '%s\n' "$SETUP_KEY" | ssh root@10.32.20.10 '
+    set -eu
+    read -r key
+    printf "{\n    \"enable\": true\n}\n" > /etc/kvmd/user/netbird.json
+    /etc/init.d/S99netbird start
+    for i in 1 2 3 4 5 6 7 8 9 10; do [ -S /var/run/netbird.sock ] && break; sleep 1; done
+    netbird up --disable-dns --setup-key "$key"
+    netbird status
+'
+```
+
+Revoke the key afterwards, and remove the old peer from NetBird Cloud if the appliance came back with a new identity.
+
 ## Downstream KVM controls
 
 The physical eight-port KVM switches inputs with `Left Ctrl`, `Left Ctrl`,
@@ -446,6 +480,7 @@ After the update:
 6. Recheck the [monitoring](#monitoring) patch against the new firmware's `export.pyc` before reinstalling it. The installed copy steps aside on its own when that file changes, and its install refuses a module it was not verified against.
 7. Confirm the [name and address](#name-and-address) survived: `hostname` prints `kvm-compute-rack` and connman still reports the static address (`connmanctl services ethernet_9483c4c499d7_cable | grep IPv4`).
 8. Confirm [TLS](#tls) survived: the renewal entry is in `/etc/crontabs/root` (the boot script restores it), and the `curl` check in that section returns `0`. If the firmware dropped `/etc/kvmd/user/scripts` or the nginx `ssl.conf` no longer reads `/etc/kvmd/user/ssl`, rerun `devices/glkvm/acme/install.sh` and `deploy.sh`.
+9. Confirm [NetBird](#netbird) survived: `netbird status` shows Management connected and `Networks: 10.32.20.10/32`, and `netbird version` matches the README's version or a newer firmware one.
 
 The update to `V1.10.1 release2` kept `/etc/kvmd/user`, the mass-storage settings in `user/boot.yaml`, and `/etc/kvmd/override.yaml`, but replaced `/etc/kvmd/nginx-kvmd.conf` with the vendor's, which serves only the GLKVM UI on 443.
 
