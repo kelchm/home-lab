@@ -2,11 +2,7 @@
 # VictoriaMetrics and VMAlertmanager datasources for standalone Grafana.
 #
 # Type is `prometheus` — VM speaks PromQL natively, so KPS's bundled
-# dashboards drop in unchanged when repointed at this datasource. The
-# `victoriametrics-metrics-datasource` plugin is also installed (see
-# Grafana commit 1) and exposes VM-specific features like downsampling
-# queries, but for the bake-off the apples-to-apples comparison wants
-# the same datasource type as the existing dashboards expect.
+# dashboards drop in unchanged when repointed at this datasource.
 apiVersion: v1
 kind: ConfigMap
 metadata:
