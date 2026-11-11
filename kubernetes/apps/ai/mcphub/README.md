@@ -52,7 +52,7 @@ The SOPS-encrypted settings Secret is the only source of truth. It includes an a
 - Do not use `accessType: all` for a deployed workload; it is reserved from this configuration.
 - Do not configure upstream headers, OAuth, or `passthroughHeaders`. Client credentials terminate at MCPHub.
 
-`lemon` sets `enableKeepAlive`, so MCPHub pings it every 60 seconds and retries at that interval while it is disconnected. Other backends have not opted in: one that fails its first connect stays disconnected until the gateway restarts, because read-only mode blocks the reload API.
+MCPHub 1.2.2 retries any disconnected backend in the background, including one that fails its first connect, with jittered exponential backoff from 5–10 seconds up to 150–300 seconds and no retry limit; a successful connection resets it. `lemon` also sets `enableKeepAlive`, so MCPHub health-checks it every 60 seconds and notices an outage without waiting for a failed request. The other backends have no health check, so an outage is detected when a request fails or the connection closes.
 
 ## PCBParts PDF links
 

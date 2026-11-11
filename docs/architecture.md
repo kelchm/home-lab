@@ -610,7 +610,7 @@ gitignored.
 - **Second Kubernetes cluster remains a reservation, not a hardware assignment**:
   VLAN 31 and its BGP/storage identities can support Talos VMs on PVE or future
   bare metal without renumbering the cluster.
-- **BGP for LB delivery, Traefik for HTTP+auth aggregation**: Different layers. BGP handles packet delivery and ECMP; Traefik aggregates TLS + auth for apps that lack native versions. Cilium Gateway API will displace Traefik when Cilium implements GEP-1494 (external auth filter) — until then Traefik's middleware story is irreducible for auth-less app UIs.
+- **BGP for LB delivery, Traefik for HTTP+auth aggregation**: Different layers. BGP handles packet delivery and ECMP; Traefik aggregates TLS + auth for apps that lack native versions. Cilium 1.20 implements the HTTPRoute `ExternalAuth` filter (GEP-1494), but staying on Traefik is a deliberate choice; see the [roadmap](roadmap.md#out-of-scope-future-considerations).
 - **Three pool classes (admin / services / shared)**: pool == firewall policy class. Shared exists specifically to let cluster-wide services like DNS take per-IP+port carve-outs from untrusted VLANs without diluting the admin/services posture.
 - **Per-service IPs for native-auth household apps**: BGP makes IPs cheap; offloading from Traefik reduces middleware sprawl and lets each app own its own TLS path via cert-manager.
 - **Admin gateway is the default for operator surfaces regardless of native auth**: native auth solves the login screen but not consistent IP allowlisting, future SSO, or uniform security headers. Centralize that policy in Traefik admin.

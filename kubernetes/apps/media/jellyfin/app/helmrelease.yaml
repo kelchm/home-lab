@@ -5,15 +5,17 @@
 # library is mounted readOnly — Jellyfin should never write into it; *arr
 # apps own library writes.
 #
-# Hardware accel: AMD iGPU (Vega 11 on Ryzen 705 G4) handles VAAPI
-# transcodes via /dev/dri/renderD128. Talos runs cgroup v2, where a
-# bare hostPath device mount leaves open() returning EPERM despite
-# crw-rw-rw- perms — kubelet only wires the cgroup-v2 device-allow
-# list when a pod requests an extended resource owned by a registered
-# device plugin. We use squat/generic-device-plugin (kube-system) to
-# expose the render node as devic.es/dri and request it below.
-# Configure HW accel in Jellyfin UI: Dashboard → Playback → Hardware
-# accel = VAAPI, device = /dev/dri/renderD128.
+# Transcoding is software-only: Jellyfin UI → Dashboard → Playback has
+# Hardware acceleration = None, with HEVC and AV1 encoding off. VAAPI
+# encode on the Vega 11 iGPU (Ryzen 705 G4) wedged the GPU until a hard
+# power cycle, so it stays off until a revisit criterion in #63 is met:
+# https://github.com/kelchm/home-lab/issues/63
+# The render node is still exposed (unused): Talos runs cgroup v2, where
+# a bare hostPath device mount leaves open() returning EPERM, because
+# kubelet only wires the device-allow list for a pod that requests an
+# extended resource from a registered device plugin.
+# squat/generic-device-plugin (kube-system) exposes /dev/dri/renderD128
+# as devic.es/dri, requested below.
 apiVersion: helm.toolkit.fluxcd.io/v2
 kind: HelmRelease
 metadata:
