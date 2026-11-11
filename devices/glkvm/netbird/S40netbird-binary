@@ -1,0 +1,27 @@
+#!/bin/sh
+# Installed in /etc/kvmd/user/scripts, which the firmware's S99custom runs at
+# boot before S99netbird starts the daemon. Bind-mounts the pinned client in
+# /etc/kvmd/user/bin over the firmware's /usr/bin/netbird when it is newer, so
+# the GL UI's NetBird page and init script drive it unchanged. A firmware update
+# that ships a newer client wins automatically; deleting this script and
+# rebooting restores the firmware's client.
+ours=/etc/kvmd/user/bin/netbird
+target=/usr/bin/netbird
+
+mounted() { grep -q " $target " /proc/mounts; }
+
+case "${1:-start}" in
+start)
+    [ -x "$ours" ] || exit 0
+    mounted && exit 0
+    ours_version=$("$ours" version 2>/dev/null) || exit 0
+    firmware_version=$("$target" version 2>/dev/null) || firmware_version=0
+    newest=$(printf '%s\n%s\n' "$firmware_version" "$ours_version" | sort -V | tail -n 1)
+    if [ "$ours_version" != "$firmware_version" ] && [ "$newest" = "$ours_version" ]; then
+        mount --bind "$ours" "$target"
+    fi
+    ;;
+stop)
+    # Leave the mount in place at shutdown; S99netbird stops the daemon.
+    ;;
+esac

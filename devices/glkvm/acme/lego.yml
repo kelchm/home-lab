@@ -1,0 +1,36 @@
+# Site configuration, installed as /etc/kvmd/user/acme/lego.yml. The other
+# files in this directory are host-independent. renew.sh supplies the Cloudflare
+# token's path through CF_DNS_API_TOKEN_FILE.
+storage: /etc/kvmd/user/acme/lego-state
+
+accounts:
+  kvm-compute-rack:
+    server: letsencrypt
+    acceptsTermsOfService: true
+
+challenges:
+  cloudflare:
+    dns:
+      provider: cloudflare
+      # The LAN resolver answers home.kelch.io itself; validate public DNS.
+      resolvers:
+        - 1.1.1.1:53
+        - 1.0.0.1:53
+
+certificates:
+  kvm-compute-rack.home.kelch.io:
+    account: kvm-compute-rack
+    challenge: cloudflare
+    domains:
+      - kvm-compute-rack.home.kelch.io
+    keyType: EC256
+    renew:
+      reuseKey: true
+
+hooks:
+  deploy:
+    command: /etc/kvmd/user/acme/deploy.sh
+
+log:
+  level: info
+  format: text

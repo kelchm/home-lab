@@ -45,9 +45,27 @@ Read with the Auditor token before and after the 2026-11-08 changes; the exports
 
 The original `Automation` admin service user, whose token expired on 2026-10-27, and the expired `netbird-pilot-router` setup key were deleted on 2026-11-08; the old token's 1Password item is archived. Dashboard changes need an owner browser session.
 
-The peers are `netbird-router-1` and `netbird-router-2` (Debian 13, NetBird 0.82.1), `Hyperion`, `iPhone-kelchm` and `Persephone`. `Persephone`, Matt's older personal MacBook Pro, joined `clients` on 2026-11-08 so that all his personal machines have the same access, and passed an away check that day. Its stored per-peer login-expiration flag is still set but has no effect while the account-level setting is off.
+The peers are `netbird-router-1` and `netbird-router-2` (Debian 13, NetBird 0.82.1), `Hyperion`, `iPhone-kelchm` and `Persephone`. `kvm-compute-rack` joined on 2026-11-11, so `All` now has six peers. `Persephone`, Matt's older personal MacBook Pro, joined `clients` on 2026-11-08 so that all his personal machines have the same access, and passed an away check that day. Its stored per-peer login-expiration flag is still set but has no effect while the account-level setting is off.
 
-Every enabled resource policy names its resource directly, and no policy names a resource group. NetBird therefore grants clients only TCP 443 to `10.32.140.1` and `10.32.130.1` and port 53 to `10.32.30.1`; nothing grants TCP 443 to the UniFi console on `10.32.30.1`. VM 103 itself can reach that port, so the routing peer's per-port filter is what blocks clients, and #625's I1 check verified that from the iPhone away from home on 2026-11-08. The 0.82.0 routers no longer show NetBird's rules in iptables, so the filter was rechecked from a client after the upgrade: on 2026-11-10 Persephone, away from home, got no answer from `10.32.30.1:443`, `10.32.140.1:80` or `10.32.20.21:8006`, while Jellyfin on `10.32.140.1:443` answered. `home-resources` holds both the household-services and DNS resources, so a policy naming that group would open its ports on both addresses, the console included. Target resources directly.
+### GLKVM console, added 2026-11-11
+
+The recovery console at `10.32.20.10` is reachable away from home without the PVE routers: the appliance is its own NetBird peer and routes only its own address. The appliance side is in the [GLKVM runbook](../../devices/glkvm/README.md#netbird). Read back with the Auditor export after creation:
+
+| Kind | Name | Definition |
+|---|---|---|
+| Group | `kvm` | Peer `kvm-compute-rack` |
+| Group | `kvm-resources` | Resource `kvm-console`; no policy names this group |
+| Network | `kvm` | Routed by group `kvm`, metric 9999, masquerade |
+| Resource | `kvm-console` | `10.32.20.10/32` |
+| Policy | `kvm-console` | `clients` → resource `kvm-console`, TCP 443 and 22, with the posture check |
+| Policy | `kvm-console-peer` | `clients` → group `kvm`, TCP 443 and 22, with the posture check |
+| Setup key | `kvm-compute-rack` | One-off, auto-group `kvm`, used once on 2026-11-11; revoked |
+
+Both policies are needed. NetBird enforces a resource policy in the router's forward chain, but traffic to the router's own address is delivered locally through its input chain, which only peer policies populate; with the resource policy alone the appliance dropped the away iPhone's connections. NetBird keeps one rule per policy, so the peer rule is a separate policy. The resource policy still matters: it gives away clients the route to `10.32.20.10`. On 2026-11-11 the iPhone, on cellular, loaded `https://kvm-compute-rack.home.kelch.io/` with the trusted certificate.
+
+Peer `kvm-compute-rack` (`kvm-compute-rack.netbird.cloud`) runs the firmware's NetBird client with kernel WireGuard; it is in `All` and `kvm`, with login expiration and NetBird SSH off. Away clients resolve `kvm-compute-rack.home.kelch.io` through the `home-dns` resource, which the PVE routers carry; if both are down, browse to `https://10.32.20.10/` instead, which still routes through the appliance itself.
+
+Every enabled resource policy names its resource directly, and no policy names a resource group. Through the PVE routers, NetBird therefore grants clients only TCP 443 to `10.32.140.1` and `10.32.130.1` and port 53 to `10.32.30.1`; the GLKVM grants TCP 443 and 22 to `10.32.20.10` through its own peer, below; nothing grants TCP 443 to the UniFi console on `10.32.30.1`. VM 103 itself can reach that port, so the routing peer's per-port filter is what blocks clients, and #625's I1 check verified that from the iPhone away from home on 2026-11-08. The 0.82.0 routers no longer show NetBird's rules in iptables, so the filter was rechecked from a client after the upgrade: on 2026-11-10 Persephone, away from home, got no answer from `10.32.30.1:443`, `10.32.140.1:80` or `10.32.20.21:8006`, while Jellyfin on `10.32.140.1:443` answered. `home-resources` holds both the household-services and DNS resources, so a policy naming that group would open its ports on both addresses, the console included. Target resources directly.
 
 ## Read back NetBird Cloud
 
@@ -66,6 +84,7 @@ Read back on 2026-11-08:
 | `netbird-router-1`, `netbird-router-2` | Debian package from `pkgs.netbird.io` `stable`; vendor data installs it at first boot | 0.82.1 | Renovate opens a PR for each NetBird release against [`upgrade-routers.sh`](../../proxmox/guests/netbird-router/upgrade-routers.sh). Merging changes no router; running the script upgrades them one at a time, and away clients move to the other router ([procedure](../../proxmox/guests/netbird-router/README.md#upgrades)). |
 | Hyperion | Homebrew `netbirdio/tap/netbird` (daemon and CLI) and cask `netbirdio/tap/netbird-ui`; LaunchDaemon `netbird` runs `/opt/homebrew/bin/netbird service run` | 0.81.5, daemon and CLI read back on 2026-11-10 | Operator, with `brew upgrade`. A `netbird-ui` cask upgrade removes and reinstalls the service; an interrupted one on 2026-10-28 left no daemon until the upgrade was rerun. Check `netbird status` after upgrading. |
 | Persephone | — | 0.82.0, reported by management | Operator |
+| `kvm-compute-rack` | Upstream `linux/arm64` binary bind-mounted over the GLKVM firmware's client | 0.82.1, installed 2026-11-11 | Renovate opens a PR against [`devices/glkvm/netbird/install.sh`](../../devices/glkvm/netbird/install.sh); running it updates the appliance ([procedure](../../devices/glkvm/README.md#update-the-client)) |
 | iPhone | App Store | Management reports build `ci-cb7ca8ef` | App Store updates |
 
 NetBird's client auto-update setting is off, so no client upgrades itself through NetBird.
@@ -148,4 +167,4 @@ Broader resource access, such as SSH to the PVE nodes from away, is not granted;
 
 Disable the new NetBird admin HTTPS policy first, then disable the new UniFi forward rule and its paired return rule using the IDs recorded during application. Do not select return rules by name alone. Remove the new resource and policy, and the dedicated resource group if unused, after confirming that the original household HTTPS and DNS resources remain present and functional. Leave the original services policy, split DNS, peer policy and posture check intact. Verify that remote admin HTTPS is withdrawn while Jellyfin and native peer access continue to work, and update the same applied-state references with the withdrawal.
 
-VMs 103 and 104 are the only routed remote path. Retain them and the household HTTPS, DNS and peer access when rolling back this admin-only extension.
+VMs 103 and 104 are the only routed path to the household and admin services; the GLKVM routes only its own address. Retain them and the household HTTPS, DNS and peer access when rolling back this admin-only extension.
