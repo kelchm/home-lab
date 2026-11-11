@@ -553,13 +553,13 @@ ssh kelchm@10.32.21.31 \
 
 Save host/switch evidence before resetting a link or rebooting. Stop affected inference workloads through their corresponding SparkRun recipe. Test a known-good short cable first, then a known-good module, changing one component at a time. If neither resolves the fault, test a spare switch port with the same native Workloads VLAN 21 and tagged Storage VLAN 25 profile before pursuing the host NIC/driver. Record counter deltas; cumulative counts are not a count of the current incident. Reaccept the link only after management/storage probes succeed, at least 30 minutes idle and a complete C4 250k cold/replay pair produce no new carrier or SFP receive-signal-loss events, and the cause/fix is recorded in #649.
 
-#649 closed on 2026-10-30 as no longer reproducing, with the cause unknown. Reopen it for an unexpected runtime carrier drop or recurring management interruption, capturing the boot ID, host carrier counters and matching kernel events. If it recurs, first move the existing module and cable together to a compatible spare switch cage with the same `spark-trunk` profile during an idle window, keeping the module, cable, host NIC and driver unchanged so the move tests the cage path. The move interrupts management and VLAN 25 storage.
+#649 closed on 2026-10-30 as no longer reproducing, with the cause unknown and without the reaccept gate above, which applies to a recurrence. Reopen it for an unexpected runtime carrier drop or recurring management interruption, capturing the boot ID, host carrier counters and matching kernel events. If it recurs, first move the existing module and cable together to a compatible spare switch cage with the same `spark-trunk` profile during an idle window, keeping the module, cable, host NIC and driver unchanged so the move tests the cage path. The move interrupts management and VLAN 25 storage.
 
 ## Remaining work
 
 Do not mark this runbook complete until these are resolved:
 
-- [x] Resolve spark-2 management/storage carrier loss. [#649](https://github.com/kelchm/home-lab/issues/649) closed on 2026-10-30 as no longer reproducing, cause unknown; its reopen trigger is under [Management SSH drops with NIC carrier loss](#management-ssh-drops-with-nic-carrier-loss).
+- [x] Spark-2 management/storage carrier loss: [#649](https://github.com/kelchm/home-lab/issues/649) closed on 2026-10-30 as no longer reproducing, cause unknown, without running the recovery gate. The gate and reopen trigger under [Management SSH drops with NIC carrier loss](#management-ssh-drops-with-nic-carrier-loss) apply if it recurs.
 - [ ] In DSM, identify only the NFS exports the Sparks need and scope them to
       `10.32.25.31` and `10.32.25.32`. Do not broaden unrelated exports.
 - [ ] Run Spark-to-NAS `iperf3` over VLAN 25 and record at least 9 Gb/s plus a
