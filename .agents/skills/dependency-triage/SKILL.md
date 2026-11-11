@@ -5,7 +5,7 @@ description: Triage, merge and verify Renovate dependency-update PRs in this hom
 
 # Dependency triage
 
-Renovate opens PRs every weekend. Only GitHub Actions updates automerge; every other merge is yours, with no branch protection behind you. Anything under `kubernetes/` is live seconds after merging, and green CI only proves the change renders.
+Renovate may open PRs at any time; they arrive whenever the hosted bot processes the repository. Two kinds merge themselves: GitHub Actions minor, patch and digest updates once a release is three days old (except the Flate CI image, and the Renovate CI image waits for its tests), and Broadsheet image digest updates once their PR passes CI. Every other merge is yours, with no branch protection behind you. Anything under `kubernetes/` is live seconds after merging, and green CI only proves the change renders.
 
 ## Size up the batch
 

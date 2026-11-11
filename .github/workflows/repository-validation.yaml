@@ -126,10 +126,8 @@ jobs:
               - 'proxmox/guests/netbird-router-2/**'
               - 'proxmox/guests/netbird-router/**'
               - 'healthchecks/**'
-              - '.taskfiles/healthchecks/**'
               - 'Taskfile.yaml'
-              - '.taskfiles/bootstrap/**'
-              - '.taskfiles/talos/**'
+              - '.taskfiles/**'
             skills:
               - '.github/workflows/repository-validation.yaml'
               - '.agents/skills/**'
@@ -585,11 +583,17 @@ jobs:
         with:
           persist-credentials: false
 
-      - name: Install ShellCheck
+      - name: Install ShellCheck and Task
         if: needs.pre-job.outputs.scripts_changed == 'true'
         uses: jdx/mise-action@b44d12e7d0d8ee7461bb893e1b1993500433185b # v5.2.7
         with:
-          install_args: "aqua:koalaman/shellcheck"
+          install_args: "aqua:koalaman/shellcheck aqua:go-task/task"
+
+      # The root Taskfile includes every file under .taskfiles/, so listing
+      # all tasks parses each one. It needs no kubeconfig, dotenv or secrets.
+      - name: Parse Taskfiles
+        if: needs.pre-job.outputs.scripts_changed == 'true'
+        run: task --list-all > /dev/null
 
       - name: Check shell syntax
         if: needs.pre-job.outputs.scripts_changed == 'true'

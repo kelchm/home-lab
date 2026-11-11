@@ -86,10 +86,7 @@ spec:
     ingress:
       enabled: false   # we use Gateway API HTTPRoute
 
-    # Pre-installed for commits 4/5 so adding the VM-stack datasources
-    # later doesn't require a Grafana restart cycle.
     plugins:
-      - victoriametrics-metrics-datasource
       # Pin the reviewed release instead of silently taking a new plugin on a
       # future Grafana restart.
       - victoriametrics-logs-datasource@0.33.1@https://grafana.com/api/plugins/victoriametrics-logs-datasource/versions/0.33.1/download
