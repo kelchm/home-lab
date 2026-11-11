@@ -42,5 +42,5 @@ consume these reservations merely by hosting unrelated guests.
 
 ## Out of scope (future considerations)
 
-- **Cilium Gateway API replacing Traefik**: not planned; staying on Traefik is a deliberate choice. The earlier blocker is gone: Cilium 1.20 implements the HTTPRoute `ExternalAuth` filter (GEP-1494), so a move would need its own evaluation rather than waiting on upstream. The cluster's Cilium has its Gateway API controller disabled.
+- **Cilium Gateway API replacing Traefik**: undecided, and not yet evaluated. Cilium 1.20 implements the HTTPRoute `ExternalAuth` filter (GEP-1494), but Gateway API v1.7.0 ships that filter only in its experimental channel, and this cluster installs the standard channel. Cilium's Gateway API controller and Envoy are disabled here. A move would also need a separate auth service, because the filter hands the decision to a backend, whereas `traefik-oidc-auth` does the Kanidm sign-in inside Traefik. Revisit when `ExternalAuth` reaches the standard channel and [#1348](https://github.com/kelchm/home-lab/issues/1348) (Cilium policy enforcement) is closed.
 - **Pod CIDR BGP advertisement**: Cilium can advertise pod IPs via BGP for direct LAN reachability. Not needed for current use cases.
