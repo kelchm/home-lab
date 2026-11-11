@@ -43,8 +43,6 @@ spec:
         # a detection on traffic through a WAN is marked
         # UNIFIdirection=outgoing and carries no src or dst, only the client,
         # so the rule matches that marker as well as an external dst.
-        # Signature 2403454 (CINS group 155) matches Cloudflare addresses
-        # that iCloud Private Relay uses.
         - alert: UniFiIntrusionDetectedOutbound
           expr: >-
             _time:15m {cef.device_product="UniFi Network", cef.device_event_class_id=~"200|201"}
@@ -56,7 +54,6 @@ spec:
                 -cef.extension.dst:ipv4_range(100.64.0.0/10)
                 -cef.extension.dst:ipv4_range(169.254.0.0/16)
                 -cef.extension.dst:ipv4_range(224.0.0.0/4)))
-            -cef.extension.UNIFIipsSignatureId:=2403454
             | format "<cef.extension.UNIFIsrcClientAlias>" as client
             | format if (client:"") "<cef.extension.src>" as client
             | format "<cef.extension.dst>" as dst
@@ -71,9 +68,10 @@ spec:
             description: >-
               The IDS matched "{{ $labels.signature }}" on traffic between
               {{ $labels.client }} and {{ $labels.dst }} ({{ $value }} in 15
-              minutes). When the console did not record the address, find the
-              flow by client and time on the UniFi / Flows dashboard. Identify
-              the client and the signature before allowing it.
+              minutes). When the console did not record the address, look for
+              candidate flows from the client around that time on the UniFi /
+              Flows dashboard. Identify the client and the signature before
+              allowing it.
 
         # The honeypot answers only on otherwise unused addresses, so any
         # contact means a LAN device is probing. Class 202 names the client by
