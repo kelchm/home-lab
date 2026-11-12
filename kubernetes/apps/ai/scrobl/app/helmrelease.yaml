@@ -30,7 +30,7 @@ spec:
           app:
             image:
               repository: ghcr.io/kelchm/scrobl
-              tag: 0.1.0@sha256:37014d2967dca95572ec59df359ae0a9855b29a71bdae0de56ea0584d7c601ed
+              tag: 0.1.1@sha256:9864ced2974fbd829174db12948ed411f0b03528f7fdc05da0503dd80fd3b2a2
             # Keep the image's /data working directory: SQLite temporary
             # files also need to land on this writable mount.
             args: ["sync", "--db", "/data/history.db", "--user", "kelchm"]
