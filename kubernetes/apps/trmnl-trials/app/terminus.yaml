@@ -139,7 +139,8 @@ spec:
           keyvalue:
             image:
               repository: docker.io/valkey/valkey
-              tag: 9.1-alpine@sha256:bf09d58e96d6b4524a15396b65b242bbe18beebbcc15a04d8ee75ddac62fae0b
+              # Minor-only aliases can point to RCs; retain full release precision.
+              tag: 9.1.3-alpine@sha256:bf09d58e96d6b4524a15396b65b242bbe18beebbcc15a04d8ee75ddac62fae0b
             command:
             - valkey-server
             args:
