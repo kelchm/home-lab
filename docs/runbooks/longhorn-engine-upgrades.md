@@ -38,9 +38,9 @@ For every live upgrade, capture the hosting instance-manager's logs starting bef
 
 ## Canary backup and restore evidence
 
-1. Through Longhorn's normal API, create a uniquely named snapshot. Wait for its Snapshot CR to exist and report `status.readyToUse=true` before requesting its backup to the existing `default` target: the legacy snapshot-create action returns before the controller registers its CR, and an immediate backup is rejected with `snapshot <nil> is invalid`. Prefer `snapshotCRCreate` and wait for readiness. Do not change retention or backup-target settings. Wait for the matching Backup CR to become Completed; record its URL, snapshot time and backup name.
+1. Capture the live `tokens.json` hash, byte count and JSON validity immediately before creating a uniquely named snapshot through Longhorn's normal API; capture the hash again immediately after snapshot creation. Wait for its Snapshot CR to exist and report `status.readyToUse=true` before requesting its backup to the existing `default` target: the legacy snapshot-create action returns before the controller registers its CR, and an immediate backup is rejected with `snapshot <nil> is invalid`. Prefer `snapshotCRCreate` and wait for readiness. Do not change retention or backup-target settings. Wait for the matching Backup CR to become Completed; record its URL, snapshot time and backup name.
 2. Follow [inspect a copy](longhorn-backup-restore.md#1-restore-through-an-explicit-volume): create a uniquely named two-replica Longhorn Volume with `spec.fromBackup` set to that URL, a Retain PV and a PVC in a disposable namespace. The Volume/PV/CSI handle/claimRef must all use the new restore name, never the live volume's handle. Label the restore Volume `recurring-job-group.longhorn.io/no-backup: enabled`.
-3. Capture the live `tokens.json` hash immediately before the snapshot and again after it. Wait for restore completion, then mount only the copy read-only in an inspection pod. Check that `tokens.json` exists, parses as JSON and matches that hash when both live hashes agree. If they differ because a token rotated, JSON validity/size alone does not establish byte identity: take another bounded snapshot or document the narrower recovery evidence. Do not expose token values or use restored credentials against DigiKey. The live workload and claim remain mounted and healthy throughout.
+3. Wait for restore completion, then mount only the copy read-only in an inspection pod. Check that `tokens.json` exists, parses as JSON and matches the hashes captured in step 1 when both live hashes agree. If they differ because a token rotated, JSON validity/size alone does not establish byte identity: take another bounded snapshot or document the narrower recovery evidence. Do not expose token values or use restored credentials against DigiKey. The live workload and claim remain mounted and healthy throughout.
 4. Stop the inspection pod, then delete only the recorded disposable PVC, PV, restore Volume and namespace. Verify their engines, replicas and VolumeAttachments disappear and that no backup history was created for the restore copy. Preserve the source recovery backup. Re-run the full production health gates before upgrading the canary.
 
 ## Upgrade one volume
@@ -59,7 +59,7 @@ lh_api='http://127.0.0.1:19500/v1'
 curl --noproxy '*' --connect-timeout 5 --max-time 30 --fail-with-body --silent --show-error "$lh_api/volumes/$volume"
 ```
 
-Require `image == currentImage ==` the reviewed source image, `state=attached`, `robustness=healthy`, V1/blockdev, the expected replica count and the gates above. Confirm `engineUpgrade` is offered. Submit exactly once, with the fixed target:
+Require `image == currentImage ==` the reviewed source image, `state=attached`, `robustness=healthy`, V1/blockdev, the expected replica count and the gates above. Confirm `engineUpgrade` is offered. An offline availability decision means deferring this action: this procedure does not detach ordinary workloads. Submit exactly once, with the fixed target:
 
 ```sh
 curl --noproxy '*' --connect-timeout 5 --max-time 30 --fail-with-body --silent --show-error \
@@ -85,6 +85,10 @@ Confirm the scheduled writer is inactive, no running pod uses its claim, and the
 Require no active Job or running pod uses the claim, including manually created Jobs. Record the Longhorn VolumeAttachment's complete `spec.attachmentTickets` map before this operation. Use a normal maintenance attachment (frontend disabled, named attachment owner) on one healthy node to take a one-time snapshot/backup of the idle volume:
 
 ```sh
+scrobl_volume="$(kubectl -n ai get pvc scrobl -o jsonpath='{.spec.volumeName}')"
+test -n "$scrobl_volume"
+kubectl -n longhorn-system get volumes.longhorn.io "$scrobl_volume" -o json |
+  jq -e '.status.kubernetesStatus.namespace == "ai" and .status.kubernetesStatus.pvcName == "scrobl" and .status.state == "detached"'
 curl --noproxy '*' --connect-timeout 5 --max-time 30 --fail-with-body -sS \
   -H 'Content-Type: application/json' \
   --data '{"hostId":"k8s-prod-1","disableFrontend":true,"attachedBy":"engine-consolidation-20261111","attacherType":"longhorn-api","attachmentID":"engine-consolidation-20261111"}' \
