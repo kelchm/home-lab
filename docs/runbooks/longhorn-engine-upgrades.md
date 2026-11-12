@@ -20,8 +20,20 @@ Record a baseline and the exact volume/claim mapping, source and target images, 
 - Every instance-manager is Running/Ready, and its current sandbox has the storage network on `lhnet1`. Use the shared read-only check, which verifies the actual interface as well as the annotation:
 
   ```sh
-  kubectl -n longhorn-system get pods -l longhorn.io/component=instance-manager -o json |
-    .agents/skills/talos-rollout/scripts/failing-instance-managers.sh
+  (
+    set -euo pipefail
+    im_pods="$(kubectl -n longhorn-system get pods -l longhorn.io/component=instance-manager -o json)"
+    printf '%s\n' "$im_pods" | jq -e '
+      (.items | length >= 3) and
+      ([.items[].spec.nodeName] | unique == ["k8s-prod-1", "k8s-prod-2", "k8s-prod-3"])
+    ' >/dev/null
+    im_failures="$(printf '%s\n' "$im_pods" |
+      .agents/skills/talos-rollout/scripts/failing-instance-managers.sh)"
+    if [ -n "$im_failures" ]; then
+      printf '%s\n' "$im_failures" >&2
+      exit 1
+    fi
+  )
   ```
 
   An empty result is success only if the input contains the expected instance-managers and the command succeeds. Stop if any check fails.
