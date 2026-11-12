@@ -38,24 +38,24 @@ For every live upgrade, capture the hosting instance-manager's logs starting bef
 
 ## Canary backup and restore evidence
 
-1. Through Longhorn's normal API, create a uniquely named snapshot, then request its backup to the existing `default` target. Do not change retention or backup-target settings. Wait for the matching Backup CR to become Completed; record its URL, snapshot time and backup name.
+1. Through Longhorn's normal API, create a uniquely named snapshot. Wait for its Snapshot CR to exist and report `status.readyToUse=true` before requesting its backup to the existing `default` target: the legacy snapshot-create action returns before the controller registers its CR, and an immediate backup is rejected with `snapshot <nil> is invalid`. Prefer `snapshotCRCreate` and wait for readiness. Do not change retention or backup-target settings. Wait for the matching Backup CR to become Completed; record its URL, snapshot time and backup name.
 2. Follow [inspect a copy](longhorn-backup-restore.md#1-restore-through-an-explicit-volume): create a uniquely named two-replica Longhorn Volume with `spec.fromBackup` set to that URL, a Retain PV and a PVC in a disposable namespace. The Volume/PV/CSI handle/claimRef must all use the new restore name, never the live volume's handle. Label the restore Volume `recurring-job-group.longhorn.io/no-backup: enabled`.
 3. Capture the live `tokens.json` hash immediately before the snapshot and again after it. Wait for restore completion, then mount only the copy read-only in an inspection pod. Check that `tokens.json` exists, parses as JSON and matches that hash when both live hashes agree. If they differ because a token rotated, JSON validity/size alone does not establish byte identity: take another bounded snapshot or document the narrower recovery evidence. Do not expose token values or use restored credentials against DigiKey. The live workload and claim remain mounted and healthy throughout.
 4. Stop the inspection pod, then delete only the recorded disposable PVC, PV, restore Volume and namespace. Verify their engines, replicas and VolumeAttachments disappear and that no backup history was created for the restore copy. Preserve the source recovery backup. Re-run the full production health gates before upgrading the canary.
 
 ## Upgrade one volume
 
-Use the manager's `engineUpgrade` action, not a direct patch of the Volume's image or controller-owned Engine/Replica objects. The following local API path uses the authenticated Kubernetes Service proxy; it avoids Longhorn UI authentication and does not follow the API's advertised action URLs.
+Use the manager's `engineUpgrade` action, not a direct patch of the Volume's image or controller-owned Engine/Replica objects. Forward the existing Longhorn frontend's API proxy over authenticated Kubernetes port-forwarding. The manager binds its pod IP rather than localhost, so forwarding its own port fails. The Kubernetes Service-proxy path was unreliable under the current network policy; no requests through it should be retried without first checking their effects. The frontend's existing `/v1` proxy was verified with read-only GET and POST actions before use. Construct local action paths rather than following advertised backend URLs.
 
 ```sh
-kubectl proxy --address=127.0.0.1 --port=18001
+kubectl -n longhorn-system port-forward --address=127.0.0.1 service/longhorn-frontend 19500:80
 ```
 
 In another terminal, inspect the exact candidate immediately before the action:
 
 ```sh
 volume='pvc-31e77fda-b254-437d-9c9e-dc31ed1571f9'
-lh_api='http://127.0.0.1:18001/api/v1/namespaces/longhorn-system/services/http:longhorn-backend:9500/proxy/v1'
+lh_api='http://127.0.0.1:19500/v1'
 curl --noproxy '*' --connect-timeout 5 --max-time 30 --fail-with-body --silent --show-error "$lh_api/volumes/$volume"
 ```
 
@@ -116,4 +116,4 @@ Require every inventoried volume's requested/current image and its active or sto
 
 ## Verified outcome
 
-Preparation only as of 2026-11-11. No engine has been changed by this procedure yet. Recovery evidence, canary result and final inventory will be recorded after execution.
+Preparation and canary recovery verification completed on 2026-11-11 (2026-11-12 UTC). Fresh backup `backup-f094b773b9c24512` of snapshot `engine-1122-canary-20261112` completed on the existing default target. A separate two-replica 100 MiB Volume/PV/PVC restored it into namespace `longhorn-engine-drill-20261112`; read-only inspection parsed the 135-byte token-cache JSON and matched its SHA-256 to the live file immediately before and after the snapshot, without exposing tokens or calling DigiKey with the copy. The live claim stayed attached/healthy and its engine remains 1.12.0. No engine upgrade has been submitted. The confirmed replacement-timeout risk requires the live-versus-offline availability decision before execution. Scratch cleanup and the final production health check are recorded in #1282.
