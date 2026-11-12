@@ -1,0 +1,546 @@
+{
+  "schema": "glm53-release-qualification/v1",
+  "recorded_utc": "2026-11-07T19:18:14.754579+00:00",
+  "release": "glm53-mia-2026.11.07",
+  "qualification": "rejected",
+  "reasons": [
+    "The first 301,087-token request did not publish its 299,008-token checkpoint: StagingFull.",
+    "The near-window 987,136-token capture needs 6,264 MiB, exceeding the configured 6,144 MiB RAM cache."
+  ],
+  "image": "ghcr.io/kelchm/spark-inference/glm53-mia@sha256:0956a18406597abc252564b6f23e7f205dc35c5eac5b475ea6c0c229d10d4d9c",
+  "engine_commit": "e52eb42b52b1e50f3f23a5eae8115bbe80c5e7d9",
+  "launch_flow": "Existing home-lab recipe/mod/plugin/readiness-v2/rsync; no spark-inference PR3 fetch.",
+  "tested_harness_sha256": "b68e962573623a9020a72a7721932e001cca52adb2f335ddb54541f58189c0b8",
+  "tested_recipe_sha256": "bf978cba88603bb4df11a6bf8b4cda74db849e82ca180ac4b5b6a8a0894cf3ba",
+  "tested_mod_lock_sha256": "bbdce1504221fe8b4b3125c6b90dfbc4760063da933d7bb40ec3f9004985cc6b",
+  "comparison": {
+    "scope": "One matched exploratory batch, not statistical qualification; intended profiles differ in dense/head precision. Tool-result requests replay each engine's original IDs and reasoning; other request hashes match. Bounded decode length finishes are speed probes only.",
+    "client_sha256": "46ba809bd9da041080e5bb3493566156cad760531aecbd36e01a892975c6d2a2",
+    "settings": {
+      "model": "GLM-5.3-Flash",
+      "temperature": 0,
+      "top_k": 20,
+      "seed": 27,
+      "reasoning_effort": "low",
+      "chat_template_kwargs": {
+        "enable_thinking": true,
+        "clear_thinking": false
+      },
+      "max_tokens": 256,
+      "stream": true,
+      "stream_options": {
+        "include_usage": true
+      }
+    },
+    "rows": [
+      {
+        "metric": "decode-c1 aggregate end-to-end tok/s",
+        "python": 49.081193500105606,
+        "native": 42.817017130343274,
+        "unit": "tok/s",
+        "higher_is_better": true,
+        "native_change_percent": -12.76288517667944
+      },
+      {
+        "metric": "decode-c4 aggregate end-to-end tok/s",
+        "python": 99.57219852098137,
+        "native": 80.92822860530778,
+        "unit": "tok/s",
+        "higher_is_better": true,
+        "native_change_percent": -18.7240717716452
+      },
+      {
+        "metric": "6341 tokens cold TTFT",
+        "python": 3.412872,
+        "native": 3.985039,
+        "unit": "s",
+        "higher_is_better": false,
+        "python_cached_tokens": 0,
+        "native_cached_tokens": 0,
+        "native_change_percent": 16.764970968732484
+      },
+      {
+        "metric": "6341 tokens repeat TTFT",
+        "python": 0.160402,
+        "native": 1.46946,
+        "unit": "s",
+        "higher_is_better": false,
+        "python_cached_tokens": 6336,
+        "native_cached_tokens": 4096,
+        "native_change_percent": 816.1107716861386
+      },
+      {
+        "metric": "26846 tokens cold TTFT",
+        "python": 13.022067,
+        "native": 14.917399,
+        "unit": "s",
+        "higher_is_better": false,
+        "python_cached_tokens": 0,
+        "native_cached_tokens": 0,
+        "native_change_percent": 14.554770759511527
+      },
+      {
+        "metric": "26846 tokens repeat TTFT",
+        "python": 0.293263,
+        "native": 1.525256,
+        "unit": "s",
+        "higher_is_better": false,
+        "python_cached_tokens": 26816,
+        "native_cached_tokens": 24576,
+        "native_change_percent": 420.09834176149053
+      },
+      {
+        "metric": "111919 tokens cold TTFT",
+        "python": 53.884718,
+        "native": 62.015576,
+        "unit": "s",
+        "higher_is_better": false,
+        "python_cached_tokens": 0,
+        "native_cached_tokens": 0,
+        "native_change_percent": 15.08935798828901
+      },
+      {
+        "metric": "111919 tokens repeat TTFT",
+        "python": 0.362038,
+        "native": 1.130211,
+        "unit": "s",
+        "higher_is_better": false,
+        "python_cached_tokens": 111872,
+        "native_cached_tokens": 110592,
+        "native_change_percent": 212.18021312679883
+      },
+      {
+        "metric": "Pi-style tool-result TTFT",
+        "python": 0.463805,
+        "native": 1.494441,
+        "unit": "s",
+        "higher_is_better": false,
+        "python_cached_tokens": 10368,
+        "native_cached_tokens": 8192,
+        "prompt_tokens": 10456,
+        "native_change_percent": 222.2132146052759
+      }
+    ],
+    "artifacts": {
+      "python-baseline/summary.json": "cd5ef28f94b7ef576c1605fd2b19dbf26910aa4abaaa701daab6d4f831d70e1c",
+      "native-comparison/summary.json": "e620c158dea15015936673336368624b4aade64b63e7eabeef726b37013dc840"
+    }
+  },
+  "capacity": {
+    "python_pool_tokens": 2582528,
+    "native_initial_part_pages": 3809,
+    "native_initial_nominal_pool_tokens": 3900416,
+    "native_final_part_pages": 3812,
+    "native_final_nominal_pool_tokens": 3903488,
+    "startup_pool_floor_passed": true,
+    "caveat": "These are ownership-pool positions, not four simultaneous1M histories. Twins temporarily borrow unpromised pages during prefill; source has an owner-computed fallback when borrowing fails. Concurrent long-history admission frontier was not measured."
+  },
+  "context_growth": {
+    "rows": [
+      {
+        "step": "first",
+        "prompt_tokens": 301087,
+        "elapsed_s": 178.606003,
+        "correct": true,
+        "finish_reason": "stop",
+        "usage": {
+          "completion_tokens": 68,
+          "completion_tokens_details": {
+            "reasoning_tokens": 31
+          },
+          "prompt_tokens": 301087,
+          "prompt_tokens_details": {
+            "cached_tokens": 0
+          },
+          "total_tokens": 301155
+        }
+      },
+      {
+        "step": "grow-1",
+        "prompt_tokens": 450822,
+        "elapsed_s": 102.815793,
+        "correct": true,
+        "finish_reason": "stop",
+        "usage": {
+          "completion_tokens": 69,
+          "completion_tokens_details": {
+            "reasoning_tokens": 31
+          },
+          "prompt_tokens": 450822,
+          "prompt_tokens_details": {
+            "cached_tokens": 299008
+          },
+          "total_tokens": 450891
+        }
+      },
+      {
+        "step": "grow-2",
+        "prompt_tokens": 601306,
+        "elapsed_s": 108.797049,
+        "correct": true,
+        "finish_reason": "stop",
+        "usage": {
+          "completion_tokens": 67,
+          "completion_tokens_details": {
+            "reasoning_tokens": 30
+          },
+          "prompt_tokens": 601306,
+          "prompt_tokens_details": {
+            "cached_tokens": 450560
+          },
+          "total_tokens": 601373
+        }
+      },
+      {
+        "step": "grow-3",
+        "prompt_tokens": 801258,
+        "elapsed_s": 157.589789,
+        "correct": true,
+        "finish_reason": "stop",
+        "usage": {
+          "completion_tokens": 68,
+          "completion_tokens_details": {
+            "reasoning_tokens": 30
+          },
+          "prompt_tokens": 801258,
+          "prompt_tokens_details": {
+            "cached_tokens": 598016
+          },
+          "total_tokens": 801326
+        }
+      },
+      {
+        "step": "grow-4",
+        "prompt_tokens": 990494,
+        "elapsed_s": 161.803491,
+        "correct": true,
+        "finish_reason": "stop",
+        "usage": {
+          "completion_tokens": 67,
+          "completion_tokens_details": {
+            "reasoning_tokens": 30
+          },
+          "prompt_tokens": 990494,
+          "prompt_tokens_details": {
+            "cached_tokens": 798720
+          },
+          "total_tokens": 990561
+        }
+      }
+    ],
+    "near_1m_ram_capture_refused": {
+      "at": 987136,
+      "needed_mib": 6264,
+      "budget_mib": 6144
+    },
+    "qualification": "context retrieval passed tested points; large first-save failed, near-window RAM snapshot refused"
+  },
+  "durability": {
+    "first_large_save": {
+      "measured_prompt_tokens": 301087,
+      "saves": [],
+      "skipped": [
+        "2026-11-07T18:33:01.487305+00:00 warning: prompt cache: imprint: saving 299008 tokens skipped (StagingFull)"
+      ],
+      "status": "fail"
+    },
+    "small_state_eviction": "4096 tokens read from disk after observed RAM eviction; correct answer",
+    "restart_and_process_crash": {
+      "text_checkpoint_tokens": [
+        4096,
+        24576
+      ],
+      "tool_checkpoint_tokens": 8192,
+      "image_checkpoint_tokens_each": 16384,
+      "correct_after_each": true,
+      "scope": "Restored saved prefixes; remaining tail re-prefilled. No claim every token was saved."
+    },
+    "images": {
+      "rows": [
+        {
+          "variant": "image",
+          "prompt_tokens": 18843,
+          "request_sha256": "fe9ee432a597b407abb558bd075f465b9c4242faa5a8539edb706eab79a7ed80",
+          "expected": {
+            "1": "blue",
+            "2": "white",
+            "3": "black",
+            "4": "purple"
+          },
+          "phases": {
+            "before": {
+              "correct": true,
+              "cached_tokens": 0,
+              "ttft_s": 10.562406
+            },
+            "restart": {
+              "correct": true,
+              "cached_tokens": 16384,
+              "ttft_s": 1.91578
+            },
+            "crash": {
+              "correct": true,
+              "cached_tokens": 16384,
+              "ttft_s": 1.762556
+            }
+          }
+        },
+        {
+          "variant": "image-fork",
+          "prompt_tokens": 18843,
+          "request_sha256": "3e05dd05bb087d9c021d381f2f585220912ec75eb48c88a7713dc71f86d04b8f",
+          "expected": {
+            "1": "orange",
+            "2": "blue",
+            "3": "purple",
+            "4": "white"
+          },
+          "phases": {
+            "before": {
+              "correct": true,
+              "cached_tokens": 0,
+              "ttft_s": 10.542396
+            },
+            "restart": {
+              "correct": true,
+              "cached_tokens": 16384,
+              "ttft_s": 1.768314
+            },
+            "crash": {
+              "correct": true,
+              "cached_tokens": 16384,
+              "ttft_s": 1.744182
+            }
+          }
+        }
+      ],
+      "disk_read_tokens_per_variant": 16384,
+      "restart_and_crash_read_logs_present": true,
+      "scope": "Tested two color variants; no universal claim of image-identity collision safety; not a power-loss test.",
+      "imprint_image_false_negative": true
+    },
+    "crash_witness": "native-crash-write-witness.jsonl",
+    "quota": {
+      "status": "pass",
+      "quota_bytes": 1073741824,
+      "measured_store_bytes": 565349820,
+      "disk_probe": {
+        "A": {
+          "object": "imprint.resume",
+          "disk": true,
+          "tokens": 26855,
+          "resume_from": "ram",
+          "ram_tokens": 24576,
+          "disk_tokens": 0,
+          "disk_bytes": 0,
+          "wait_seconds": 1.2735700742500056
+        },
+        "B": {
+          "object": "imprint.resume",
+          "disk": true,
+          "tokens": 26855,
+          "resume_from": "ram",
+          "ram_tokens": 24576,
+          "disk_tokens": 0,
+          "disk_bytes": 0,
+          "wait_seconds": 1.2735700742500056
+        },
+        "C": {
+          "object": "imprint.resume",
+          "disk": true,
+          "tokens": 26855,
+          "resume_from": "ram",
+          "ram_tokens": 24576,
+          "disk_tokens": 24576,
+          "disk_bytes": 565349812,
+          "wait_seconds": 1.2735700742500056
+        }
+      },
+      "scope": "Isolated1GiB mechanism test; not an actual64GiB fill or quota-pressure restart test."
+    },
+    "short_histories": "406-token image and223/252-token tool histories were not retained below4096-row grid. Correct continuations were cold, not durable."
+  },
+  "pi_cli": {
+    "cases": [
+      {
+        "case": "text",
+        "started_at": "2026-11-07T19:11:38.141853+00:00",
+        "ended_at": "2026-11-07T19:11:47.856659+00:00",
+        "returncode": 0,
+        "expected": "PUBLIC-PI-ACCEPTANCE-67291",
+        "assistant_texts": [
+          "",
+          "Q1=PUBLIC-PI-ACCEPTANCE-67291"
+        ],
+        "tool_calls": [
+          {
+            "type": "toolCall",
+            "id": "call_1db91a17b5d60e1a73b782a4",
+            "name": "read",
+            "arguments": {
+              "path": "/Users/kelchm/.cache/glm53-evidence/trial-20261107T175225Z/pi-cli-fixture/value.txt"
+            }
+          }
+        ],
+        "usages": [
+          {
+            "input": 12691,
+            "output": 39,
+            "cacheRead": 0,
+            "cacheWrite": 0,
+            "reasoning": 1,
+            "totalTokens": 12730,
+            "cost": {
+              "input": 0,
+              "output": 0,
+              "cacheRead": 0,
+              "cacheWrite": 0,
+              "total": 0
+            }
+          },
+          {
+            "input": 457,
+            "output": 15,
+            "cacheRead": 12288,
+            "cacheWrite": 0,
+            "reasoning": 1,
+            "totalTokens": 12760,
+            "cost": {
+              "input": 0,
+              "output": 0,
+              "cacheRead": 0,
+              "cacheWrite": 0,
+              "total": 0
+            }
+          }
+        ],
+        "stop_reasons": [
+          "toolUse",
+          "stop"
+        ],
+        "correct": true,
+        "tool_result_cache_fraction": 0.96414280109847
+      },
+      {
+        "case": "image",
+        "started_at": "2026-11-07T19:11:47.857659+00:00",
+        "ended_at": "2026-11-07T19:11:50.762838+00:00",
+        "returncode": 0,
+        "expected": "orange",
+        "assistant_texts": [
+          "",
+          "Q1=orange"
+        ],
+        "tool_calls": [
+          {
+            "type": "toolCall",
+            "id": "call_92189d23be7e6163cb14a22c",
+            "name": "read",
+            "arguments": {
+              "path": "/Users/kelchm/.cache/glm53-evidence/trial-20261107T175225Z/pi-cli-fixture/image-1.png"
+            }
+          }
+        ],
+        "usages": [
+          {
+            "input": 412,
+            "output": 41,
+            "cacheRead": 12288,
+            "cacheWrite": 0,
+            "reasoning": 1,
+            "totalTokens": 12741,
+            "cost": {
+              "input": 0,
+              "output": 0,
+              "cacheRead": 0,
+              "cacheWrite": 0,
+              "total": 0
+            }
+          },
+          {
+            "input": 539,
+            "output": 6,
+            "cacheRead": 12288,
+            "cacheWrite": 0,
+            "reasoning": 1,
+            "totalTokens": 12833,
+            "cost": {
+              "input": 0,
+              "output": 0,
+              "cacheRead": 0,
+              "cacheWrite": 0,
+              "total": 0
+            }
+          }
+        ],
+        "stop_reasons": [
+          "toolUse",
+          "stop"
+        ],
+        "correct": true,
+        "tool_result_cache_fraction": 0.9579792624931784
+      }
+    ],
+    "scope": "Native-only actual Pi CLI1.3.0 with unmodified copied Spark provider, low thinking, read only and isolated config. No Python CLI baseline.",
+    "extension_sha256": "8570bbf1ce2672b8071ddce9698a60a4156e3db0155f76afa0ea46687a4b30a8"
+  },
+  "dashboard": {
+    "requested_flag": "--dashboard",
+    "source_verified": "e52eb42b zig/src/server/cli.zig store_true, default false",
+    "staged_on_head": true,
+    "current_native_process_has_flag": false,
+    "current_process_started_before_request": true,
+    "next_planned_native_launch_only": true,
+    "tested_lock_sha256": "bbdce1504221fe8b4b3125c6b90dfbc4760063da933d7bb40ec3f9004985cc6b",
+    "staged_lock_sha256": "8520b632cee50a38abeac8cb4d3f93d69cc751fc597c44e15edc4689466f5b79",
+    "contract_tests": "48 passed; 7 locks/8 recipes verified",
+    "ssh_transport": "one persistent ControlMaster connection per Spark; per-command automatic fallback disabled"
+  },
+  "alerts": {
+    "native_tensorfold_health_alert_coverage": false,
+    "note": "InferenceEngineBroken/Stalled currently depend on unavailable tensorfold_health metrics; dashboards thread owns follow-up. Trial used independent host telemetry and recipe memory guards."
+  },
+  "service_at_handoff": {
+    "profile": "glm53-mia-2026.11.07-agent-1m",
+    "status": "running healthy; owner keep-native/restore-Python choice pending",
+    "containers": [
+      {
+        "host": "10.32.21.31",
+        "Id": "20f1a15ab7a65de4e0c49493f790f1d95eb4f78e26d584bcb70f175061684d0c",
+        "Image": "sha256:ab992b177ec576277720a8acf71d36ed094f56b724d9acb8aebc0d83afad2a34"
+      },
+      {
+        "host": "10.32.21.32",
+        "Id": "6cbb291d55da2c1691bd2296ffe05094668b538fcfc63d31e044836a85836e06",
+        "Image": "sha256:ab992b177ec576277720a8acf71d36ed094f56b724d9acb8aebc0d83afad2a34"
+      }
+    ],
+    "dashboard_active": false,
+    "python_rollback": "Preserved original recipe/image/controller/mod/spill; Python stopped after both flush receipts; relaunch not performed pending owner choice."
+  },
+  "limits": [
+    "One exploratory matched batch; intended Python and native profiles use different dense/head precision.",
+    "Separate600K evictor workload was not run after definite large-save failure; small published-state RAM eviction was actually observed and restored.",
+    "Large ledger restart/crash continuation not re-prefilled after confirmed absent disk checkpoint.",
+    "No full32K generation, concurrent growing long-session frontier, long soak or power-loss test.",
+    "Two image variants do not prove universal collision-safe image identity.",
+    "Observed log timestamps are workstation tail receipts, about1s polling delay, not intrinsic engine timestamps."
+  ],
+  "raw_evidence": {
+    "directory": "/Users/kelchm/.cache/glm53-evidence/trial-20261107T175225Z",
+    "manifest": "raw-file-manifest.json",
+    "manifest_sha256": "2f4b916686ded9940b1c944e1f34088ace5d73e0a711465ba8e43d9146e280ec",
+    "file_count": 509
+  },
+  "operational_incident": {
+    "network_ids_alerts": "Owner reported alert spam from repeated short-lived SSH polling connections.",
+    "mitigation": "Stopped polling; one persistent SSH ControlMaster TCP connection per Spark; command channels refuse automatic direct fallback.",
+    "service_impact": "Native remained healthy; no relaunch for the transport change."
+  },
+  "follow_up": {
+    "controlled_rerun": "rerun.json",
+    "analysis": "comparison.md",
+    "final_service": "Python, isolated rerun spill; retained production spill untouched",
+    "qualification": "rejected"
+  }
+}

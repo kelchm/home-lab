@@ -1,0 +1,87 @@
+{
+  "schema": "glm53-offhost-preparation/v1",
+  "release": "glm53-mia-2026.11.07",
+  "prepared_utc": "2026-11-07T17:18:43.543047+00:00",
+  "attestation": {
+    "command": "gh attestation verify oci://ghcr.io/kelchm/spark-inference/glm53-mia@sha256:0956a18406597abc252564b6f23e7f205dc35c5eac5b475ea6c0c229d10d4d9c --repo kelchm/spark-inference --format json",
+    "exit_code": 0,
+    "raw_sha256": "4d0a630e5fe7adf0a1939668ac5a23f7c778362e618bb2803d553c0392af642d",
+    "subject": [
+      {
+        "name": "ghcr.io/kelchm/spark-inference/glm53-mia",
+        "digest": {
+          "sha256": "0956a18406597abc252564b6f23e7f205dc35c5eac5b475ea6c0c229d10d4d9c"
+        }
+      }
+    ],
+    "build_definition": {
+      "buildType": "https://actions.github.io/buildtypes/workflow/v1",
+      "externalParameters": {
+        "workflow": {
+          "path": ".github/workflows/build.yml",
+          "ref": "refs/heads/main",
+          "repository": "https://github.com/kelchm/spark-inference"
+        }
+      },
+      "internalParameters": {
+        "github": {
+          "event_name": "push",
+          "repository_id": "1449387752",
+          "repository_owner_id": "172301",
+          "runner_environment": "github-hosted"
+        }
+      },
+      "resolvedDependencies": [
+        {
+          "digest": {
+            "gitCommit": "23f17a3d56bc034de3b9b555948f20c58bbd823d"
+          },
+          "uri": "git+https://github.com/kelchm/spark-inference@refs/heads/main"
+        }
+      ]
+    }
+  },
+  "qualification_status": "pending",
+  "hosts_contacted": true,
+  "gpu_or_model_executed": false,
+  "python_service_changed": false,
+  "source_audit": {
+    "engine": "e52eb42b52b1e50f3f23a5eae8115bbe80c5e7d9",
+    "learn_store": "rank0 NVMe contains both ranks parts; KV_SHARD does not make per-rank filesystems",
+    "single_request_capacity": "one KV shard part, not aggregate pool",
+    "video": "decoder not built; video errors not promised to be HTTP400",
+    "efforts": [
+      "max",
+      "high",
+      "low"
+    ],
+    "thinking_default": true
+  },
+  "offhost_checks": {
+    "spark_inference": {
+      "tests": 47,
+      "status": "passed",
+      "sdk": "0.4.2",
+      "log_sha256": "38855f40519b6e9665e0e1473c204532cd0dfa9b8800734f608ff390b5b8a8be"
+    },
+    "home_lab_contract_suite": {
+      "passed": 253,
+      "skipped": 5,
+      "subtests_passed": 26,
+      "log_sha256": "5ab290587f503eadf245523fdaa0136cdb284a88ec283f0b0bb6af535654d1a6"
+    },
+    "generation_recipe_release_status_actionlint": "passed",
+    "offline_campaign": "unknown; no endpoint evidence",
+    "independent_launch_review": "store identity and explicit native TERM fixes accepted; external consumer retired for this trial"
+  },
+  "retained_python_local_recipe": {
+    "path": "sparks/inference/sparkrun/mia-tensorfold-glm53-exl3-tp2/glm53-exl3-tp2-mia-tf-bf5f9452-mia-1m-durable-readiness-v2.yaml",
+    "sha256": "e6d4207bd7c3c83a07c64e6919a18ca8965682c5c8969ff1b6dfd79d0c5bd006",
+    "live_identity": "unverified; approved-window preflight required"
+  },
+  "raw_evidence_local_directory": "/Users/kelchm/.cache/glm53-evidence/deploy-prep-20261107",
+  "launch_flow": "existing home-lab recipe/mod/plugin/rsync; no PR3 fetch",
+  "spark_inference_pr3": "draft; launch-plumbing migration deferred",
+  "window_authorization": "owner approved NOW, November7; baseline first; stop/report unexpected results; ask final keep-native/restore-Python decision",
+  "trial_receipts_local_directory": "/Users/kelchm/.cache/glm53-evidence/trial-20261107T175225Z"
+}

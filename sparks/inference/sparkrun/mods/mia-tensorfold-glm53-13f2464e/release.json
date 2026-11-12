@@ -1,0 +1,39 @@
+{
+  "release": "glm53-mia-2026.11.07",
+  "lane": "glm53-mia",
+  "image": "ghcr.io/kelchm/spark-inference/glm53-mia@sha256:0956a18406597abc252564b6f23e7f205dc35c5eac5b475ea6c0c229d10d4d9c",
+  "recipe_commit": "23f17a3d56bc034de3b9b555948f20c58bbd823d",
+  "model": "GLM-5.3-Flash",
+  "engine": {
+    "repository": "kelchm/TensorFold",
+    "branch": "deploy/glm53-mia",
+    "commit": "e52eb42b52b1e50f3f23a5eae8115bbe80c5e7d9",
+    "upstream": "ashhart/TensorFold@f350cd3ea253a042e205746928271f9d8f71a82d"
+  },
+  "kit": {
+    "repository": "MiaAI-Lab/GLM-5.3-Flash-DGX-Sparks-1104",
+    "revision": "13f2464ee84ab2b5dabf0bb264d1144b02cf5fb7",
+    "patches": 110,
+    "patches_sha256": "287db8619735278d26139df314ddc01e938f70a09286224e528739772b2829fb"
+  },
+  "build": {
+    "base_image": "nvidia/cuda@sha256:afc92f9727f96346f2912934f11e5a43aa0581aca4a826bd5c8fd4ab6b152bcc",
+    "runtime_image": "nvidia/cuda@sha256:585155539dd4ff2ab653ee59d812aae81a9406a5804596d516c06e3a5719eb26",
+    "zig_version": "0.17.0",
+    "zig_sha256": "9e8d11661d4ae3bd57702a3832781e23ad151dde5798e16a5ccd503f65234ff8",
+    "zig_cpu": "cortex_a725+aes-mte-perfmon+sha2+sha3+sm4-spe",
+    "sm": "121"
+  },
+  "weights": {
+    "repository": "Mia-AiLab/GLM-5.3-Flash-EXL3-4bpw-TensorFold",
+    "revision": "078455ffe6472f9a52fbc1139f58b9db2881b25c"
+  },
+  "drafter": {
+    "repository": "incoai/GLM-5.3-Flash-DFlash2",
+    "revision": "bf582e4eacc1810f76656d1811693ff6c6737d2a"
+  },
+  "changes": "First release of this lane: Mia's kit at 13f2464 on TensorFold f350cd3e with no engine changes of ours, built by this repository's Dockerfile (explicit Spark CPU target, no video).",
+  "qualification": {
+    "status": "pending"
+  }
+}

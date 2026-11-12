@@ -1,0 +1,111 @@
+{
+  "schema": "glm53-trial-baseline/v1",
+  "recorded_utc": "2026-11-07T17:52:25Z",
+  "profile": "glm53-exl3-tp2-mia-tf-bf5f9452-mia-1m-durable-readiness-v2",
+  "image_config": "sha256:b925352f3515caddc1dde8abf33a621afad8133d2964a091184ad4842bfff7b6",
+  "settings": {
+    "model": "GLM-5.3-Flash",
+    "temperature": 0,
+    "top_k": 20,
+    "seed": 27,
+    "reasoning_effort": "low",
+    "chat_template_kwargs": {
+      "enable_thinking": true,
+      "clear_thinking": false
+    },
+    "max_tokens": 256,
+    "stream": true,
+    "stream_options": {
+      "include_usage": true
+    }
+  },
+  "pool_tokens": 2582528,
+  "spill_cap_bytes": 68719476736,
+  "results": [
+    {
+      "case": "decode-c1",
+      "streams": 1,
+      "wall_s": 5.215847084065899,
+      "aggregate_e2e_tps": 49.081193500105606,
+      "per_stream_decode_tps": [
+        51.377282450824815
+      ]
+    },
+    {
+      "case": "decode-c4",
+      "streams": 4,
+      "wall_s": 10.283995083067566,
+      "aggregate_e2e_tps": 99.57219852098137,
+      "per_stream_decode_tps": [
+        26.739967602858002,
+        26.594006853566437,
+        25.451700576252353,
+        26.74019384342551
+      ]
+    },
+    {
+      "case": "prefill-4096",
+      "prompt_tokens": 6341,
+      "cold_ttft_s": 3.412872,
+      "repeat_ttft_s": 0.160402,
+      "repeat_cached_tokens": 6336
+    },
+    {
+      "case": "prefill-16384",
+      "prompt_tokens": 26846,
+      "cold_ttft_s": 13.022067,
+      "repeat_ttft_s": 0.293263,
+      "repeat_cached_tokens": 26816
+    },
+    {
+      "case": "prefill-65536",
+      "prompt_tokens": 111919,
+      "cold_ttft_s": 53.884718,
+      "repeat_ttft_s": 0.362038,
+      "repeat_cached_tokens": 111872
+    },
+    {
+      "case": "pi-tool-loop",
+      "prompt_tokens": 10456,
+      "cached_tokens": 10368,
+      "elapsed_s": 0.652041,
+      "call_ids": [
+        "call_55e5f0a7b47b40c092c9a246"
+      ]
+    }
+  ],
+  "image_identity_probes": [
+    {
+      "session": "image",
+      "correct": true,
+      "prompt_tokens": 406,
+      "cached_tokens": 0
+    },
+    {
+      "session": "image-fork",
+      "correct": true,
+      "prompt_tokens": 406,
+      "cached_tokens": 0
+    },
+    {
+      "session": "image",
+      "correct": true,
+      "prompt_tokens": 406,
+      "cached_tokens": 384
+    },
+    {
+      "session": "image-fork",
+      "correct": true,
+      "prompt_tokens": 406,
+      "cached_tokens": 384
+    }
+  ],
+  "limits": [
+    "one measured batch per cell; exploratory",
+    "no forced production crash/restart/eviction",
+    "cache counters do not prove disk restoration"
+  ],
+  "raw_local_directory": "/Users/kelchm/.cache/glm53-evidence/trial-20261107T175225Z",
+  "raw_summary_sha256": "cd5ef28f94b7ef576c1605fd2b19dbf26910aa4abaaa701daab6d4f831d70e1c",
+  "raw_image_summary_sha256": "21ff33b3823492fa08a4a0c4ec0e15f4ac6dba2dcd6bf33252e6dce6594b66b9"
+}
