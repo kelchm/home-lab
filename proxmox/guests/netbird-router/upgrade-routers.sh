@@ -5,7 +5,7 @@
 set -euo pipefail
 
 # renovate: datasource=github-releases depName=netbirdio/netbird
-NETBIRD_ROUTER_VERSION=v0.82.1
+NETBIRD_ROUTER_VERSION=v0.83.0
 version=${NETBIRD_ROUTER_VERSION#v}
 
 # PVE node, VMID and NetBird peer name of each routing peer.
