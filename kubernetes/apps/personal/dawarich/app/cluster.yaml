@@ -1,8 +1,8 @@
 ---
-# Dedicated PostgreSQL + PostGIS store for Dawarich. Dawarich's own compose
-# runs PostgreSQL 17 with PostGIS 3.5; 3.6 on 17 keeps the tested major. A
-# streaming standby on a separate node provides failover; WAL archiving and
-# volume backups remain DR.
+# Dedicated PostgreSQL 17 + PostGIS store for Dawarich. Extension upgrades
+# are rehearsed on a restored copy before updating the live SQL extension.
+# A streaming standby on a separate node provides failover; WAL archiving
+# and volume backups remain DR.
 apiVersion: postgresql.cnpg.io/v1
 kind: Cluster
 metadata:
