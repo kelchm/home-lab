@@ -34,6 +34,7 @@ or fixing.
 | [logging](runbooks/logging.md) | Querying Kubernetes, Talos node and UniFi console logs, rolling out Talos log delivery, the UniFi log alerts, and diagnosing the Fluent Bit-to-VictoriaLogs ingestion path. |
 | [local-ntp](runbooks/local-ntp.md) | Connecting Talos and DHCP clients to the UPS Pi time servers, the current UniFi change, client acceptance and rollback. |
 | [longhorn-backup-restore](runbooks/longhorn-backup-restore.md) | Restoring a PV from a Longhorn backup; DR drills. |
+| [longhorn-engine-upgrades](runbooks/longhorn-engine-upgrades.md) | Consolidating V1 engines with a recovery-tested canary and one-volume-at-a-time checks. |
 | [cnpg-backup-restore](runbooks/cnpg-backup-restore.md) | CloudNativePG WAL archiving and base backups to the NAS S3 endpoint: alerts, the emergency archiver switch, and the three restore paths. |
 | [longhorn-storage-network-cutover](runbooks/longhorn-storage-network-cutover.md) | Moving Longhorn replica traffic onto the dedicated storage VLAN. |
 | [longhorn-storage-boundary](runbooks/longhorn-storage-boundary.md) | Preparing and, after a separate decision, running the eight bounded tenant-to-Longhorn storage-network attempts for #226. |
