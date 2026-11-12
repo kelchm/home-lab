@@ -94,25 +94,36 @@ Use only volumes from the reviewed inventory whose requested/current source imag
 
 Confirm the scheduled writer is inactive, no running pod uses its claim, and the window ends well before its next 00:30 America/New_York run. If that cannot be guaranteed, suspend its CronJob through Git and wait for Flux before proceeding, then restore the schedule afterward. Do not start a second sync.
 
-Require no active Job or running pod uses the claim, including manually created Jobs. Record the Longhorn VolumeAttachment's complete `spec.attachmentTickets` map before this operation. Use a normal maintenance attachment (frontend disabled, named attachment owner) on one healthy node to take a one-time snapshot/backup of the idle volume:
+Require no active Job or running pod uses the claim, including manually created Jobs. Record the Longhorn VolumeAttachment's complete `spec.attachmentTickets` map before this operation. Use a normal maintenance attachment (frontend disabled, unique attachment owner) on one healthy node to take a one-time snapshot/backup of the idle volume. Run both blocks in the same shell and retain the printed owner ID and `scrobl_ticket_baseline` with the operation evidence. Each `&&` chain prevents the API action if a preceding check fails; stop on any nonzero result. Generate the owner ID once per operation and reuse it for detach:
 
 ```sh
-scrobl_volume="$(kubectl -n ai get pvc scrobl -o jsonpath='{.spec.volumeName}')"
-test -n "$scrobl_volume"
-kubectl -n longhorn-system get volumes.longhorn.io "$scrobl_volume" -o json |
-  jq -e '.status.kubernetesStatus.namespace == "ai" and .status.kubernetesStatus.pvcName == "scrobl" and .status.state == "detached"'
+scrobl_volume="$(kubectl -n ai get pvc scrobl -o jsonpath='{.spec.volumeName}')" &&
+test -n "$scrobl_volume" &&
+scrobl_volume_json="$(kubectl -n longhorn-system get volumes.longhorn.io "$scrobl_volume" -o json)" &&
+printf '%s\n' "$scrobl_volume_json" |
+  jq -e '.status.kubernetesStatus.namespace == "ai" and .status.kubernetesStatus.pvcName == "scrobl" and .status.state == "detached"' >/dev/null &&
+scrobl_attachment_id="engine-consolidation-$(uuidgen)" &&
+scrobl_attachment_json="$(kubectl -n longhorn-system get volumeattachments.longhorn.io "$scrobl_volume" -o json)" &&
+printf '%s\n' "$scrobl_attachment_json" | jq -e --arg volume "$scrobl_volume" '.spec.volume == $volume' >/dev/null &&
+scrobl_ticket_baseline="$(printf '%s\n' "$scrobl_attachment_json" | jq -cS '.spec.attachmentTickets // {}')" &&
+printf '%s\n' "$scrobl_ticket_baseline" | jq -e --arg id "$scrobl_attachment_id" 'has($id) | not' >/dev/null &&
+scrobl_attach_body="$(jq -cn --arg id "$scrobl_attachment_id" '{hostId:"k8s-prod-1",disableFrontend:true,attachedBy:$id,attacherType:"longhorn-api",attachmentID:$id}')" &&
+printf 'Attachment owner: %s\nTicket baseline: %s\n' "$scrobl_attachment_id" "$scrobl_ticket_baseline" &&
 curl --noproxy '*' --connect-timeout 5 --max-time 30 --fail-with-body -sS \
   -H 'Content-Type: application/json' \
-  --data '{"hostId":"k8s-prod-1","disableFrontend":true,"attachedBy":"engine-consolidation-20261111","attacherType":"longhorn-api","attachmentID":"engine-consolidation-20261111"}' \
+  --data "$scrobl_attach_body" \
   "$lh_api/volumes/$scrobl_volume?action=attach"
 ```
 
 Wait for attached/healthy state and confirm the frontend remains disabled and the new ticket has the intended node/owner. Verify a restored copy with SQLite `PRAGMA integrity_check`, `scrobbles` (history), `loved` and `removed` row counts and the `user`, `history_read_at` and `loved_read_at` metadata; never point an application writer at the copy. Remove the inspection resources. Keep the existing `no-backup` label and detached-volume-backup setting unchanged. Release only this operation's attachment ticket:
 
 ```sh
+test -n "${scrobl_volume:-}" &&
+test -n "${scrobl_attachment_id:-}" &&
+scrobl_detach_body="$(jq -cn --arg id "$scrobl_attachment_id" '{attachmentID:$id,hostId:"k8s-prod-1"}')" &&
 curl --noproxy '*' --connect-timeout 5 --max-time 30 --fail-with-body -sS \
   -H 'Content-Type: application/json' \
-  --data '{"attachmentID":"engine-consolidation-20261111","hostId":"k8s-prod-1"}' \
+  --data "$scrobl_detach_body" \
   "$lh_api/volumes/$scrobl_volume?action=detach"
 ```
 
