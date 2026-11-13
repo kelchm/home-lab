@@ -15,7 +15,7 @@ spec:
   primaryUpdateMethod: switchover
   affinity:
     podAntiAffinityType: required
-  imageName: ghcr.io/cloudnative-pg/postgis:17.11-3.7.0-system-trixie
+  imageName: ghcr.io/cloudnative-pg/postgis:17.12-3.7.0-system-trixie
   storage:
     # Room for about 4 days of unarchived WAL while the backup store is down.
     size: 20Gi
