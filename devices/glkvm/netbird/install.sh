@@ -7,7 +7,7 @@
 set -euo pipefail
 
 # renovate: datasource=github-releases depName=netbirdio/netbird
-NETBIRD_VERSION=v0.83.0
+NETBIRD_VERSION=v0.83.1
 version=${NETBIRD_VERSION#v}
 
 if (( $# > 1 )); then
