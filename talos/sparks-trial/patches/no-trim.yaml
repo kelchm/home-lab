@@ -1,0 +1,6 @@
+# Talos 1.14 generates weekly filesystem trim for new clusters. Trim would
+# issue discards to the DGX OS disk, so the trial deletes it.
+apiVersion: v1alpha1
+kind: FilesystemTrimConfig
+# Escape the dollar sign through talhelper's environment substitution.
+$$patch: delete
