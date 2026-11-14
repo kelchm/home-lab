@@ -1,0 +1,46 @@
+name: sparknest
+
+services:
+  sparknest:
+    image: ghcr.io/kelchm/home-lab/sparknest:v0.8.3-20261108-1@sha256:b9980721b4205b66460b030110b1121f9c2572f52ff52485dad8afbb10ad6a0c
+    platform: linux/amd64
+    user: "0:0"
+    read_only: true
+    ports:
+      - "10.32.10.5:8091:7411"
+      - "10.32.25.5:8091:7411"
+    devices:
+      - /dev/fuse:/dev/fuse
+    cap_drop:
+      - ALL
+    cap_add:
+      - SYS_ADMIN
+    security_opt:
+      - apparmor:unconfined
+      - no-new-privileges:true
+    volumes:
+      - /volume1/docker/sparknest:/config:ro
+      # One bind: DSM 4.4 refuses hard links and reflinks across bind mounts.
+      # This contains staging copies only, never original model stores.
+      - /volume1/models/sparknest:/data
+    tmpfs:
+      - /tmp:mode=1777,size=1g
+    environment:
+      SPARKNEST_SOCKET: /data/state/api.sock
+      RUST_LOG: info
+    mem_limit: 2g
+    cpu_shares: 512
+    healthcheck:
+      test: ["CMD", "nest", "wait-ready", "--timeout", "5"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 20s
+    stop_signal: SIGINT
+    stop_grace_period: 60s
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+    restart: unless-stopped
