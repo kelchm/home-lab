@@ -310,7 +310,7 @@ API VIP is managed by the Talos `vipController` (GARP-based at the machine-confi
 10.32.20.111      ups-compute-rack         NixOS Pi, compute-rack UPS monitor
 10.32.20.112      ups-office               NixOS Pi 5, office UPS monitor — Starlink/T-Mobile gateways; NTP; ADS-B receiver feeding FlightAware
 10.32.20.120-.129 (ADS-B receiver family, 1-indexed)
-10.32.20.121      adsb-office              NixOS Pi 3B, ADS-B fallback, switched off since 2026-11-14 (UniFi fixed IP)
+10.32.20.121      adsb-office              NixOS Pi 3B, retired 2026-11-14 (ADS-B moved to ups-office)
 ```
 
 Talos nodes do NOT have IPs on Infra Mgmt. Talos has no classic management plane — `talosctl` and `kubectl` (both mTLS) are the entire management surface, and run over VLAN 30 alongside workload traffic. Network-level isolation is replaced by cryptographic isolation. Infra Mgmt exists for tenants that *do* need a classic mgmt plane.
