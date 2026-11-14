@@ -1,0 +1,57 @@
+---
+# The ADS-B receiver exports no metrics; its journal is the only evidence that
+# the SDR is wedging or the FlightAware feed has stopped
+# (docs/runbooks/host-monitoring.md#ads-b). LogsQL rules: the datasource label
+# routes them to vmalert-victoria-logs. Series carry no cluster label. Nothing
+# depends on the feed, so neither rule notifies.
+apiVersion: operator.victoriametrics.com/v1beta1
+kind: VMRule
+metadata:
+  name: adsb-logs
+  labels:
+    alerting.home.kelch.io/datasource: victorialogs
+spec:
+  groups:
+    - name: adsb-logs
+      type: vlogs
+      interval: 1m
+      labels:
+        platform: pi
+      rules:
+        # dump1090-fa gives up after a sample stall and systemd restarts it, so
+        # one is self-healing. The Pi 3 it replaced logged 3 or more in an hour
+        # through most of its stalling hours.
+        - alert: ADSBReceiverStalling
+          expr: >-
+            _time:1h {service.name="dump1090-fa"} "No samples received from the SDR"
+            | stats by (host.name) count() as stalls
+            | filter stalls:>=3
+            | rename host.name as instance
+          labels:
+            severity: info
+          annotations:
+            summary: "The SDR on {{ $labels.instance }} stalled {{ $value }} times in an hour"
+            description: >-
+              dump1090-fa on {{ $labels.instance }} keeps receiving no samples
+              from the RTL-SDR and restarting. Check the Pi's undervoltage alarm,
+              the dongle's USB power and cable, and the kernel log for USB
+              disconnects.
+
+        # The host expected to feed FlightAware: only one may run piaware with
+        # the feeder ID. piaware logs its message count every five minutes; a
+        # quiet night still sees aircraft within an hour. The host must be
+        # logging something, so a dark host is NodeMetricsMissing's.
+        - alert: ADSBFeedSilent
+          expr: >-
+            _time:1h {host.name="ups-office"}
+            | stats by (host.name) count() if ({service.name="piaware"} "msgs recv'd" -"(0 in last") as heartbeats
+            | filter heartbeats:=0
+            | rename host.name as instance
+          labels:
+            severity: info
+          annotations:
+            summary: "{{ $labels.instance }} has fed no aircraft messages to FlightAware for an hour"
+            description: >-
+              piaware on {{ $labels.instance }} has logged no received messages
+              for an hour, or has not logged at all. Check piaware and
+              dump1090-fa, and whether the dongle is connected.
