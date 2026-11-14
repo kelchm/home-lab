@@ -1,0 +1,22 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="720" height="350" viewBox="0 0 720 350" role="img" aria-labelledby="title desc">
+  <title id="title">Native sharing coverage of affected weight sets</title>
+  <desc id="desc">Mia Qwen NVFP4: 37 of 37 unique weight files shared. Mia GLM EXL3 TR3: 120 of 120 shared. DeepSeek Vision EXL3: zero of 11 shared. All three sets passed content verification. Sharing coverage does not measure disk space saved.</desc>
+  <rect width="720" height="350" fill="#ffffff"/>
+  <g font-family="Arial, sans-serif" fill="#17202a" font-size="24">
+    <text x="20" y="34" font-size="26">Native sharing coverage</text>
+    <text x="20" y="78">Mia Qwen NVFP4</text>
+    <text x="700" y="78" text-anchor="end">37 / 37</text>
+    <rect x="20" y="92" width="680" height="18" fill="#21618c"/>
+    <text x="20" y="150">Mia GLM EXL3 TR3</text>
+    <text x="700" y="150" text-anchor="end">120 / 120</text>
+    <rect x="20" y="164" width="680" height="18" fill="#21618c"/>
+    <text x="20" y="222">DeepSeek Vision EXL3</text>
+    <text x="700" y="222" text-anchor="end">0 / 11</text>
+    <rect x="20" y="236" width="680" height="18" fill="#b66a20"/>
+    <rect x="20" y="281" width="14" height="14" fill="#21618c"/>
+    <text x="44" y="295" font-size="22">Shared store</text>
+    <rect x="270" y="281" width="14" height="14" fill="#b66a20"/>
+    <text x="294" y="295" font-size="22">Repository blobs</text>
+    <text x="20" y="332" font-size="22">Weight files only. Coverage does not measure space saved.</text>
+  </g>
+</svg>
