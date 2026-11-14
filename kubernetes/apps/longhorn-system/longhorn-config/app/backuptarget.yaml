@@ -5,8 +5,10 @@
 # Kustomization because the Longhorn HelmRelease installs its CRD.
 #
 # Network path: instance-manager pods carry a storage-network attachment
-# in the same /24 as the NAS (10.32.25.5), so the kernel routes NFS
-# traffic out lhnet1 (2.5GbE) without extra config.
+# using 10.32.25.128/28 and an explicit 10.32.25.5/32 route to the NAS
+# over lhnet1 (2.5GbE). Strict rp_filter requires that return route too.
+# A replacement NAS must reuse 10.32.25.5 or get a reviewed explicit route
+# in the storage-network NAD before changing this target.
 #
 # Restore drill / opt-out / DR sketch: docs/runbooks/longhorn-backup-restore.md
 apiVersion: longhorn.io/v1beta2

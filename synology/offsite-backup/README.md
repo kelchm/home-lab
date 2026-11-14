@@ -13,7 +13,7 @@ State as of 2026-10-05: running on Athena. The first snapshot (90.6 GB, 81,844 f
 | Lock | Compliance mode, 30 days, renewed by daily full maintenance while data is still referenced |
 | Bucket lifecycle | Hidden and superseded versions are removed 30 days later, once unlocked |
 | Snapshots kept | 14 daily, 4 weekly, 3 latest (repository global policy) |
-| Schedule | 10:00 UTC daily: start ping, snapshot every directory under `/sources`, full maintenance, then a ping with the exit status |
+| Schedule | 10:00 UTC daily: start ping, source checks, snapshot every directory under `/sources`, full maintenance, then a ping with the exit status |
 | Dead-man check | healthchecks.io `athena-offsite-backup`, cron `0 10 * * *` UTC, 3 hours grace, Pushover and email |
 | Runtime state | `/volume1/docker/offsite-backup/{cache,logs}`; disposable |
 
@@ -26,7 +26,9 @@ Sources:
 
 As of 2026-10-29 UTC, `/sources/object-storage` is mounted read-only and both live databases have accepted base backups and advancing WAL on Athena. No completed Kopia snapshot of this new source was observed at database sign-off; the subsequent normal run completed at 10:32:48 UTC with both accepted base archives and selected WAL objects verified in its immutable catalog. The [dated database runbook record](../../docs/runbooks/cnpg-backup-restore.md#first-normal-object-storage-snapshot-2026-10-29) identifies the snapshot and limits: payload readability, complete required WAL continuity and a CNPG restore from B2 remain unverified.
 
-To add a source, mount another share read-only under `/sources/`. It is picked up on the next run.
+Before each scheduled snapshot, the job requires at least one nonempty regular `backupstore/volumes/*/*/*/volume.cfg` file in the Longhorn source and one `base/*/backup.info` file in each expected CloudNativePG archive: `k8s-prod-visionect-db/visionect-db-pg17`, `k8s-prod-bambuddy-db/bambuddy-db-pg18`, and `k8s-prod-dawarich-db/dawarich-db-pg17` under the object store's `data/`. Missing or empty markers log the affected archive, skip both snapshot and maintenance, and send a failure ping; the container waits for the next daily run. These checks detect missing or emptied archives, not backup integrity or freshness.
+
+To add a source, mount another share read-only under `/sources/` and add a representative nonempty archive marker to `check_sources` in `compose.yaml`. Update that check when adding, retiring or renaming a database archive. Every mounted source is still picked up on the next successful run.
 
 Every source shares this one repository, and with it one lock period, one password and one key. Data that needs a different lock period or its own password gets a second repository under its own prefix; repositories do not deduplicate against each other. The lock period for new uploads can be changed with `kopia repository set-parameters --retention-period`, but a lock already applied to an object can only be extended.
 
