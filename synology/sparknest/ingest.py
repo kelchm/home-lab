@@ -146,14 +146,15 @@ def inventory(spec):
                     tree = repo / "trees" / (rev.name + ".json")
                     if tree.is_file():
                         trees.append(file_record(tree, tree.name))
-                refs_complete = True
+                refs_complete, before = True, len(warnings)
                 for path in walk(repo / "refs", warnings) if (repo / "refs").exists() else []:
                     try:
                         if path.is_file():
                             refs[str(path.relative_to(repo / "refs"))] = path.read_text().strip()
                     except OSError as exc:
                         warnings.append("unreadable ref: " + str(exc))
-                        refs_complete = False
+                if len(warnings) > before:
+                    refs_complete = False  # Any ref walk problem means agreement is unknown.
                 if files:
                     items.append({"kind": "hf", "name": repo.name, "files": files, "refs": refs,
                                   "refs_complete": refs_complete, "trees": trees, "store": store["name"]})
@@ -411,6 +412,11 @@ def receive_direct(request):
         # Never buffer an unread payload: close the pipe and end the source.
         unread = abandon or source.stdout.read(1)
         source.stdout.close()
+        if abandon:
+            try:
+                source.wait(timeout=5)  # Let a failed SSH report 255 before any terminate.
+            except subprocess.TimeoutExpired:
+                pass
         if unread and source.poll() is None:
             source.terminate()
         source.wait()
@@ -565,7 +571,11 @@ def lmstudio_acceptance(request):
     expected = {(entry["sha256"], entry["bytes"]) for entry in json.loads(Path(request["manifest"]).read_text())}
     legacy = Path("/mnt/sparknest") / safe_relative(request["legacy"].lstrip("/"))
     unmatched, count = [], 0
-    for folder, dirs, files in os.walk(legacy):
+    def fail(exc):
+        raise exc  # An unlisted subtree must block cleanup, not escape the check.
+    if not legacy.is_dir():
+        raise ValueError("legacy import is not a readable directory: " + str(legacy))
+    for folder, dirs, files in os.walk(legacy, onerror=fail):
         for name in dirs + files:
             path = Path(folder) / name
             if path.is_symlink():

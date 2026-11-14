@@ -129,6 +129,13 @@ class NativeModelImport(unittest.TestCase):
             self.assertEqual(result["unshared"], ["2" * 64])
             self.assertEqual([Path(p).name for p in result["unmatched"]], ["extra.txt"])
             self.assertEqual(result["legacy_files"], 2)
+            real = os.walk
+            with patch.object(ingest, "HUB", hub), patch.object(ingest, "Path",
+                    side_effect=lambda p, *a: mnt if p == "/mnt/sparknest" else original(p, *a)), \
+                    patch.object(ingest.os, "walk", side_effect=lambda top, onerror=None, **kw: (onerror(PermissionError("denied")), iter(()))[1]):
+                with self.assertRaises(PermissionError):
+                    ingest.lmstudio_acceptance({"name": "models--owner--model", "lfs": [],
+                                                "legacy": "/imports/mac/lmstudio/owner/model", "manifest": str(manifest)})
 
     def test_sha_reuse_selects_receipt_with_required_git_identity(self):
         rec = dict(self.item["files"][0], sha256=self.sha, etag=self.git)
@@ -166,6 +173,23 @@ class Inventory(unittest.TestCase):
             self.assertNotIn(str((outside / "blobs/config").resolve()), sources)
             self.assertEqual(sources.count(str(shared.resolve())), 1)
             self.assertEqual(sources.count(str(external.resolve())), 1)
+
+    def test_unlistable_refs_directory_blocks_agreement(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            snap = root / "models--x--y/snapshots/rev"
+            snap.mkdir(parents=True)
+            (snap / "config.json").write_text("{}")
+            (root / "models--x--y/refs/heads").mkdir(parents=True)
+            real = os.walk
+            def failing(top, onerror=None, **kw):
+                if str(top).endswith("refs"):
+                    onerror(PermissionError("denied: " + str(top)))
+                    return iter(())
+                return real(top, onerror=onerror, **kw)
+            with patch.object(ingest.os, "walk", side_effect=failing):
+                result = ingest.inventory({"name": "mac", "host": "local", "stores": [{"name": "hf", "root": str(root), "kind": "hf"}]})
+            self.assertFalse(result["items"][0]["refs_complete"])
 
     def test_incomplete_refs_do_not_count_as_agreement(self):
         a = {"kind": "hf", "name": "models--x--y", "files": [], "refs": {"main": "a" * 40}}
@@ -207,6 +231,7 @@ class DirectTransfer(unittest.TestCase):
             self.stdout, self.stderr = io.BytesIO(data), io.BytesIO(b"ssh: connect failed")
             # A failed SSH client has already exited; a healthy one is still streaming.
             self.final, self.returncode, self.terminated = returncode, returncode or None, False
+            self.exits_late = False
 
         def poll(self):
             return self.returncode
@@ -214,7 +239,12 @@ class DirectTransfer(unittest.TestCase):
         def terminate(self):
             self.terminated, self.final = True, -15
 
-        def wait(self):
+        def wait(self, timeout=None):
+            if timeout is not None and self.returncode is None:
+                if self.exits_late:
+                    self.returncode = self.final
+                    return self.returncode
+                raise subprocess.TimeoutExpired("ssh", timeout)
             self.returncode = self.final
             return self.returncode
 
@@ -243,6 +273,13 @@ class DirectTransfer(unittest.TestCase):
         with self.assertRaises(ConnectionError):
             self.direct(source, [None, ValueError("transfer ended early")])
         self.assertTrue(ingest.transport_failure(subprocess.CalledProcessError(ingest.TRANSPORT_EXIT, "agent")))
+
+    def test_ssh_exit_reported_after_stream_closes_is_still_a_transport_failure(self):
+        source = self.Source(b"", returncode=255)
+        source.returncode, source.exits_late = None, True
+        with self.assertRaises(ConnectionError):
+            self.direct(source, [None, ValueError("transfer ended early")])
+        self.assertFalse(source.terminated)
 
 
     def test_forced_command_rejects_uninventoried_file(self):
