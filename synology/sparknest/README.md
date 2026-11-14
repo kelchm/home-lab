@@ -4,7 +4,7 @@ SparkNest v0.8.3 runs as one container and one voting node on Athena, using TCP 
 
 The dated [evaluation findings](FINDINGS.md) distinguish demonstrated recovery, remaining acceptance work, integration defects and candidate upstream changes. Native HF `--archive` import/download support already permits archive-first payload storage; this trial's host-backed import layout is not mandatory. That alternate path still needs live acceptance here.
 
-The UI/API is at `http://10.32.10.5:8091/` on Main and `http://10.32.25.5:8091/` on Storage. There is no management-VLAN listener. The UI shell is public; API requests require the cluster-derived bearer token. Retrieve the login link on Athena with `sudo /usr/local/bin/docker exec sparknest-sparknest-1 nest ui`, replacing its container hostname and port with `10.32.10.5:8091`. Do not commit that link or the token. Traffic is HTTP on these LAN addresses.
+The UI/API is at `http://10.32.10.5:8091/` on Main and `http://10.32.25.5:8091/` on Storage. There is no management-VLAN listener. The UI shell is public; API requests require the cluster-derived bearer token. Retrieve the login link on Athena with `sudo /usr/local/bin/docker exec sparknest-sparknest-1 nest ui`, replacing its container hostname and port with `10.32.10.5:8091`. Do not commit that link or the token. Traffic is HTTP on these LAN addresses, so the token is exposed to anyone who can observe it; this is accepted for the trial on trusted VLANs. HTTPS is tracked in [#1485](https://github.com/kelchm/home-lab/issues/1485). An SSH tunnel is not an option while Athena's sshd sets `AllowTcpForwarding no`.
 
 ## Storage
 
