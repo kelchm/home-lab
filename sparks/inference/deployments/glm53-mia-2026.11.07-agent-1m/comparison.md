@@ -1,6 +1,6 @@
 # Controlled GLM recipe comparison — November 7, 2026
 
-The owner authorized N8 → N4 → P4 → repeated N8, with a final return to Python. Both service profiles follow Mia’s recipes, with their respective precision defaults. Native remains unqualified. Python was restored and passed readiness on both Sparks at the end. The running profile is `glm53-python-rerun-p4`, from `~/sparkrun/recipes/glm53/mia-tensorfold-glm53-rerun/P4.yaml`, using the isolated `/cache/huggingface/tensorfold-spill-rerun-20261107` store. The original retained production spill was not opened by the rerun.
+The owner authorized N8 → N4 → P4 → repeated N8, with a final return to Python. Both service profiles follow Mia’s recipes, with their respective precision defaults. The tested native release remained unqualified. Python was restored and passed readiness on both Sparks at the end. The restored profile was `glm53-python-rerun-p4`, from `~/sparkrun/recipes/glm53/mia-tensorfold-glm53-rerun/P4.yaml`, using the isolated `/cache/huggingface/tensorfold-spill-rerun-20261107` store. The original retained production spill was not opened by the rerun. This is the campaign's end state; see the [current operational notes](../../sparkrun/README.md) before operating the hosts.
 
 Later sharding, Python precision and upstream message-start results are recorded separately in [the November 7–8 follow-ups](followups.md), including the verification-command correction. This comparison retains its original release/configuration scope.
 
