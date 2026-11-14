@@ -5,8 +5,8 @@ import argparse
 import collections
 import datetime
 import json
-import os
 from pathlib import Path
+import subprocess
 import sys
 import time
 
@@ -19,6 +19,8 @@ def size(value):
 
 
 def display(root):
+    if not (root / "journal.json").exists():
+        return "SparkNest bulk ingestion: waiting for the coordinator to create journal.json"
     inventory = json.loads((root / "inventory.json").read_text())
     journal = json.loads((root / "journal.json").read_text())
     items = {item["key"]: item for item in inventory["items"]}
@@ -34,9 +36,14 @@ def display(root):
     active = [value for value in states.values() if value["state"] not in ("verified", "failed")]
     try:
         worker = json.loads((root / "worker.json").read_text())
-        os.kill(worker["pid"], 0)
-        lines.append("Worker process: running (PID {})".format(worker["pid"]))
+        started = subprocess.run(["ps", "-o", "lstart=", "-p", str(worker["pid"])],
+                                 stdout=subprocess.PIPE, text=True).stdout.strip()
+        running = bool(started) and started == worker.get("process_start")
     except (OSError, KeyError, ValueError):
+        running = False
+    if running:
+        lines.append("Worker process: running (PID {})".format(worker["pid"]))
+    else:
         lines.append("Worker process: not found" if not journal.get("finished") else "Queue pass finished")
     if journal.get("blocked"):
         lines.append("BLOCKED: " + journal["blocked"])
@@ -70,7 +77,8 @@ def display(root):
                   "Content verification does not mean sharing/deduplication succeeded."])
     for value in states.values():
         if value["state"] == "failed":
-            lines.append("FAILED: {}: {}".format(value["name"], value.get("error", "").splitlines()[0][:180]))
+            error = (value.get("error") or "").splitlines() or ["unknown error"]
+            lines.append("FAILED: {}: {}".format(value["name"], error[0][:180]))
     age = max(0, int(time.time() - (root / "journal.json").stat().st_mtime))
     lines.extend(["", "Journal last updated {}s ago; updates occur at file/stage boundaries.".format(age),
                   "Large-file hashing can take several minutes without an update."])
