@@ -1,8 +1,20 @@
 # SparkNest evaluation findings
 
-Assessment of SparkNest v0.8.3 on Athena, recorded November 8, 2026. Ingestion status was captured at 20:57 EST; completed recovery results are identified separately. The [runbook](README.md) contains procedures and the detailed audit history. [Issue #1371](https://github.com/kelchm/home-lab/issues/1371) tracks unfinished acceptance work; [PR #1373](https://github.com/kelchm/home-lab/pull/1373) records the deployment and importer.
+Assessment of SparkNest v0.8.3 on Athena, recorded November 8, 2026, with the separately dated acceptance below. The November 8 sections retain their 20:57 EST ingestion cutoff and must not be read as current progress. The [runbook](README.md) contains current procedures and the detailed audit history. [Issue #1371](https://github.com/kelchm/home-lab/issues/1371) records qualification and cleanup; [PR #1373](https://github.com/kelchm/home-lab/pull/1373) records the deployment and importer.
 
-## Conclusion
+## Accepted interim use, 2026-11-14
+
+**Accepted for the immediate goal: keep the captured downloads recoverable while removing their selected Mac copies.** The owner accepts the current arrangement as an interim solution. Incomplete non-HF model recognition, catalog presentation and archive-first qualification are useful follow-ups, not blockers for that practical outcome.
+
+Final captured-source qualification completed on November 14 at 08:30 UTC. All 98 collections are accounted for: 97 verified collections and one explicitly excluded zero-byte Krea `.incomplete` artifact, rather than 98 fully verified collections. Report-only deep fsck found no findings and no lost objects across 4,745 objects. A network-disabled full export reconstructed 4,745 files and 2,354 internal links with no missing objects; all 2,896 expected source-bound paths matched their captured SHA-256. Real model files were restored to the Mac without the daemon or FUSE in the selected recovery exercises. These checks establish preservation of the captured downloads, not completeness against every upstream repository.
+
+Selected Mac HF, LM Studio, ComfyUI and Ollama payload removal is complete, including the HF shared-store correction and fresh absence checks. No total physical-space saving is claimed: logical deletion totals, deduplication layout and APFS allocation differ, and no Time Machine snapshots were thinned. Retained source mappings and matched offline exports remain part of the operating procedure.
+
+The opt-in offline-sharing helper was deployed on November 14 and used on the two archives whose canonical sharing metadata was unavailable. DeepSeek moved 31 blobs and Qwen moved 12; all 31 DeepSeek and 51 Qwen blob entries are now shared-store links. All four original manifests then passed full FUSE re-verification with no mismatches. Those conversions reported zero bytes freed; sharing layout is not evidence of physical reclamation. The original verification output and its provenance are retained on Mac and Athena under `offline-share-20261114/`.
+
+The live archive and linked recovery exports still share Athena's failure domain. Independent backup outside Athena, native archive-first storage, richer catalog support and abrupt-power-loss qualification remain separate work. The historical findings below explain the limitations; they do not reopen the completed captured-source acceptance or authorize further pruning.
+
+## November 8 conclusion
 
 **SparkNest is a conditional fit for an HF-oriented model archive. Its storage and offline recovery capabilities have held up in the completed tests, but it does not yet satisfy the full requirement for a model-aware archive across all our stores.** The strongest evidence is successful reconstruction without the daemon or network, full checksums of selected restored models, and real weight files restored to the Mac. The main remaining product gaps are recognition of non-HF model collections, metadata-dependent sharing, and presentation that confuses file availability with model completeness or recovery coverage.
 
@@ -127,4 +139,4 @@ Whole-inventory completion, final report-only deep fsck, a fresh full offline ex
 
 The audit root is `/Users/kelchm/Documents/sparknest-ingest-20261108/`. Its inventory, journal and worker manifests establish source scope and progress. `sharing-warning-review-20261108/` records classification and pinned matches; `sharing-recovery-20261108/` contains the completed native-sharing/export/checksum/Mac-restore proofs. Corresponding retained NAS recovery directories are under `/volume1/models/sparknest/recovery/`. `final-acceptance-20261108/` records the pending complete-archive checks. Cleanup execution files retain original results and accounting corrections. `report-evidence-20261108/native-archive-cli-help.json` captures the deployed archive-first interface without modifying storage.
 
-This report is a dated evaluation snapshot. Later milestone results should update the maintained runbook and tracker rather than retroactively making these pending checks look completed at the reporting cutoff.
+The sections from November 8 are a dated evaluation snapshot. The November 14 addendum and maintained runbook record later results without retroactively making pending checks look completed at the original reporting cutoff.
