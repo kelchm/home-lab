@@ -170,6 +170,7 @@ jobs:
               - 'scripts/ci/validate-synology.sh'
               - 'scripts/ci/test-synology-break-glass.sh'
               - 'scripts/ci/test-google-photos-takeout.py'
+              - 'scripts/ci/test-offsite-backup.py'
             talos:
               - '.github/workflows/repository-validation.yaml'
               - '.mise.toml'
@@ -535,6 +536,10 @@ jobs:
       - name: Test inactive Photos collector offline in its pinned image
         if: needs.pre-job.outputs.synology_changed == 'true'
         run: python3 scripts/ci/test-google-photos-takeout.py
+
+      - name: Test off-site backup source guards offline in the pinned image
+        if: needs.pre-job.outputs.synology_changed == 'true'
+        run: python3 scripts/ci/test-offsite-backup.py
 
       - name: Test native Athena ACME controls offline
         if: needs.pre-job.outputs.synology_changed == 'true'
