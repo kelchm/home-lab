@@ -29,6 +29,8 @@ MARKERS = {
     'dawarich-db': 'object-storage/data/k8s-prod-dawarich-db/dawarich-db-pg17/base/20261114T082000/backup.info',
 }
 STUBS = r'''
+# Merge before Docker multiplexes the streams so diagnostics cannot split stub lines.
+exec 2>&1
 kopia() { printf 'KOPIA'; printf ' %s' "$@"; printf '\n'; }
 curl() {
   printf 'CURL'; printf ' %s' "$@"; printf '\n'
