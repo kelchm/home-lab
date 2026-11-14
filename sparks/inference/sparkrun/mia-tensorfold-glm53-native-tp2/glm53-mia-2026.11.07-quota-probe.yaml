@@ -1,0 +1,86 @@
+# Native release trial through the existing home-lab SparkRun runtime.
+recipe_version: '2'
+model: Mia-AiLab/GLM-5.3-Flash-EXL3-4bpw-TensorFold
+model_revision: 078455ffe6472f9a52fbc1139f58b9db2881b25c
+runtime: tensorfold
+container: ghcr.io/kelchm/spark-inference/glm53-mia@sha256:0956a18406597abc252564b6f23e7f205dc35c5eac5b475ea6c0c229d10d4d9c
+min_nodes: 2
+max_nodes: 2
+metadata:
+  profile: glm53-mia-2026.11.07-quota-probe
+  release: glm53-mia-2026.11.07
+  serving_profile: quota-probe
+  status: qualification-only
+  kit_revision: 13f2464ee84ab2b5dabf0bb264d1144b02cf5fb7
+  engine_revision: e52eb42b52b1e50f3f23a5eae8115bbe80c5e7d9
+  upstream_patch_count: 110
+  target_model_revision: 078455ffe6472f9a52fbc1139f58b9db2881b25c
+  draft_model_revision: bf582e4eacc1810f76656d1811693ff6c6737d2a
+  image: ghcr.io/kelchm/spark-inference/glm53-mia@sha256:0956a18406597abc252564b6f23e7f205dc35c5eac5b475ea6c0c229d10d4d9c
+defaults:
+  tensor_parallel: 2
+  pipeline_parallel: 1
+  host: 0.0.0.0
+  port: 8888
+  served_model_name: GLM-5.3-Flash
+  context: 1048576
+  max_tokens: 32768
+  drafter: incoai/GLM-5.3-Flash-DFlash2
+  drafter_revision: bf582e4eacc1810f76656d1811693ff6c6737d2a
+  entrypoint: /usr/local/bin/tensorfold-entrypoint
+env:
+  HF_HUB_OFFLINE: '1'
+  CUDA_DEVICE_ORDER: PCI_BUS_ID
+  TENSORFOLD_NO_UPDATE_CHECK: '1'
+  TENSORFOLD_NO_LIVE: '1'
+  TENSORFOLD_MEMORY_RESERVE_GIB: '12'
+  TENSORFOLD_PREFILL_SHARE: '0.68'
+  TF_GLM_DENSE_BITS: '8'
+  TF_GLM_HEAD_BITS: '8'
+  TF_KV_PAGES: 'on'
+  TF_GLM_KV_SHARD: '1'
+  TF_PROMPT_CACHE_FIRST: '1'
+  TF_GLM_HOST_CACHE_GIB: '0'
+  TF_GLM_CLEAR_THINKING: '0'
+  TF_GLM_CE_EXCHANGE: '0'
+  TF_GLM_ABSORB_MMA: '1'
+  TF_GLM_W8A8: '0'
+  TF_ROCE: '1'
+  TF_ROCE_MAX_KB: '4096'
+  GLM_LEARN_DIR: /cache/huggingface/spark-inference/learn/glm53-mia-2026.11.07-quota-probe
+  GLM_LEARN_GIB: '1'
+  GLM_LEARN_MIN_FREE_GIB: '50'
+  GLM_LEARN_DAILY_GIB: '128'
+executor_config:
+  entrypoint: ''
+  user: root
+  ipc: host
+  shm_size: 16g
+  devices:
+  - /dev/infiniband
+  cap_add:
+  - IPC_LOCK
+  ulimit:
+  - memlock=-1:-1
+  - stack=67108864
+  - nofile=65535:65535
+  auto_remove: false
+runtime_cache:
+  key_by_image: true
+mods:
+- ../mods/tensorfold-readiness-v2
+- ../mods/mia-tensorfold-glm53-13f2464e
+post_exec:
+- python3 /opt/tensorfold-mod/capacity.py --learn-gib "1" --learn-dir "/cache/huggingface/spark-inference/learn/glm53-mia-2026.11.07-quota-probe"
+- python3 /opt/tensorfold-readiness/readiness.py --model GLM-5.3-Flash --context 1048576 --lanes 4 --efforts max,high,low
+distribution_config:
+  models:
+    entries:
+    - name: Mia-AiLab/GLM-5.3-Flash-EXL3-4bpw-TensorFold
+      revision: 078455ffe6472f9a52fbc1139f58b9db2881b25c
+      target:
+      - -1
+    - name: incoai/GLM-5.3-Flash-DFlash2
+      revision: bf582e4eacc1810f76656d1811693ff6c6737d2a
+      target:
+      - -1
