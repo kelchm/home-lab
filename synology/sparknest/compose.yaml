@@ -2,7 +2,7 @@ name: sparknest
 
 services:
   sparknest:
-    image: ghcr.io/kelchm/home-lab/sparknest:v0.8.3-20261108-1@sha256:b9980721b4205b66460b030110b1121f9c2572f52ff52485dad8afbb10ad6a0c
+    image: ghcr.io/kelchm/home-lab/sparknest:v0.8.3-20261114-1@sha256:5695a05e070e78abfd941b84a2b901f4b0d47dce1f92422ac563792b0317baa3
     platform: linux/amd64
     user: "0:0"
     read_only: true
