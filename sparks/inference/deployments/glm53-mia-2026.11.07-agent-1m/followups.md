@@ -2,7 +2,7 @@
 
 This report ends with the FP8 kept-state resume window on November 8. Later BF16 and deployment-lane experiments are outside its receipt and verdict. The restore checks below establish those recorded returns, not the current live recipe; see the [operational notes](../../sparkrun/README.md) for the November 14 check.
 
-Keep the Python q4-dense/FP8-head P4 profile. The native release's large-first-save and near-window cache-capture failures remain unresolved. The subsequent screens support message-start cache reuse as the next engine question, with an explicit cold-prefill and retained-state cost. The full fixed-work replay campaign remains on HOLD.
+Keep the Python q4-dense/FP8-head P4 profile. The native release's large-first-save and near-window cache-capture failures remain unresolved. The subsequent screens support message-start cache reuse as the next engine question, with an explicit cold-prefill and retained-state cost. The full fixed-work replay campaign remains on HOLD; [#1497](https://github.com/kelchm/home-lab/issues/1497) tracks its revisit trigger and the message-start reuse decision.
 
 The [original controlled comparison](comparison.md) records the November 7 release experiment. The [follow-up receipt](followups.json) records the later screens, separately scoped upstream experiments, recalculated latency metrics, selected input hashes and local checks of the three November 8 Python-restoration snapshots. These are different engine/configuration comparisons; their rates must not be pooled into one benchmark.
 

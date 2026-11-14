@@ -38,6 +38,8 @@ The intended frozen launcher includes `--dashboard`. The controlled rerun delibe
 
 ## Selected inputs
 
+The measured dashboard-off launcher is retained at [PR commit `d3c970da`](https://github.com/kelchm/home-lab/tree/d3c970da/sparks/inference/sparkrun/mods/mia-tensorfold-glm53-13f2464e) and in `/Users/kelchm/.cache/glm53-evidence/trial-20261107T175225Z/tested-launch-inputs/mod/`. Its lock SHA-256 is `bbdce1504221fe8b4b3125c6b90dfbc4760063da933d7bb40ec3f9004985cc6b`, and its `serve.py` SHA-256 is `7690565d8f280a30b545645b115a2df94e17374c79e7a4edc151a9472cab8670`. The in-repo launcher below adds `--dashboard` and was not hardware-qualified by this campaign. Preserve the tested-input copy with the raw evidence; the PR commit is outside main’s squash history.
+
 Use [glm53-mia-2026.11.07-agent-1m](../../sparkrun/mia-tensorfold-glm53-native-tp2/glm53-mia-2026.11.07-agent-1m.yaml) and its frozen [native launcher mod](../../sparkrun/mods/mia-tensorfold-glm53-13f2464e/). The existing `tensorfold` plugin and `tensorfold-readiness-v2` stay unchanged. The mod contains a copy of the published release manifest and checksums; it installs the rank launcher/template/capacity check, with no engine patches or binary replacement. The image is pulled on the head by its published digest; SparkRun distributes it to the worker.
 
 [spark-inference #3](https://github.com/kelchm/spark-inference/pull/3) stays draft for a later, separately reviewed migration. Nothing from that PR is fetched or installed in the launch path. Its qualification client can run off-host as a measurement tool; record its exact code hashes. No generic release materializer is used for this trial.
@@ -97,6 +99,8 @@ Stop new tests and report any unexpected launch/readiness/rail failure, rank exi
 
 ## End-of-test state
 
-The later controlled-rerun authorization required a final return to Python. Native was stopped cleanly, both GPUs were verified idle, and Python passed full-pool/active-spill readiness on both ranks using the isolated rerun store. Keep all stores as evidence. The original retained Python recipe/store remain available for a separately authorized switch; the current profile and stop ownership are recorded above. Side-by-side results and the separate capacity, durability, image, quota and recovery verdicts belong in [#1280](https://github.com/kelchm/home-lab/issues/1280).
+The later controlled-rerun authorization required a final return to Python. Native was stopped cleanly, both GPUs were verified idle, and Python passed full-pool/active-spill readiness on both ranks using the isolated rerun store. Keep all stores as evidence. The original retained Python recipe/store remained available at that return; current profile and stop ownership are recorded in the [operational notes](../../sparkrun/README.md). Side-by-side results and the separate capacity, durability, image, quota and recovery verdicts belong in [#1280](https://github.com/kelchm/home-lab/issues/1280).
 
 The measured release verdict is rejected. Record that result in spark-inference per its `AGENTS.md`, with the durable receipt link/date; this does not merge or promote a deployment. Large first saves, near-window cache capture, the concurrent long-history frontier and broader image-identity correctness remain separate from the successful incremental and smaller recovery probes.
+
+The release rejection metadata is tracked separately in [spark-inference #4](https://github.com/kelchm/spark-inference/pull/4). The held replay and message-start reuse decision is tracked in [#1497](https://github.com/kelchm/home-lab/issues/1497); a later native candidate needs its own qualification and adoption decision.
