@@ -69,9 +69,10 @@ spec:
             resources:
               requests:
                 cpu: 100m
-                memory: 256Mi
+                memory: 512Mi
               limits:
-                memory: 1Gi
+                # Grafana section previews render several Chromium pages at once.
+                memory: 4Gi
     defaultPodOptions:
       automountServiceAccountToken: false
       securityContext:

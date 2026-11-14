@@ -1,0 +1,16 @@
+#!/bin/sh
+# Installed in /etc/kvmd/user/scripts, which the firmware's S99custom runs at
+# boot. Restores the daily renewal entry, because /etc/crontabs is not part of
+# the /etc/kvmd/user state that firmware updates keep.
+line='41 3 * * * /etc/kvmd/user/acme/renew.sh'
+
+case "${1:-start}" in
+start)
+    mkdir -p /etc/crontabs
+    if ! grep -qxF "$line" /etc/crontabs/root 2>/dev/null; then
+        echo "$line" >>/etc/crontabs/root
+        # BusyBox crond rereads the users listed here within a minute.
+        echo root >>/etc/crontabs/cron.update
+    fi
+    ;;
+esac

@@ -1,0 +1,23 @@
+[node]
+id = 1
+name = "athena"
+state_dir = "/data/state"
+mountpoint = "/mnt/sparknest"
+listen = "127.0.0.1:7410"
+api_listen = "0.0.0.0:7411"
+data_reserve_gib = 8
+
+[cluster]
+name = "athena"
+secret_file = "/config/cluster.secret"
+members = [{ id = 1, name = "athena", addr = "127.0.0.1:7410" }]
+
+[fabric]
+mode = "tcp"
+
+[fuse]
+allow_other = false
+io_uring = false
+
+[hf]
+home = "/hf-home"

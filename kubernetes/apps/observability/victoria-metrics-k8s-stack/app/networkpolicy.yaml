@@ -114,6 +114,15 @@ spec:
             # bambuddy-db postgres metrics
             - port: "9187"
               protocol: TCP
+    # Dawarich database metrics.
+    - toEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: personal
+      toPorts:
+        - ports:
+            # dawarich-db postgres metrics
+            - port: "9187"
+              protocol: TCP
     # Unpackerr metrics.
     - toEndpoints:
         - matchLabels:

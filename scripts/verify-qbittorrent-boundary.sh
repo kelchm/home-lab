@@ -155,11 +155,12 @@ kubectl --namespace "${namespace}" wait --for=condition=Ready \
 
 # Prove the test pod can resolve Services and reach a separate HTTP workload.
 # This rules out DNS and general pod-network failures before testing the deny.
+# The control must be a workload with no ingress policy; the *arr apps have one.
 kubectl --namespace "${namespace}" exec "${denied_pod}" -- \
     nslookup "qbittorrent.${namespace}.svc.cluster.local" >/dev/null
 kubectl --namespace "${namespace}" exec "${denied_pod}" -- \
     wget -q -T 5 -O /dev/null \
-    "http://sonarr.${namespace}.svc.cluster.local:8989/ping"
+    "http://jellyfin.${namespace}.svc.cluster.local:8096/health"
 
 set +e
 denied_output="$(kubectl --namespace "${namespace}" exec "${denied_pod}" -- \

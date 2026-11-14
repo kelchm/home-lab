@@ -1,0 +1,9 @@
+---
+# Personal-data apps: Matt's own archives, starting with Dawarich location
+# history. Each app keeps its own default-deny policies inside it.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: personal
+  annotations:
+    kustomize.toolkit.fluxcd.io/prune: disabled

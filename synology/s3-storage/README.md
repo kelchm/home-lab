@@ -34,6 +34,7 @@ The share is not tied to one system. A bucket is named `<system>-<workload>` and
 |---|---|---|
 | `k8s-prod-visionect-db` | `k8s-prod-visionect-db` | `iot/visionect-db` |
 | `k8s-prod-bambuddy-db` | `k8s-prod-bambuddy-db` | `printing/bambuddy-db` |
+| `k8s-prod-dawarich-db` | `k8s-prod-dawarich-db` | `personal/dawarich-db` |
 
 versitygw is not published. Only Traefik listens, and it forwards to the gateway over the project's private network. The gateway's admin API listens on the container's loopback, so it is reachable only with `docker exec`.
 
@@ -66,6 +67,7 @@ The values in both files are kept in 1Password:
 | Gateway root secret key | `op://Project - home-lab/athena-s3-storage-root/credential` |
 | Visionect account secret (access key `k8s-prod-visionect-db`) | `op://Project - home-lab/athena-s3-storage-k8s-prod-visionect-db/credential` |
 | Bambuddy account secret (access key `k8s-prod-bambuddy-db`) | `op://Project - home-lab/athena-s3-storage-k8s-prod-bambuddy-db/credential` |
+| Dawarich account secret (access key `k8s-prod-dawarich-db`) | `op://Project - home-lab/athena-s3-storage-k8s-prod-dawarich-db/credential` |
 
 ## First deployment
 
@@ -82,6 +84,8 @@ Before merging, all on Athena and in UniFi:
    ```
 
    Check it: `ssh kelchm@10.32.20.5 'ls -ld /volume1/object-storage/data/* /volume1/object-storage/meta'` lists all three directories.
+
+   A database added later gets its bucket the same way: `sudo mkdir /volume1/object-storage/data/<bucket>`, then step 5 for its account. `k8s-prod-dawarich-db` was added this way on 2026-11-10. On a rebuilt NAS, create every bucket in the [table above](#what-is-where).
 
 2. Confirm nothing on Athena already listens on `10.32.25.5:9000`.
 3. Add a static record `s3-storage.home.kelch.io` → `10.32.25.5` in UniFi. Without it the name resolves to the `*.home.kelch.io` wildcard.

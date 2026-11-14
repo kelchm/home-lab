@@ -1,0 +1,54 @@
+---
+# Prowlarr sets AUTH__METHOD: External and trusts the admin gateway's OIDC
+# middleware, so a direct connection gets full control without a login, and
+# /initialize.json returns the API key. Prowlarr also stores the Sonarr,
+# Radarr and Lidarr API keys for indexer sync. This policy is that boundary:
+# ingress is default-denied for the selected endpoint and admits only the
+# admin Traefik instance and the integrations configured against Prowlarr.
+#
+# Every integration already holds Prowlarr's API key, so an L4 rule grants it
+# nothing more. Egress is unrestricted. Each workload label is paired with its
+# dedicated ServiceAccount identity so a compromised pod cannot gain access
+# merely by forging an app label.
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: prowlarr
+spec:
+  endpointSelector:
+    matchLabels:
+      app.kubernetes.io/name: prowlarr
+  ingress:
+    # Only the admin Traefik instance serves the OIDC-protected Web UI.
+    - fromEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: network
+            app.kubernetes.io/instance: traefik-admin-network
+            io.cilium.k8s.policy.serviceaccount: traefik-admin
+      toPorts: &port
+        - ports:
+            - port: "9696"
+              protocol: TCP
+
+    # API integrations.
+    - fromEndpoints:
+        # Homepage widget.
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: homepage
+            app.kubernetes.io/name: homepage
+            io.cilium.k8s.policy.serviceaccount: homepage
+        # Searches and RSS through the per-indexer proxy endpoints that
+        # Prowlarr syncs into each app.
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: media
+            app.kubernetes.io/name: sonarr
+            io.cilium.k8s.policy.serviceaccount: sonarr
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: media
+            app.kubernetes.io/name: radarr
+            io.cilium.k8s.policy.serviceaccount: radarr
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: media
+            app.kubernetes.io/name: lidarr
+            io.cilium.k8s.policy.serviceaccount: lidarr
+      toPorts: *port

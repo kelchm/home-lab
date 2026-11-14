@@ -25,7 +25,7 @@ spec:
           type: RuntimeDefault
       containers:
         - name: exporter
-          image: ghcr.io/joshuasing/starlink_exporter:0.9.2@sha256:5ac76161537b9736eb63f51f6466424432d759985fa12bee5880083f968508c9
+          image: ghcr.io/joshuasing/starlink_exporter:0.10.0@sha256:356a59dfa139c296cf711e22d2896daa0c9c0904349e648bc55ec5513a68d52f
           args: ["-dish", "192.168.100.1:9200", "-listen", ":9451"]
           ports:
             - name: metrics

@@ -1,0 +1,40 @@
+---
+# Bazarr's own authentication is off (auth.type is null in its config volume)
+# because the admin gateway's OIDC middleware fronts it, so a direct
+# connection gets full control without a login, including its settings, which
+# hold the Sonarr and Radarr API keys. This policy is that boundary: ingress is
+# default-denied for the selected endpoint and admits only the admin Traefik
+# instance and Homepage's widget, which authenticates with Bazarr's API key.
+#
+# Bazarr only calls out to Sonarr and Radarr; nothing calls it back. Egress is
+# unrestricted. Each workload label is paired with its dedicated
+# ServiceAccount identity so a compromised pod cannot gain access merely by
+# forging an app label.
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: bazarr
+spec:
+  endpointSelector:
+    matchLabels:
+      app.kubernetes.io/name: bazarr
+  ingress:
+    # Only the admin Traefik instance serves the OIDC-protected Web UI.
+    - fromEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: network
+            app.kubernetes.io/instance: traefik-admin-network
+            io.cilium.k8s.policy.serviceaccount: traefik-admin
+      toPorts: &port
+        - ports:
+            - port: "6767"
+              protocol: TCP
+
+    # API integration.
+    - fromEndpoints:
+        # Homepage widget.
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: homepage
+            app.kubernetes.io/name: homepage
+            io.cilium.k8s.policy.serviceaccount: homepage
+      toPorts: *port

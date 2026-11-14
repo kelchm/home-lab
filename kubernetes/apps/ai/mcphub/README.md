@@ -26,8 +26,11 @@ Static system bearer keys represent workload principals. The current matrix is:
 | `hermes-personal` | Every group except `digikey-lists`. |
 | `hermes-ops-cron` | `homelab-read` only. |
 | `flatrate-discord` | `automotive-reference` only. |
+| `grafana-mcp-functional-probe` | `homelab-read` only, further restricted to Grafana’s `list_datasources` by a key-specific tool policy. |
 
 The `operator-*` keys belong to agent clients on the operator workstation. `homelab-read` is the sensitive group: Kubernetes and Flux run under the `view` ClusterRole and cannot read Secrets, but Grafana's Viewer token queries every datasource, including all pod logs. `hacker-news` returns untrusted text. Claude Code, Codex, and Grok are the operator's interactive agents and receive every read-only group; `homelab-read` gives them cluster state and pod logs in every project, not only in this repository, where `.mise.toml` supplies an admin kubeconfig. OpenCode omits `homelab-read` because its `opencode-go` provider sends tool output to third-party model hosts. Claude Desktop is used for reference lookups, so it omits `homelab-read`, and it is the only client that manages DigiKey lists.
+
+The five-minute functional probe follows the HTTPS admin gateway through `/mcp/homelab-read` with its own bearer Secret. Its system key stores a token hash in MCPHub settings; a `systemConfig.toolPolicies` allow rule selects that key, the existing group ID, a stable Grafana server ID and the upstream tool name `list_datasources`. Other tools fail closed for this key; the rule does not apply to existing clients. Keep the server ID stable when editing its configuration. See the [reliability runbook](../../../../docs/runbooks/ai-mcp-reliability-and-containment.md) for rollout checks.
 
 Separate keys give each client its own log attribution, revocation, and default tool set. They do not isolate agents that run as the same macOS user: any client with shell access can read another client's configuration and key.
 
@@ -52,7 +55,7 @@ The SOPS-encrypted settings Secret is the only source of truth. It includes an a
 - Do not use `accessType: all` for a deployed workload; it is reserved from this configuration.
 - Do not configure upstream headers, OAuth, or `passthroughHeaders`. Client credentials terminate at MCPHub.
 
-`lemon` sets `enableKeepAlive`, so MCPHub pings it every 60 seconds and retries at that interval while it is disconnected. Other backends have not opted in: one that fails its first connect stays disconnected until the gateway restarts, because read-only mode blocks the reload API.
+MCPHub 1.2.2 retries any disconnected backend in the background, including one that fails its first connect, with jittered exponential backoff from 5–10 seconds up to 150–300 seconds and no retry limit; a successful connection resets it. `lemon` also sets `enableKeepAlive`, so MCPHub health-checks it every 60 seconds and notices an outage without waiting for a failed request. The other backends have no health check, so an outage is detected when a request fails or the connection closes.
 
 ## PCBParts PDF links
 

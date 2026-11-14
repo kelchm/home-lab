@@ -7,22 +7,18 @@ Use the UPS Pis for local time service over IPv4 UDP 123:
 | ups-compute-rack | `10.32.20.111` |
 | ups-office | `10.32.20.112` |
 
-Both servers and their central alerts were accepted on 2026-10-30. See [rpi-nixos](https://github.com/kelchm/rpi-nixos#local-time-servers) for server operation and [host monitoring](host-monitoring.md#pi) for alerts. The UniFi access rule and seven DHCP advertisements are applied, and all three Talos nodes have demonstrated fresh background synchronization to a Pi. [#1031](https://github.com/kelchm/home-lab/issues/1031) records the evidence and remaining acceptance. The [NTP dashboard](https://grafana.home.kelch.io/d/ntp) shows both servers, their sources and their request load; its packet counts cannot show which clients use a server. Merging the [Talos patch](../../talos/patches/global/machine-time.yaml) does not apply it to running nodes.
+Both servers and their central alerts were accepted on 2026-10-30. See [rpi-nixos](https://github.com/kelchm/rpi-nixos#local-time-servers) for server operation and [host monitoring](host-monitoring.md#pi) for alerts. The UniFi access rules and seven DHCP advertisements are applied, and all three Talos nodes have demonstrated fresh background synchronization to a Pi. [#1031](https://github.com/kelchm/home-lab/issues/1031) records the evidence and remaining acceptance. The [NTP dashboard](https://grafana.home.kelch.io/d/ntp) shows both servers, their sources and their request load; its packet counts cannot show which clients use a server. Merging the [Talos patch](../../talos/patches/global/machine-time.yaml) does not apply it to running nodes.
 
 ## Allow access in UniFi
 
-The enabled policy **Allow Cameras Storage Workloads to Pi NTP** has these settings:
+Two enabled policies allow NTP (UDP 123) to the `Time Servers` list, `10.32.20.111` and `10.32.20.112`:
 
-| Setting | Value |
-|---|---|
-| Action / zones | Allow; Internal → Internal |
-| Sources | Cameras (VLAN 5), Workloads (21), Storage (25); source port Any |
-| Destinations | `10.32.20.111/32`, `10.32.20.112/32` |
-| Protocol / destination port | IPv4 UDP / 123 |
-| Connection states / schedule | All / Always |
-| Auto Allow Return Traffic | Off; existing policies already permit replies |
+| Policy | Zones and sources | Why it is needed |
+|---|---|---|
+| **Workloads to Time Servers** | Internal → Internal; Workloads (21) | Sits above **Workloads to Protected Networks** |
+| **Untrusted to Time Servers** | Untrusted → Internal; Cameras (5) and IoT (90) | Untrusted blocks Internal by default |
 
-It sits immediately above **Block Workloads to Protected Networks**, ahead of the Cameras/Storage isolation block. Existing isolation policies, return rules and the **Starlink Management** routes through WAN2 were preserved; other intended networks already have access. Confirm the current policy order before further changes.
+Other Internal networks reach the Pis through Allow All. On 2026-11-08 the original **Allow Cameras Storage Workloads to Pi NTP** rule was renamed and Storage was removed from its sources: no Storage host had used it in the previous week. Cameras had already moved to the Untrusted rule when the network changed zone. The applied zone state is in [`network/unifi/README.md`](../../network/unifi/README.md#local-ntp). Confirm the current policy order before further changes.
 
 ## Configure Talos
 
@@ -58,7 +54,7 @@ After a normal lease renewal, confirm the client received both addresses and syn
 
 - **Talos:** restore the previous public-only list (`162.159.200.1`, `162.159.200.123`) and apply through the same task, one node at a time. Verify fresh synchronization. A Git revert alone does not change running nodes.
 - **DHCP:** disable the NTP option and restore its previous empty list on each changed network. Verify the client's next lease.
-- **Firewall:** after restoring clients, remove only the new Pi NTP policy. Preserve existing rules and WAN2 routes.
+- **Firewall:** after restoring clients, remove only the two Pi NTP policies, **Workloads to Time Servers** and **Untrusted to Time Servers**. Preserve existing rules and WAN2 routes.
 
 ## Remaining acceptance
 

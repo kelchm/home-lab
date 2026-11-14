@@ -15,7 +15,7 @@ spec:
   primaryUpdateMethod: switchover
   affinity:
     podAntiAffinityType: required
-  imageName: ghcr.io/cloudnative-pg/postgresql:17.11-system-trixie
+  imageName: ghcr.io/cloudnative-pg/postgresql:17.12-system-trixie
   storage:
     # The source is 2 GiB with ~6.4M history rows. Leave useful growth
     # headroom; Longhorn volumes can be expanded later if retention is kept

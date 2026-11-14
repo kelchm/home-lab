@@ -52,3 +52,4 @@ pipeline:
       logs_body_key_attributes: off
       retry_limit: no_limits
       storage.total_limit_size: 256M
+      workers: 1

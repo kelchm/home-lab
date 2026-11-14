@@ -818,7 +818,7 @@
    "expect": [
     {
      "labels": {
-      "src": "10.32.10.244",
+      "client": "10.32.10.244",
       "dst": "13.32.99.10",
       "signature": "ET SCAN Potential SSH Scan OUTBOUND"
      },
@@ -908,6 +908,51 @@
     }
    ],
    "expect": []
+  },
+  {
+   "rule": "UniFiIntrusionDetectedOutbound",
+   "name": "a detection through a WAN without addresses names the client",
+   "records": [
+    {
+     "fields": {
+      "service.name": "Gateway-DMP",
+      "service.namespace": "unifi",
+      "cef.device_vendor": "Ubiquiti",
+      "cef.device_product": "UniFi Network",
+      "cef.device_version": "11.0.99",
+      "cef.device_event_class_id": "200",
+      "cef.name": "Threat Detected",
+      "cef.severity": "7",
+      "severity_number": 17,
+      "_msg": "A network intrusion attempt from MacBookPro fe:95 to MacBookPro fe:95 has been detected.",
+      "cef.extension.UNIFIcategory": "Security",
+      "cef.extension.UNIFIdirection": "outgoing",
+      "cef.extension.UNIFIipsSignature": "ET DROP Dshield Block Listed Source group 1",
+      "cef.extension.UNIFIipsSignatureId": "2402000",
+      "cef.extension.UNIFIsrcClientAlias": "MacBookPro fe:95",
+      "cef.extension.UNIFIsrcClientMac": "aa:bb:cc:dd:fe:95",
+      "cef.extension.deviceInboundInterface": "Main",
+      "cef.extension.deviceOutboundInterface": "T-Mobile (WAN1)",
+      "cef.extension.UNIFIsrcZone": "Internal",
+      "cef.extension.UNIFIdstZone": "Internal",
+      "cef.extension.proto": "TCP",
+      "cef.extension.spt": "443",
+      "cef.extension.dpt": "65061",
+      "cef.extension.msg": "A network intrusion attempt from MacBookPro fe:95 to MacBookPro fe:95 has been detected."
+     },
+     "offset": -300
+    }
+   ],
+   "expect": [
+    {
+     "labels": {
+      "client": "MacBookPro fe:95",
+      "dst": "an unrecorded external address",
+      "signature": "ET DROP Dshield Block Listed Source group 1"
+     },
+     "value": 1
+    }
+   ]
   },
   {
    "rule": "UniFiHoneypotTriggered",
@@ -1033,6 +1078,294 @@
       "_msg": "NVRM: Xid (PCI:000f:01:00): 31, pid=1234"
      },
      "offset": -120
+    }
+   ],
+   "expect": []
+  },
+  {
+   "rule": "ADSBReceiverStalling",
+   "name": "three sample stalls in an hour fire",
+   "records": [
+    {
+     "fields": {
+      "host.name": "ups-office",
+      "service.namespace": "pi",
+      "service.name": "dump1090-fa",
+      "severity_number": 9,
+      "severity_text": "info",
+      "_msg": "Sat Nov 14 12:50:11 2026 EST  No samples received from the SDR for a long time. Maybe the hardware is wedged? Giving up."
+     },
+     "offset": -3300,
+     "repeat": 3,
+     "every": 1000
+    }
+   ],
+   "expect": [
+    {
+     "labels": {
+      "instance": "ups-office"
+     },
+     "value": 3
+    }
+   ]
+  },
+  {
+   "rule": "ADSBReceiverStalling",
+   "name": "two stalls in an hour, and a third over an hour earlier, stay quiet",
+   "records": [
+    {
+     "fields": {
+      "host.name": "ups-office",
+      "service.namespace": "pi",
+      "service.name": "dump1090-fa",
+      "severity_number": 9,
+      "severity_text": "info",
+      "_msg": "Sat Nov 14 12:50:11 2026 EST  No samples received from the SDR for a long time. Maybe the hardware is wedged? Giving up."
+     },
+     "offset": -3700
+    },
+    {
+     "fields": {
+      "host.name": "ups-office",
+      "service.namespace": "pi",
+      "service.name": "dump1090-fa",
+      "severity_number": 9,
+      "severity_text": "info",
+      "_msg": "Sat Nov 14 12:50:11 2026 EST  No samples received from the SDR for a long time. Maybe the hardware is wedged? Giving up."
+     },
+     "offset": -1800,
+     "repeat": 2,
+     "every": 600
+    }
+   ],
+   "expect": []
+  },
+  {
+   "rule": "ADSBFeedSilent",
+   "name": "a feed that received messages in the last hour stays quiet",
+   "records": [
+    {
+     "fields": {
+      "host.name": "ups-office",
+      "service.namespace": "pi",
+      "service.name": "piaware",
+      "severity_number": 9,
+      "severity_text": "info",
+      "_msg": "1063 msgs recv'd from unknown process (0 in last 5m); 1055 msgs sent to FlightAware"
+     },
+     "offset": -3000,
+     "repeat": 9,
+     "every": 300
+    },
+    {
+     "fields": {
+      "host.name": "ups-office",
+      "service.namespace": "pi",
+      "service.name": "piaware",
+      "severity_number": 9,
+      "severity_text": "info",
+      "_msg": "1063 msgs recv'd from unknown process (341 in last 5m); 1055 msgs sent to FlightAware"
+     },
+     "offset": -300
+    }
+   ],
+   "expect": []
+  },
+  {
+   "rule": "ADSBFeedSilent",
+   "name": "an hour of zero-message heartbeats fires",
+   "records": [
+    {
+     "fields": {
+      "host.name": "ups-office",
+      "service.namespace": "pi",
+      "service.name": "piaware",
+      "severity_number": 9,
+      "severity_text": "info",
+      "_msg": "0 msgs recv'd from dump1090 (0 in last 1m); 0 msgs sent to FlightAware"
+     },
+     "offset": -3500
+    },
+    {
+     "fields": {
+      "host.name": "ups-office",
+      "service.namespace": "pi",
+      "service.name": "piaware",
+      "severity_number": 9,
+      "severity_text": "info",
+      "_msg": "1063 msgs recv'd from unknown process (0 in last 5m); 1055 msgs sent to FlightAware"
+     },
+     "offset": -3300,
+     "repeat": 11,
+     "every": 300
+    }
+   ],
+   "expect": [
+    {
+     "labels": {
+      "instance": "ups-office"
+     },
+     "value": 0
+    }
+   ]
+  },
+  {
+   "rule": "ADSBFeedSilent",
+   "name": "a host logging through the hour with no piaware heartbeat fires",
+   "records": [
+    {
+     "fields": {
+      "host.name": "ups-office",
+      "service.namespace": "pi",
+      "service.name": "systemd",
+      "severity_number": 9,
+      "severity_text": "info",
+      "_msg": "dump1090-fa.service: Scheduled restart job, restart counter is at 2."
+     },
+     "offset": -3000
+    },
+    {
+     "fields": {
+      "host.name": "ups-office",
+      "service.namespace": "pi",
+      "service.name": "systemd",
+      "severity_number": 9,
+      "severity_text": "info",
+      "_msg": "dump1090-fa.service: Scheduled restart job, restart counter is at 2."
+     },
+     "offset": -600
+    }
+   ],
+   "expect": [
+    {
+     "labels": {
+      "instance": "ups-office"
+     },
+     "value": 0
+    }
+   ]
+  },
+  {
+   "rule": "ADSBFeedSilent",
+   "name": "heartbeats from another host do not count for ups-office, and that host is not judged",
+   "records": [
+    {
+     "fields": {
+      "host.name": "ups-office",
+      "service.namespace": "pi",
+      "service.name": "systemd",
+      "severity_number": 9,
+      "severity_text": "info",
+      "_msg": "dump1090-fa.service: Scheduled restart job, restart counter is at 2."
+     },
+     "offset": -3000
+    },
+    {
+     "fields": {
+      "host.name": "ups-office",
+      "service.namespace": "pi",
+      "service.name": "systemd",
+      "severity_number": 9,
+      "severity_text": "info",
+      "_msg": "dump1090-fa.service: Scheduled restart job, restart counter is at 2."
+     },
+     "offset": -600
+    },
+    {
+     "fields": {
+      "host.name": "adsb-office",
+      "service.namespace": "pi",
+      "service.name": "piaware",
+      "severity_number": 9,
+      "severity_text": "info",
+      "_msg": "1063 msgs recv'd from unknown process (341 in last 5m); 1055 msgs sent to FlightAware"
+     },
+     "offset": -300
+    }
+   ],
+   "expect": [
+    {
+     "labels": {
+      "instance": "ups-office"
+     },
+     "value": 0
+    }
+   ]
+  },
+  {
+   "rule": "ADSBFeedSilent",
+   "name": "a host that logs nothing is left to NodeMetricsMissing",
+   "records": [
+    {
+     "fields": {
+      "host.name": "ups-office",
+      "service.namespace": "pi",
+      "service.name": "piaware",
+      "severity_number": 9,
+      "severity_text": "info",
+      "_msg": "1063 msgs recv'd from unknown process (341 in last 5m); 1055 msgs sent to FlightAware"
+     },
+     "offset": -3700
+    }
+   ],
+   "expect": []
+  },
+  {
+   "rule": "ADSBFeedSilent",
+   "name": "a host booted 20 minutes ago after a long outage is left to NodeMetricsMissing",
+   "records": [
+    {
+     "fields": {
+      "host.name": "ups-office",
+      "service.namespace": "pi",
+      "service.name": "systemd",
+      "severity_number": 9,
+      "severity_text": "info",
+      "_msg": "dump1090-fa.service: Scheduled restart job, restart counter is at 2."
+     },
+     "offset": -1200,
+     "repeat": 5,
+     "every": 60
+    },
+    {
+     "fields": {
+      "host.name": "ups-office",
+      "service.namespace": "pi",
+      "service.name": "piaware",
+      "severity_number": 9,
+      "severity_text": "info",
+      "_msg": "0 msgs recv'd from dump1090 (0 in last 1m); 0 msgs sent to FlightAware"
+     },
+     "offset": -1100
+    }
+   ],
+   "expect": []
+  },
+  {
+   "rule": "ADSBFeedSilent",
+   "name": "a host that shut down 55 minutes ago is left to NodeMetricsMissing",
+   "records": [
+    {
+     "fields": {
+      "host.name": "ups-office",
+      "service.namespace": "pi",
+      "service.name": "piaware",
+      "severity_number": 9,
+      "severity_text": "info",
+      "_msg": "1063 msgs recv'd from unknown process (341 in last 5m); 1055 msgs sent to FlightAware"
+     },
+     "offset": -3600
+    },
+    {
+     "fields": {
+      "host.name": "ups-office",
+      "service.namespace": "pi",
+      "service.name": "systemd",
+      "severity_number": 9,
+      "severity_text": "info",
+      "_msg": "dump1090-fa.service: Scheduled restart job, restart counter is at 2."
+     },
+     "offset": -3300
     }
    ],
    "expect": []

@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
-# Post-reboot gates for one node. The gates are unchanged: Talos API answers at
-# the target version, the node is Ready, Multus has republished its CNI conf, an
-# instance-manager is Running and Ready on lhnet1, every Longhorn volume is
-# healthy, and every node and instance-manager cluster-wide is Ready.
+# Post-reboot gates for one node: Talos API answers at the target version, the
+# node is Ready, Multus has republished its CNI conf, an instance-manager is
+# Running and Ready with the lhnet1 its network-status names, every
+# Longhorn volume is healthy, every node and instance-manager cluster-wide is
+# Ready, and every endpoint on the node enforces the Cilium policies selecting it.
 #
 # Output is summarised. The volume watcher reports counts, trends, and names that
 # changed state rather than reprinting every unhealthy volume each poll, and dumps
@@ -29,6 +30,8 @@ if command -v mise >/dev/null 2>&1 \
       || [[ -z "${TALOSCONFIG:-}" || ! -f "${TALOSCONFIG}" ]]; }; then
     eval "$(mise env -s bash)"
 fi
+# The shared helpers resolve the kubeconfig the same way.
+export KUBECONFIG="${KUBECONFIG:-$ROOT_DIR/kubeconfig}"
 
 for bin in jq kubectl talosctl yq; do
     command -v "$bin" >/dev/null 2>&1 || { echo "missing required tool: $bin" >&2; exit 1; }
@@ -40,21 +43,8 @@ readonly detail_secs="${VERIFY_DETAIL_SECS:-120}"
 readonly VERBOSE="${VERBOSE:-}"
 readonly deadline=$(( $(date +%s) + timeout_secs ))
 
-# jq variables, not shell ones
-# shellcheck disable=SC2016
-readonly INSTANCE_MANAGER_FILTER='
-  .items[]
-  | (.status.containerStatuses // []) as $containers
-  | (.metadata.annotations["k8s.v1.cni.cncf.io/network-status"] // "[]") as $raw
-  | ($raw | fromjson? // []) as $networks
-  | select(.status.phase != "Running"
-      or ($containers | length) == 0
-      or (all($containers[]; .ready == true) | not)
-      or ([$networks[]
-        | select(.name == "longhorn-system/storage-network"
-            and .interface == "lhnet1"
-            and any(.ips[]?; startswith("10.32.25.")))] | length) == 0)
-'
+# Instance-managers failing the gate, one TSV row each: name, node, reasons.
+failing_instance_managers() { "$ROOT_DIR/.agents/skills/talos-rollout/scripts/failing-instance-managers.sh"; }
 
 section() { printf '\n== %s ==\n' "$1"; }
 line()    { printf '  %s\n' "$1"; }
@@ -115,7 +105,8 @@ while true; do
         -l longhorn.io/component=instance-manager \
         --field-selector "spec.nodeName=$node_name" -o json)"
     im_total="$(jq '.items | length' <<<"$instance_json")"
-    im_bad="$(jq "[ $INSTANCE_MANAGER_FILTER ] | length" <<<"$instance_json")"
+    im_failing="$(failing_instance_managers <<<"$instance_json")"
+    im_bad="$(grep -c . <<<"${im_failing:-}" || true)"
     if (( im_total > 0 && im_bad == 0 )); then
         break
     fi
@@ -125,6 +116,7 @@ while true; do
     fi
     if ! (( $(date +%s) < deadline )); then
         echo "timed out waiting for a healthy instance-manager attachment on $node_name" >&2
+        printf '%s\n' "$im_failing" >&2
         jq -r '.items[] | [.metadata.name, .status.phase, ((.metadata.annotations["k8s.v1.cni.cncf.io/network-status"] // "none"))] | @tsv' <<<"$instance_json" >&2
         exit 1
     fi
@@ -224,13 +216,13 @@ line "nodes Ready: ${node_total}/${node_total}"
 
 instance_json="$(kubectl -n longhorn-system get pods -l longhorn.io/component=instance-manager -o json)"
 instance_count="$(jq '.items | length' <<<"$instance_json")"
-bad_instances="$(jq -r "$INSTANCE_MANAGER_FILTER | [.metadata.name, .spec.nodeName, (.status.phase // \"unknown\")] | @tsv" <<<"$instance_json")"
+bad_instances="$(failing_instance_managers <<<"$instance_json")"
 if (( instance_count == 0 )); then
     echo 'no Longhorn instance-manager pods found' >&2
     exit 1
 fi
 if [[ -n "$bad_instances" ]]; then
-    printf 'instance-managers not Ready or missing storage-network/lhnet1:\n%s\n' "$bad_instances" >&2
+    printf 'instance-managers not Ready, missing storage-network/lhnet1, or with a stale network-status:\n%s\n' "$bad_instances" >&2
     exit 1
 fi
 line "instance-managers Ready with lhnet1: ${instance_count}/${instance_count}"
@@ -243,6 +235,10 @@ fi
 
 detail "$(kubectl get nodes -o wide)"
 
-printf '\nNODE CHECKS PASSED: %s is Ready on %s, all %s nodes are Ready and uncordoned, all %s instance-managers are Ready with lhnet1, and all %s in-use Longhorn volumes are healthy (%s idle).\n' \
+# Only this node's agent restarted, so only its endpoints gate (see the script).
+section "Cilium policy enforcement on $node_name"
+"$ROOT_DIR/.agents/skills/talos-rollout/scripts/policy-enforcement.sh" "$node_name"
+
+printf '\nNODE CHECKS PASSED: %s is Ready on %s, all %s nodes are Ready and uncordoned, all %s instance-managers are Ready with lhnet1, and all %s in-use Longhorn volumes are healthy (%s idle), and its endpoints enforce their Cilium policies.\n' \
     "$node_name" "$server_version" "$node_total" "$instance_count" "$(( volume_count - idle_count ))" "$idle_count"
 printf 'Run talosctl health on a healthy control-plane node, then re-check the access path and CloudNativePG placement before selecting the next candidate.\n'

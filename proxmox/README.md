@@ -51,7 +51,7 @@ The initial certificates were issued and hostname-validated on 2026-08-27. A man
 
 Both stores use hard NFSv4.1 mounts and are allowed only from the three PVE storage addresses. `library-pve` is platform-specific but reusable across PVE clusters; `backups-pve-sbx` is intentionally cluster-specific. Shared external storage uses the DSM shared-folder leaf as its PVE storage ID so the same resource has one canonical name across both systems.
 
-The cluster job `daily-backups` backs up all non-disposable guests to `backups-pve-sbx` at 05:00 America/New_York in snapshot mode with Zstandard compression. The live job uses `all=1`; add every disposable VMID to its explicit `exclude` field. Since 2026-10-28 the `exclude` field is unset, so the job covers every guest, including `103` (`netbird-pilot-router`) and template `9000`. Its retention policy is last 3, daily 7, weekly 4, and monthly 6. The built-in matcher currently targets `mail-to-root`, but direct delivery to Gmail failed with `550 5.7.1`; do not depend on email alerts until an authenticated SMTP relay is configured and tested.
+The cluster job `daily-backups` backs up all non-disposable guests to `backups-pve-sbx` at 05:00 America/New_York in snapshot mode with Zstandard compression. The live job uses `all=1`; add every disposable VMID to its explicit `exclude` field. Since 2026-10-28 the `exclude` field is unset, so the job covers every guest, including `103` (`netbird-router-1`) and template `9000`. Its retention policy is last 3, daily 7, weekly 4, and monthly 6. The built-in matcher currently targets `mail-to-root`, but direct delivery to Gmail failed with `550 5.7.1`; do not depend on email alerts until an authenticated SMTP relay is configured and tested.
 
 ### Backup alerting
 
@@ -65,16 +65,17 @@ Every node's RTL8125-backed `vmbr0` is VLAN-aware with an explicit `bridge-vids 
 
 | VMID | Guest | Address | Purpose | Source |
 |---|---|---|---|---|
-| `103` | `netbird-pilot-router` | `10.32.19.103` | NetBird routing peer for remote access | [`guests/netbird-router`](guests/netbird-router/) |
+| `103` | `netbird-router-1` | `10.32.19.103` | NetBird routing peer for remote access | [`guests/netbird-router`](guests/netbird-router/) |
+| `104` | `netbird-router-2` | `10.32.19.104` | Second NetBird routing peer, on `pve-sbx-2` | [`guests/netbird-router-2`](guests/netbird-router-2/) |
 | `200` | `hermes-1` | `10.32.21.100` | Hermes Agent, dashboard, and client API | [`guests/hermes-1`](guests/hermes-1/) |
 
-Both guests are enabled at host boot and intentionally not PVE HA resources. `hermes-1` is covered by `daily-backups` and keeps its application state on its local VM disk under `/srv/hermes`. `netbird-pilot-router` holds no application state beyond its NetBird peer identity. It is covered by `daily-backups` and has `protection: 1`; it is the only protected guest. The first scheduled post-enrollment backup was verified on 2026-10-29: VM 103 completed at 09:00:17 UTC with a 623,690,275-byte archive and enclosing task `OK` at 09:01:44 UTC (#625). It predates the node-local snippet installation; no archive was unpacked, restored or booted, so identity recovery remains undrilled. Its guest definition covers restore, rebuild and re-enrollment, including snippet provisioning and the limits of the old pre-enrollment archive.
+All three guests are enabled at host boot and intentionally not PVE HA resources. `hermes-1` is covered by `daily-backups` and keeps its application state on its local VM disk under `/srv/hermes`. `netbird-router-1` holds no application state beyond its NetBird peer identity. It is covered by `daily-backups` and has `protection: 1`, as does VM 104. The first scheduled post-enrollment backup was verified on 2026-10-29: VM 103 completed at 09:00:17 UTC with a 623,690,275-byte archive and enclosing task `OK` at 09:01:44 UTC (#625). It predates the node-local snippet installation; no archive was unpacked, restored or booted, so identity recovery remains undrilled. Its guest definition covers restore, rebuild and re-enrollment, including snippet provisioning and the limits of the old pre-enrollment archive.
 
-VM 103's boot disk, EFI disk and cloud-init drive are local. The [node-local startup repair](guests/netbird-router/local-startup.md#accepted-installation-2026-10-29) was installed and verified at 11:56 UTC on 2026-10-29: the saved vendor reference is now `local:snippets/netbird-pilot-router.yaml`, with unchanged vendor bytes, identity, NetBird 0.79.0 and running process. The running cloud-init medium retains its expected old NAS value/local pending row. Only `snippets` was added to the cluster-wide `local` content flags; files remain node-local and must be provisioned on each chosen restore/migration node. Retain the NAS copy for older archives. Host-boot recovery on 2026-10-25 required a manual start; unattended startup remains untested, #1096 stays open and #625/P6 remains uncredited pending the next separately authorized planned host boot.
+VM 103's boot disk, EFI disk and cloud-init drive are local. The [node-local startup repair](guests/netbird-router/local-startup.md#accepted-installation-2026-10-29) was installed and verified at 11:56 UTC on 2026-10-29: the saved vendor reference became `local:snippets/netbird-pilot-router.yaml`, with unchanged vendor bytes, identity and running process. On 2026-11-08 VM 103 was renamed `netbird-router-1` and pointed at the byte-identical `local:snippets/netbird-router-1.yaml`; the old-named local file stays for archives from 2026-10-30 to 2026-11-08. Only `snippets` was added to the cluster-wide `local` content flags; files remain node-local and must be provisioned on each chosen restore/migration node. Retain the NAS copy for older archives. Host-boot recovery on 2026-10-25 required a manual start. The separately authorized 2026-11-11 host reboot verified unattended startup: VM 103 started about 23 seconds after the 01:58:07 UTC boot, retained its identity/version and reconnected to Management and Signal; VM 200 also returned automatically ([acceptance](guests/netbird-router/local-startup.md#accepted-host-boot-2026-11-11), #1096).
 
-## Planned second routing peer
+## Second routing peer
 
-[VM 104 `netbird-router-2`](guests/netbird-router-2/README.md) at `10.32.19.104` on `pve-sbx-2` is prepared for #1097, **not allocated or installed**. 103 remains the only routing peer. The candidate uses local root/EFI/cloud-init/snippet, a clean template full clone and stopped migration, default Debian first-boot upgrades and a NetBird 0.79.0 pin/hold. It keeps staging stopped, NIC down and `onboot=0`; installation/identity verification of #1096 precedes activation. Its actual planned host-boot acceptance remains open, without an extra reboot solely to unlock redundancy. VMIDs/addresses 101/102 remain reserved. Existing all-guest backups include 104 when created; a verified successful post-enrollment archive is required before claiming identity recovery. Merging the definition provisions nothing.
+[VM 104 `netbird-router-2`](guests/netbird-router-2/README.md) at `10.32.19.104` on `pve-sbx-2` was installed and enrolled on 2026-11-08 (#1097). It has local root/EFI/cloud-init disks and a node-local snippet on `pve-sbx-2`, `onboot=1` and `protection=1`. It is covered by `daily-backups`; its first post-enrollment archive is due on 2026-11-09 and has not been verified. Both routers run NetBird 0.82.1 since 2026-11-11, set by [`upgrade-routers.sh`](guests/netbird-router/upgrade-routers.sh), which Renovate keeps current. Away clients moved between the routers without help during the 2026-11-08 upgrades; failover timing was not measured. VMIDs and addresses 101/102 remain reserved.
 
 ## Retired guests
 
@@ -86,9 +87,9 @@ Three UniFi policies contain the general-purpose Workloads VLAN without changing
 
 | Policy | Source | Destination | Action |
 |---|---|---|---|
-| `Block Workloads to Protected Networks` | `Workloads` | `Infra Mgmt`, `Storage`, `K8s Prod` | Block all |
-| `Block Workloads to Admin Prod Routed` | `Workloads` | `10.32.130.0/24` in UniFi's `External` destination zone | Block all |
-| `Block K8s Prod to Workloads` | `K8s Prod` | `Workloads` | Block all |
+| `Workloads to Protected Networks` | `Workloads` | `Infra Mgmt`, `Storage`, `K8s Prod` | Block all |
+| `Workloads to Admin Prod` | `Workloads` | `10.32.130.0/24` in UniFi's `External` destination zone | Block all |
+| `K8s Prod to Workloads` | `K8s Prod` | `Workloads` | Block all |
 
 The `admin-prod` pool is a BGP-routed prefix rather than a UniFi network. Network 10.5.67 classified that path in the `External` destination zone during live testing; an otherwise identical `Internal`-zone rule did not match `10.32.130.1`. Keep the explicit routed rule above the default allow rules and retest after UniFi upgrades.
 

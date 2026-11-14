@@ -61,7 +61,7 @@ jobs:
         uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
         with:
           # renovate: datasource=github-releases depName=docker/buildx
-          version: v0.38.2
+          version: v0.39.0
           driver-opts: image=moby/buildkit:v0.34.1@sha256:99368f3e46177c6405b9740e4461d91cee004128daeecca78d4ceac50ec1da5c
       - name: Build once on native amd64 without registry credentials
         id: build
@@ -112,7 +112,7 @@ jobs:
         uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
         with:
           # renovate: datasource=github-releases depName=docker/buildx
-          version: v0.38.2
+          version: v0.39.0
           driver-opts: image=moby/buildkit:v0.34.1@sha256:99368f3e46177c6405b9740e4461d91cee004128daeecca78d4ceac50ec1da5c
       - name: Set immutable build identity
         id: identity
@@ -122,7 +122,7 @@ jobs:
           echo "image=ghcr.io/${REPOSITORY,,}/caddy-cloudflare" >> "$GITHUB_OUTPUT"
           echo "tag=sha-${GITHUB_SHA}-run-${GITHUB_RUN_ID}-attempt-${GITHUB_RUN_ATTEMPT}" >> "$GITHUB_OUTPUT"
       - name: Login with short-lived repository token
-        uses: docker/login-action@81c6f93d4bc991e510b342a00b419b3bb4efc5c6 # v4.7.0
+        uses: docker/login-action@8aa5831fb8d48d8f76594c7ddde61ae58019f550 # v4.8.0
         with:
           registry: ghcr.io
           username: ${{ github.actor }}

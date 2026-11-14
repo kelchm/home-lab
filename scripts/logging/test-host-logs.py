@@ -15,11 +15,16 @@ Then runs PVE's task log overlay, which includes that configuration, on a volume
 a restart with tasks written while it was stopped, a reused inode, an aged file that resumes and an
 overlong line. Every stored record is compared with what should have arrived, once each.
 
+Then runs the Sparks' inference overlay and sends request lines from each TensorFold engine through
+Docker's fluentd driver, with the options and labels the SparkRun adapter sets, and checks the fields
+each line is read into. `test-host-logs.py inference` runs this part alone; it needs Docker and yq.
+
 Finally runs Athena's collector from synology/monitoring/compose.yaml, with its hardening and mounts,
 on a journal systemd 219 writes, whose files only DSM's log group can read here: publication, a
 first start at the end of the journal, a compressed record and a restart that resumes from the
 cursor. `test-host-logs.py nas` runs this part alone; it needs only Docker.
 """
+import ast
 from collections import Counter
 import hashlib
 import json
@@ -37,6 +42,8 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[2]
 LOGS = ROOT / 'proxmox/monitoring/logs'
 TASKS = ROOT / 'proxmox/monitoring/task-logs'
+INFERENCE = ROOT / 'sparks/monitoring/inference-logs'
+ADAPTER = ROOT / 'sparks/inference/sparkrun/plugins/tensorfold/__init__.py'
 SYNOLOGY = ROOT / 'synology/monitoring'
 VMUSERS = ROOT / 'kubernetes/apps/observability/metrics-ingest/app/vmusers.yaml'
 ALPINE_IMAGE = 'alpine:3.22@sha256:2e0b81d60597f449baa56dc25d355367869d2dca4cd57e866f1e2b52af3eb55f'
@@ -246,13 +253,13 @@ class Check:
         raise SystemExit(f'{step}: unexpected {dict(extra)}, missing {dict(missing)}')
 
 
-def output_parity():
-    """The overlay's output must stay the shared one, apart from what it matches."""
+def output_parity(overlay=TASKS / 'pve-tasks.yaml'):
+    """An overlay's output must stay the shared one, apart from what it matches."""
     def output(path):
         return json.loads(subprocess.run(['yq', '-o=json', '.pipeline.outputs[0] | del(.alias) | del(.match)', str(path)],
                                          check=True, capture_output=True, text=True).stdout)
-    if output(LOGS / 'fluent-bit.yaml') != output(TASKS / 'pve-tasks.yaml'):
-        sys.exit('The task output in pve-tasks.yaml differs from the shared output in fluent-bit.yaml')
+    if output(LOGS / 'fluent-bit.yaml') != output(overlay):
+        sys.exit(f'The output in {overlay.name} differs from the shared output in fluent-bit.yaml')
 
 
 def scenario(tasks, check, collector):
@@ -403,6 +410,182 @@ def test_task_logs(routes, fb_image, vl_image, memory, base):
             subprocess.run(['docker', 'volume', 'rm', f'{net}-state', f'{net}-tasks'], capture_output=True)
             subprocess.run(['docker', 'network', 'rm', net], capture_output=True)
     print(f'PVE task logs: {sum(check.want.values())} records stored once each.')
+
+
+# Lines as each engine prints them: the upstream Zig server, an older Zig fork without timings,
+# TensorFold 0.6.0's Python server in Mia's GLM kit, and the Zig server's other request lines.
+INFERENCE_LINES = {
+    '[tensorfold] done chatcmpl-zig prompt=65 cached=0 thinking=False effort=none tokens=234 sha=7550f0ef0a8f finish=stop '
+    'rounds=48 accepted=186/240 ttft=0.199 decode=4.082 elapsed=4.281 queued=0.250 tok/s=57.1 seed=20260930': {
+        'event.name': 'inference.request.done', 'inference.request.id': 'chatcmpl-zig', 'inference.tokens.prompt': '65',
+        'inference.tokens.cached': '0', 'inference.tokens.output': '234', 'inference.thinking': 'false',
+        'inference.effort': 'none', 'inference.finish': 'stop', 'inference.spec.rounds': '48',
+        'inference.spec.accepted': '186', 'inference.spec.drafted': '240', 'inference.ttft_s': '0.199',
+        'inference.decode_s': '4.082', 'inference.total_s': '4.281', 'inference.queue_s': '0.25',
+        'inference.output_tps': '57.1', 'inference.prefill_s': None},
+    '[tensorfold] done chatcmpl-fork prompt=33 cached=0 thinking=False effort=none tokens=4 sha=bca3318b4669 finish=stop '
+    'rounds=2 accepted=3/8': {
+        'event.name': 'inference.request.done', 'inference.tokens.output': '4', 'inference.spec.drafted': '8',
+        'inference.ttft_s': None, 'inference.total_s': None, 'inference.output_tps': None},
+    '[tensorfold] done chatcmpl-py prompt=171612 cached=167864 thinking=True effort=high tokens=692 sha=0a1b2c3d4e5f '
+    'finish=tool_calls tok/s=41.3 ttft=0.93s prefill=0.42s background preemptions=1 rounds=200 accepted=480/800 '
+    'ms/round=21.5 forward=15.0 draft=4.0 post=2.5 rows=2.0 checkpoints=12 (3.10 GiB, hits=40 misses=3 evictions=0)': {
+        'event.name': 'inference.request.done', 'inference.tokens.prompt': '171612', 'inference.tokens.cached': '167864',
+        'inference.thinking': 'true', 'inference.finish': 'tool_calls', 'inference.output_tps': '41.3',
+        'inference.ttft_s': '0.93', 'inference.prefill_s': '0.42', 'inference.preemptions': '1',
+        'inference.decode_s': None, 'inference.queue_s': None},
+    '[tensorfold] done chatcmpl-unmeasured prompt=10 cached=0 thinking=False effort=none tokens=0 sha=e3b0c44298fc '
+    'finish=length tok/s=0.0 ttft=-1.00s prefill=-1.00s rounds=0 accepted=0/0 checkpoints=off': {
+        'inference.finish': 'length', 'inference.ttft_s': None, 'inference.prefill_s': None},
+    '[tensorfold] ended chatcmpl-err reason=error (TopKPastScratch) prompt=56 tokens=0 after=0.08s': {
+        'event.name': 'inference.request.ended', 'inference.request.id': 'chatcmpl-err', 'inference.finish': 'error',
+        'error.type': 'TopKPastScratch', 'inference.tokens.prompt': '56', 'inference.tokens.output': '0',
+        'inference.total_s': '0.08'},
+    '[tensorfold] ended chatcmpl-left reason=client-left prompt=59 tokens=1 after=0.41s': {
+        'inference.finish': 'client-left', 'error.type': None, 'inference.total_s': '0.41'},
+    '[tensorfold] refused cmpl-1: prompt is 2000000 tokens, over the 1048576-token window': {
+        'event.name': 'inference.request.refused', 'inference.request.id': 'cmpl-1', 'inference.finish': 'refused'},
+    '[tensorfold] 10.32.20.9 "POST /v1/chat/completions HTTP/1.1" 429 -': {
+        'http.request.method': 'POST', 'url.path': '/v1/chat/completions', 'http.response.status_code': '429',
+        'event.name': None},
+    '[tensorfold] 127.0.0.1 "GET /metrics HTTP/1.1" 503 -': {'http.response.status_code': '503'},
+    # Only whole keys count, and only a line with the engine's prefix and a request's shape is a request.
+    '[tensorfold] done chatcmpl-draft prompt=12 cached=0 tokens=4 draft_tokens=900 finish=stop': {
+        'event.name': 'inference.request.done', 'inference.tokens.output': '4'},
+    '[tensorfold] done loading weights in 3.2s': {'event.name': None, 'inference.request.id': None},
+    'done chatcmpl-bare prompt=12 tokens=4 finish=stop': {'event.name': None, 'inference.tokens.output': None},
+    'info: prompt cache: 59 tokens, resumed at 0, kept 2; 2 states, 223 MiB and 0 MiB spare of 16384 MiB '
+    '(hits 0, misses 1, evicted 0, refused 0, failed 0)': {'event.name': None, 'inference.request.id': None},
+}
+# From a one-Spark container, which carries no rank label.
+SOLO_LINE = '[tensorfold] done chatcmpl-solo prompt=33 cached=0 thinking=False effort=none tokens=4 sha=bca3318b4669 finish=stop'
+# Polling that succeeded, which the overlay drops.
+INFERENCE_DROPPED = ['[tensorfold] 127.0.0.1 "GET /metrics HTTP/1.1" 200 -', '[tensorfold] 127.0.0.1 "GET /health HTTP/1.1" 200 -']
+
+
+def adapter_docker_opts(port):
+    """The log options the TensorFold adapter gives every rank's container, pointed at the test collector."""
+    tree = ast.parse(ADAPTER.read_text())
+    opts = next(ast.literal_eval(node.value) for node in tree.body
+                if isinstance(node, ast.Assign) and [t.id for t in node.targets] == ['LOG_DOCKER_OPTS'])
+    address = '--log-opt=fluentd-address=tcp://127.0.0.1:24224'
+    if address not in opts:
+        sys.exit(f'The adapter should send to the collector at {address}')
+    return [f'--log-opt=fluentd-address=tcp://127.0.0.1:{port}' if o == address else o for o in opts]
+
+
+# Accepts connections and never reads them, as a collector that has hung.
+STALLED = """
+import socket, time
+server = socket.socket()
+server.bind(('0.0.0.0', 24224))
+server.listen()
+held = []
+while True:
+    held.append(server.accept())
+    print('accepted', flush=True)
+"""
+
+
+def test_stalled_collector(python_image, run):
+    """A collector that stops reading must not stop Docker removing a rank's container."""
+    name = f'inference-stalled-{run}'
+    if not any(o.startswith('--log-opt=fluentd-write-timeout=') for o in adapter_docker_opts(24224)):
+        sys.exit('The adapter should bound the log driver\'s writes with fluentd-write-timeout')
+    try:
+        docker('run', '-d', '--name', f'{name}-collector', '-p', '127.0.0.1::24224', python_image, 'python', '-c', STALLED)
+        port = docker('port', f'{name}-collector', '24224/tcp').stdout.split(':')[-1].strip()
+        # Far more than the socket buffers hold, so the driver's writes block.
+        docker('run', '-d', '--name', f'{name}-rank0', *adapter_docker_opts(port), ALPINE_IMAGE,
+               'sh', '-c', 'yes "$(printf "%0200d" 0)" | head -n 400000; sleep 600')
+        # Once connected, the driver fills the socket buffers within a second and its writes block.
+        deadline = time.time() + 30
+        while 'accepted' not in docker('logs', f'{name}-collector').stdout:
+            if time.time() > deadline:
+                sys.exit('The log driver never connected to the stalled collector')
+            time.sleep(1)
+        time.sleep(5)
+        started = time.time()
+        try:
+            subprocess.run(['docker', 'rm', '-f', f'{name}-rank0'], check=True, capture_output=True, timeout=60)
+        except subprocess.TimeoutExpired:
+            sys.exit('Removing a container hung while its log collector stopped reading')
+        print(f'Stalled collector: container removed in {time.time() - started:.1f}s.')
+    finally:
+        subprocess.run(['docker', 'rm', '-f', f'{name}-rank0', f'{name}-collector'], capture_output=True)
+
+
+def test_inference_logs(routes, fb_image, vl_image, memory, base):
+    output_parity(INFERENCE / 'inference.yaml')
+    run = uuid.uuid4().hex[:8]
+    net = f'inference-{run}'
+    route = urllib.parse.urlencode(routes['spark-1'], doseq=True)
+    recipe = f'glm53-test-{run}'
+    with tempfile.TemporaryDirectory(dir=base) as tmp:
+        work = Path(tmp)
+        (work / 'token').mkdir()
+        (work / 'token/token').write_text('test-token\n')
+        (work / 'fluent-bit.yaml').write_text(test_config(route))
+        # Docker reaches the collector through a published port here, not the host's loopback.
+        overlay = test_config(route, INFERENCE / 'inference.yaml')
+        assert overlay.count('listen: 127.0.0.1') == 1
+        (work / 'inference.yaml').write_text(overlay.replace('listen: 127.0.0.1', 'listen: 0.0.0.0'))
+        docker('network', 'create', net)
+        try:
+            docker('run', '-d', '--name', f'{net}-vl', '--network', net, '--network-alias', 'vl', '-p', '127.0.0.1::9428', vl_image)
+            port = docker('port', f'{net}-vl', '9428/tcp').stdout.split(':')[-1].strip()
+            args, command = collector_args(net, work, memory, 'inference.yaml')
+            docker('run', '-d', *args, '-p', '127.0.0.1::24224',
+                   '-v', f'{work}/inference.yaml:/fluent-bit/etc/inference.yaml:ro',
+                   '-v', f'{INFERENCE}/inference.lua:/fluent-bit/etc/inference.lua:ro', fb_image, *command)
+            forward = docker('port', f'{net}-fb', '24224/tcp').stdout.split(':')[-1].strip()
+            labels = {'sparkrun.recipe': f'/home/kelchm/sparkrun/recipes/glm53/{recipe}.yaml',
+                      'sparkrun.served_model_name': 'GLM-5.3-Flash', 'sparkrun.runtime': 'tensorfold', 'sparkrun.rank': '0'}
+            lines = [*INFERENCE_DROPPED, *INFERENCE_LINES]
+            # Sent at once: the driver is asynchronous and holds lines until the collector answers.
+            docker('run', '--rm', '-i', '--name', f'{net}-rank0', *adapter_docker_opts(forward),
+                   *[a for k, v in labels.items() for a in ('--label', f'{k}={v}')], ALPINE_IMAGE,
+                   'sh', '-c', 'cat; echo "stderr line" >&2', input='\n'.join(lines) + '\n')
+            # SparkRun's one-Spark path labels no rank.
+            docker('run', '--rm', '-i', '--name', f'{net}-solo', *adapter_docker_opts(forward),
+                   *[a for k, v in labels.items() if k != 'sparkrun.rank' for a in ('--label', f'{k}={v}')],
+                   ALPINE_IMAGE, 'cat', input=SOLO_LINE + '\n')
+            rows = []
+            deadline = time.time() + 60
+            while time.time() < deadline:
+                try:
+                    rows = query(port, f'inference.recipe:={recipe}')
+                except OSError:
+                    rows = []
+                if {'stderr line', SOLO_LINE} <= {r['_msg'] for r in rows}:
+                    break
+                time.sleep(2)
+            failures = []
+            counts = Counter(r['_msg'] for r in rows)
+            want = {*INFERENCE_LINES, 'stderr line', SOLO_LINE}
+            if set(counts) != want or set(counts.values()) != {1}:
+                failures.append(f'stored {dict(counts)}, missing {want - set(counts)}')
+            for row in rows:
+                fields = {'host.name': 'spark-1', 'service.namespace': 'spark', 'service.name': 'inference',
+                          '_stream': '{host.name="spark-1",service.name="inference"}', 'inference.model': 'GLM-5.3-Flash',
+                          'inference.runtime': 'tensorfold', 'inference.rank': '0', 'container.name': f'{net}-rank0',
+                          'log.iostream': 'stderr' if row['_msg'] == 'stderr line' else 'stdout', 'severity_number': '0',
+                          'pipeline.normalize_error': None, **INFERENCE_LINES.get(row['_msg'], {})}
+                if row['_msg'] == SOLO_LINE:
+                    fields |= {'inference.rank': None, 'container.name': f'{net}-solo', 'event.name': 'inference.request.done',
+                               'inference.tokens.output': '4'}
+                for key, value in fields.items():
+                    if row.get(key) != value:
+                        failures.append(f"{row['_msg'][:50]}: {key} should be {value!r}, got {row.get(key)!r}")
+            if failures:
+                print(docker('logs', f'{net}-fb').stderr[-3000:], file=sys.stderr)
+                sys.exit('\n'.join(failures))
+        finally:
+            subprocess.run(['docker', 'rm', '-f', f'{net}-fb', f'{net}-vl'], capture_output=True)
+            subprocess.run(['docker', 'volume', 'rm', f'{net}-state'], capture_output=True)
+            subprocess.run(['docker', 'network', 'rm', net], capture_output=True)
+    print(f'Spark inference logs: {len(want)} lines stored once each, with their fields; polling dropped.')
+    test_stalled_collector(pinned(ROOT / 'scripts/logging/test-fluent-bit.py', r"PYTHON_IMAGE = '([^']+)'"), run)
 
 
 def binds(service, root):
@@ -642,11 +825,23 @@ def main():
             subprocess.run(['docker', 'network', 'rm', net], capture_output=True)
     print(f'Host logs: {len(routes)} log routes and {len(want)} journal records passed.')
     test_task_logs(routes, fb_image, vl_image, memory, base)
+    test_inference_logs(routes, fb_image, vl_image, memory, base)
     test_nas(routes, vl_image)
+
+
+def images():
+    return (pinned(ROOT / 'proxmox/monitoring/compose.yaml', r'image: (\S*fluent/fluent-bit:\S+)'),
+            pinned(ROOT / 'scripts/logging/test-logsql-rules.py', r"VL_IMAGE = '([^']+)'"),
+            pinned(ROOT / 'proxmox/monitoring/compose.yaml', r'/fluent-bit/etc/\S+"\]\n(?:.*\n)*?    mem_limit: (\S+)'))
 
 
 if __name__ == '__main__':
     if sys.argv[1:] == ['nas']:
         test_nas(log_routes()[0], pinned(ROOT / 'scripts/logging/test-logsql-rules.py', r"VL_IMAGE = '([^']+)'"))
+    elif sys.argv[1:] == ['inference']:
+        fb_image, vl_image, memory = images()
+        base = Path(os.environ.get('FLUENT_BIT_TEST_TMP', Path.home() / '.cache'))
+        base.mkdir(parents=True, exist_ok=True)
+        test_inference_logs(log_routes()[0], fb_image, vl_image, memory, base)
     else:
         main()

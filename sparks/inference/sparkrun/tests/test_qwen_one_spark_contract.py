@@ -19,7 +19,7 @@ PLUGINS = ROOT / "plugins"
 if str(PLUGINS) not in sys.path:
     sys.path.insert(0, str(PLUGINS))
 
-from tensorfold import TensorFoldRuntime, hf_snapshot_path  # noqa: E402
+from tensorfold import SERVE_OUTPUT, TensorFoldRuntime, hf_snapshot_path  # noqa: E402
 
 from sparkrun.core.recipe import Recipe  # noqa: E402
 from sparkrun.core.validation import ERROR  # noqa: E402
@@ -61,6 +61,8 @@ def _lock():
 
 
 def _env(command):
+    output, _, command = command.partition("\n")
+    assert output == SERVE_OUTPUT
     tokens = shlex.split(command)
     assert tokens[0] == "env"
     env = {}

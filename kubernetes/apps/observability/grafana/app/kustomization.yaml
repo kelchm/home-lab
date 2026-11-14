@@ -109,6 +109,16 @@ configMapGenerator:
       annotations:
         grafana_folder: Overview
         kustomize.toolkit.fluxcd.io/substitute: disabled
+  # Home system board for the 1600x1200 e-paper display; capture the full dashboard.
+  - name: grafana-dashboard-home-eink
+    files:
+      - home-eink.json=./home-eink-dashboard.json
+    options:
+      labels:
+        grafana_dashboard: "1"
+      annotations:
+        grafana_folder: Overview
+        kustomize.toolkit.fluxcd.io/substitute: disabled
   # grafana.com 24838 revision 1; remove __inputs, clear database id and fixed datasource selection.
   - name: grafana-dashboard-grafana-internal-metrics
     files:

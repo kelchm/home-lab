@@ -1,0 +1,20 @@
+---
+# Longhorn custom resources. They are kept out of the longhorn Kustomization
+# because the HelmRelease there installs their CRDs: on a cluster without
+# them, Flux's dry-run of a combined batch rejects the unknown kinds and the
+# HelmRelease is never applied.
+apiVersion: kustomize.toolkit.fluxcd.io/v1
+kind: Kustomization
+metadata:
+  name: longhorn-config
+spec:
+  dependsOn:
+    - name: longhorn               # Ready once the HelmRelease is Ready
+  interval: 1h
+  path: ./kubernetes/apps/longhorn-system/longhorn-config/app
+  prune: true
+  sourceRef:
+    kind: GitRepository
+    name: flux-system
+    namespace: flux-system
+  targetNamespace: longhorn-system

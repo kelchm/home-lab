@@ -38,31 +38,40 @@ spec:
 
         # The IDS runs in detect-only mode, and lab-internal detections are
         # dominated by operator traffic to the Sparks, so only detections
-        # whose destination is outside private, CGNAT, link-local and
-        # multicast space page. Classes 200 and 201 are Threat Detected and
-        # Threat Detected and Blocked.
+        # that involve an outside host page. Classes 200 and 201 are Threat
+        # Detected and Threat Detected and Blocked. Since Network 10.6.109
+        # a detection on traffic through a WAN is marked
+        # UNIFIdirection=outgoing and carries no src or dst, only the client,
+        # so the rule matches that marker as well as an external dst.
         - alert: UniFiIntrusionDetectedOutbound
           expr: >-
             _time:15m {cef.device_product="UniFi Network", cef.device_event_class_id=~"200|201"}
-            cef.extension.dst:ipv4_range(0.0.0.0/0)
-            -cef.extension.dst:ipv4_range(10.0.0.0/8)
-            -cef.extension.dst:ipv4_range(172.16.0.0/12)
-            -cef.extension.dst:ipv4_range(192.168.0.0/16)
-            -cef.extension.dst:ipv4_range(100.64.0.0/10)
-            -cef.extension.dst:ipv4_range(169.254.0.0/16)
-            -cef.extension.dst:ipv4_range(224.0.0.0/4)
-            | stats by (cef.extension.src, cef.extension.dst, cef.extension.UNIFIipsSignature) count() as detections
+            (cef.extension.UNIFIdirection:=outgoing
+              OR (cef.extension.dst:ipv4_range(0.0.0.0/0)
+                -cef.extension.dst:ipv4_range(10.0.0.0/8)
+                -cef.extension.dst:ipv4_range(172.16.0.0/12)
+                -cef.extension.dst:ipv4_range(192.168.0.0/16)
+                -cef.extension.dst:ipv4_range(100.64.0.0/10)
+                -cef.extension.dst:ipv4_range(169.254.0.0/16)
+                -cef.extension.dst:ipv4_range(224.0.0.0/4)))
+            | format "<cef.extension.UNIFIsrcClientAlias>" as client
+            | format if (client:"") "<cef.extension.src>" as client
+            | format "<cef.extension.dst>" as dst
+            | format if (dst:"") "an unrecorded external address" as dst
+            | stats by (client, dst, cef.extension.UNIFIipsSignature) count() as detections
             | filter detections:>0
-            | rename cef.extension.src as src, cef.extension.dst as dst, cef.extension.UNIFIipsSignature as signature
+            | rename cef.extension.UNIFIipsSignature as signature
           labels:
             severity: warning
           annotations:
-            summary: "Intrusion detection: {{ $labels.src }} to {{ $labels.dst }}"
+            summary: "Intrusion detection: {{ $labels.client }} to {{ $labels.dst }}"
             description: >-
-              The IDS matched "{{ $labels.signature }}" on traffic from
-              {{ $labels.src }} to the external address {{ $labels.dst }}
-              ({{ $value }} in 15 minutes). Identify the client and the
-              signature in VictoriaLogs before allowing it.
+              The IDS matched "{{ $labels.signature }}" on traffic between
+              {{ $labels.client }} and {{ $labels.dst }} ({{ $value }} in 15
+              minutes). When the console did not record the address, look for
+              candidate flows from the client around that time on the UniFi /
+              Flows dashboard. Identify the client and the signature before
+              allowing it.
 
         # The honeypot answers only on otherwise unused addresses, so any
         # contact means a LAN device is probing. Class 202 names the client by

@@ -8,7 +8,7 @@ spec:
   chart:
     spec:
       chart: traefik
-      version: 42.3.1
+      version: 42.4.0
       sourceRef:
         kind: HelmRepository
         name: traefik
@@ -30,11 +30,28 @@ spec:
         traefik-oidc-auth:
           moduleName: github.com/sevensolutions/traefik-oidc-auth
           # renovate: datasource=github-releases depName=sevensolutions/traefik-oidc-auth
-          version: v0.23.0
+          version: v0.24.0
 
     podDisruptionBudget:
       enabled: true
       maxUnavailable: 1
+    # One replica per node, required. A rollout replaces one pod at a time,
+    # removing the old pod first (maxSurge 0), so it needs no spare node and
+    # still completes while one of the three nodes is cordoned. The PDB above
+    # already allows one replica down.
+    updateStrategy:
+      type: RollingUpdate
+      rollingUpdate:
+        maxUnavailable: 1
+        maxSurge: 0
+    affinity:
+      podAntiAffinity:
+        requiredDuringSchedulingIgnoredDuringExecution:
+          - labelSelector:
+              matchLabels:
+                app.kubernetes.io/name: traefik
+                app.kubernetes.io/instance: traefik-admin-network
+            topologyKey: kubernetes.io/hostname
     deployment:
       replicas: 2
       # Restart the Deployment when kaniop rotates either OAuth2 client_secret

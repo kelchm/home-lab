@@ -69,6 +69,7 @@ jobs:
               - 'scripts/ci/validate-longhorn-alerts.sh'
               - 'scripts/ci/validate-pi-probe-alerts.sh'
               - 'scripts/monitoring/pi-probe-alerts.test.yaml'
+              - 'scripts/monitoring/test-mcp-probe.py'
               - 'scripts/ci/validate-drive-alerts.sh'
               - 'scripts/monitoring/drive-alerts.test.yaml'
               - 'scripts/monitoring/longhorn-alerts.test.yaml'
@@ -113,6 +114,7 @@ jobs:
               - '.renovaterc.json5'
               - '.shellcheckrc'
               - '**/*.sh'
+              - '.agents/skills/talos-rollout/scripts/*.jq'
               - 'scripts/healthchecks.py'
               - 'scripts/ci/test-healthchecks.py'
               - 'scripts/ci/check-renovate-problems.py'
@@ -125,7 +127,8 @@ jobs:
               - 'proxmox/guests/netbird-router-2/**'
               - 'proxmox/guests/netbird-router/**'
               - 'healthchecks/**'
-              - '.taskfiles/healthchecks/**'
+              - 'Taskfile.yaml'
+              - '.taskfiles/**'
             skills:
               - '.github/workflows/repository-validation.yaml'
               - '.agents/skills/**'
@@ -165,7 +168,9 @@ jobs:
               - 'scripts/ci/test-athena-acme.py'
               - 'scripts/ci/test-validate-synology.sh'
               - 'scripts/ci/validate-synology.sh'
+              - 'scripts/ci/test-synology-break-glass.sh'
               - 'scripts/ci/test-google-photos-takeout.py'
+              - 'scripts/ci/test-offsite-backup.py'
             talos:
               - '.github/workflows/repository-validation.yaml'
               - '.mise.toml'
@@ -302,7 +307,7 @@ jobs:
 
       - name: Install Kubernetes validation tools
         if: needs.pre-job.outputs.kubernetes_changed == 'true'
-        uses: jdx/mise-action@f5be966e4a917d54244728e6a5fdcd1d93a35e6c # v5.2.6
+        uses: jdx/mise-action@b44d12e7d0d8ee7461bb893e1b1993500433185b # v5.2.7
         with:
           install_args: "aqua:fluxcd/flux2 aqua:yannh/kubeconform aqua:mikefarah/yq aqua:prometheus/prometheus aqua:prometheus/alertmanager"
 
@@ -321,6 +326,10 @@ jobs:
       - name: Validate the NTP dashboard against its generator
         if: needs.pre-job.outputs.kubernetes_changed == 'true'
         run: python3 scripts/grafana/render-ntp.py --check
+
+      - name: Validate MCP gateway probe
+        if: needs.pre-job.outputs.kubernetes_changed == 'true'
+        run: PYTHONDONTWRITEBYTECODE=1 python3 scripts/monitoring/test-mcp-probe.py
 
       - name: Validate Pi probe alerts
         if: needs.pre-job.outputs.kubernetes_changed == 'true'
@@ -411,7 +420,7 @@ jobs:
 
       - name: Install Talos validation tools
         if: needs.pre-job.outputs.talos_changed == 'true'
-        uses: jdx/mise-action@f5be966e4a917d54244728e6a5fdcd1d93a35e6c # v5.2.6
+        uses: jdx/mise-action@b44d12e7d0d8ee7461bb893e1b1993500433185b # v5.2.7
         with:
           install_args: "aqua:budimanjojo/talhelper aqua:siderolabs/talos aqua:mikefarah/yq aqua:jqlang/jq"
 
@@ -436,7 +445,7 @@ jobs:
 
       - name: Install bootstrap validation tools
         if: needs.pre-job.outputs.bootstrap_changed == 'true'
-        uses: jdx/mise-action@f5be966e4a917d54244728e6a5fdcd1d93a35e6c # v5.2.6
+        uses: jdx/mise-action@b44d12e7d0d8ee7461bb893e1b1993500433185b # v5.2.7
         with:
           install_args: "aqua:helm/helm aqua:helmfile/helmfile aqua:yannh/kubeconform"
 
@@ -474,7 +483,7 @@ jobs:
 
       - name: Install SOPS validation tools
         if: needs.pre-job.outputs.sops_changed == 'true'
-        uses: jdx/mise-action@f5be966e4a917d54244728e6a5fdcd1d93a35e6c # v5.2.6
+        uses: jdx/mise-action@b44d12e7d0d8ee7461bb893e1b1993500433185b # v5.2.7
         with:
           install_args: "aqua:getsops/sops aqua:mikefarah/yq aqua:FiloSottile/age"
 
@@ -507,11 +516,11 @@ jobs:
         with:
           persist-credentials: false
 
-      - name: Install yq and ShellCheck
+      - name: Install yq, ShellCheck, SOPS and age
         if: needs.pre-job.outputs.synology_changed == 'true'
-        uses: jdx/mise-action@f5be966e4a917d54244728e6a5fdcd1d93a35e6c # v5.2.6
+        uses: jdx/mise-action@b44d12e7d0d8ee7461bb893e1b1993500433185b # v5.2.7
         with:
-          install_args: "aqua:mikefarah/yq aqua:koalaman/shellcheck"
+          install_args: "aqua:mikefarah/yq aqua:koalaman/shellcheck aqua:getsops/sops aqua:FiloSottile/age"
 
       - name: Validate Compose projects and doco-cd targets
         if: needs.pre-job.outputs.synology_changed == 'true'
@@ -520,9 +529,17 @@ jobs:
           scripts/ci/test-validate-synology.sh
           scripts/ci/validate-synology.sh
 
+      - name: Test break-glass secret staging offline with synthetic keys
+        if: needs.pre-job.outputs.synology_changed == 'true'
+        run: scripts/ci/test-synology-break-glass.sh
+
       - name: Test inactive Photos collector offline in its pinned image
         if: needs.pre-job.outputs.synology_changed == 'true'
         run: python3 scripts/ci/test-google-photos-takeout.py
+
+      - name: Test off-site backup source guards offline in the pinned image
+        if: needs.pre-job.outputs.synology_changed == 'true'
+        run: python3 scripts/ci/test-offsite-backup.py
 
       - name: Test native Athena ACME controls offline
         if: needs.pre-job.outputs.synology_changed == 'true'
@@ -545,7 +562,7 @@ jobs:
 
       - name: Install host monitoring validation tools
         if: needs.pre-job.outputs.hosts_changed == 'true'
-        uses: jdx/mise-action@f5be966e4a917d54244728e6a5fdcd1d93a35e6c # v5.2.6
+        uses: jdx/mise-action@b44d12e7d0d8ee7461bb893e1b1993500433185b # v5.2.7
         with:
           install_args: "aqua:mikefarah/yq aqua:prometheus/prometheus"
 
@@ -576,11 +593,17 @@ jobs:
         with:
           persist-credentials: false
 
-      - name: Install ShellCheck
+      - name: Install ShellCheck and Task
         if: needs.pre-job.outputs.scripts_changed == 'true'
-        uses: jdx/mise-action@f5be966e4a917d54244728e6a5fdcd1d93a35e6c # v5.2.6
+        uses: jdx/mise-action@b44d12e7d0d8ee7461bb893e1b1993500433185b # v5.2.7
         with:
-          install_args: "aqua:koalaman/shellcheck"
+          install_args: "aqua:koalaman/shellcheck aqua:go-task/task"
+
+      # The root Taskfile includes every file under .taskfiles/, so listing
+      # all tasks parses each one. It needs no kubeconfig, dotenv or secrets.
+      - name: Parse Taskfiles
+        if: needs.pre-job.outputs.scripts_changed == 'true'
+        run: task --list-all > /dev/null
 
       - name: Check shell syntax
         if: needs.pre-job.outputs.scripts_changed == 'true'
@@ -593,6 +616,10 @@ jobs:
       - name: Validate mixed-version Talos client selection
         if: needs.pre-job.outputs.scripts_changed == 'true'
         run: .agents/skills/talos-rollout/scripts/test-node-client.sh
+
+      - name: Validate Talos rollout gates
+        if: needs.pre-job.outputs.scripts_changed == 'true'
+        run: .agents/skills/talos-rollout/scripts/test-gates.sh
 
       - name: Validate Kanidm ceiling sync
         if: needs.pre-job.outputs.scripts_changed == 'true'
@@ -715,7 +742,7 @@ jobs:
 
       - name: Install lychee
         if: needs.pre-job.outputs.docs_changed == 'true'
-        uses: jdx/mise-action@f5be966e4a917d54244728e6a5fdcd1d93a35e6c # v5.2.6
+        uses: jdx/mise-action@b44d12e7d0d8ee7461bb893e1b1993500433185b # v5.2.7
         with:
           install_args: "aqua:lycheeverse/lychee"
 
@@ -786,7 +813,7 @@ jobs:
           persist-credentials: false
 
       - name: Install workflow validation tools
-        uses: jdx/mise-action@f5be966e4a917d54244728e6a5fdcd1d93a35e6c # v5.2.6
+        uses: jdx/mise-action@b44d12e7d0d8ee7461bb893e1b1993500433185b # v5.2.7
         with:
           install_args: "aqua:rhysd/actionlint aqua:koalaman/shellcheck"
 
@@ -850,7 +877,9 @@ jobs:
       - network
       - docs
     runs-on: ubuntu-latest
-    if: ${{ always() }}
+    # In a run cancelled by concurrency this reports cancelled, not failed. In
+    # any other run a failed or skipped dependency still fails the check below.
+    if: ${{ !cancelled() }}
     steps:
       - name: Require every validation job to succeed
         env:

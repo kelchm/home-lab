@@ -13,6 +13,25 @@ services:
     command:
       - |
         set -o errexit -o nounset -o pipefail
+        # Known nonempty metadata proves each expected archive is present, rather
+        # than accepting an empty share (or just its leftover directories).
+        require_marker() {
+          local source="$$1" marker
+          shift
+          for marker in "$$@"; do
+            if [[ -f "$$marker" && -s "$$marker" ]]; then return 0; fi
+          done
+          echo "Refusing off-site backup: $$source has no nonempty archive marker" >&2
+          return 1
+        }
+        check_sources() {
+          local status=0
+          require_marker longhorn /sources/longhorn/backupstore/volumes/*/*/*/volume.cfg || status=1
+          require_marker visionect-db /sources/object-storage/data/k8s-prod-visionect-db/visionect-db-pg17/base/*/backup.info || status=1
+          require_marker bambuddy-db /sources/object-storage/data/k8s-prod-bambuddy-db/bambuddy-db-pg18/base/*/backup.info || status=1
+          require_marker dawarich-db /sources/object-storage/data/k8s-prod-dawarich-db/dawarich-db-pg17/base/*/backup.info || status=1
+          return "$$status"
+        }
         kopia repository connect s3 \
           --bucket "$$B2_BUCKET" --endpoint "$$B2_ENDPOINT" --prefix kopia/ \
           --override-hostname athena --override-username offsite
@@ -24,8 +43,12 @@ services:
           curl --fail --silent --show-error --max-time 10 --retry 5 --output /dev/null \
             "$$HC_PING_URL/start" || true
           status=0
-          kopia snapshot create /sources/* || status=$$?
-          kopia maintenance run --full || status=$$?
+          if check_sources; then
+            kopia snapshot create /sources/* || status=$$?
+            kopia maintenance run --full || status=$$?
+          else
+            status=1
+          fi
           curl --fail --silent --show-error --max-time 10 --retry 5 --output /dev/null \
             "$$HC_PING_URL/$$status" || true
         done

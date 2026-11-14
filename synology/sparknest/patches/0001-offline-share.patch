@@ -1,0 +1,136 @@
+--- a/sparknest-hf-fetch
++++ b/sparknest-hf-fetch
+@@ -27,6 +27,11 @@
+       and this copy dropped. Each blob's Xet hash comes from the repo's
+       trees/*.json, else from the Hub. A blob must have the size recorded
+       for it; --verify also checks its LFS sha256 (reads the whole file).
++      With --hash-missing --verify, SHA-256-named files without Xet metadata
++      use an existing shared ID from another cached repo, else hf_xet's local
++      file hash. Local IDs can differ from old Hub IDs after chunker changes.
++      No tree metadata is invented. The mode is opt-in and works --offline.
++      SPARKNEST_HF_HASH_MISSING=1 enables it for verified share jobs only.
+       Files kept in git (no Xet hash: configs, small JSON) stay in the repo,
+       as hf keeps them. --offline does not ask the Hub.
+       {"blob": B, "name": F, "size": N, "action": "move"|"link"|"skip", "why": W}
+@@ -116,11 +121,48 @@
+             emit({"file": name, "error": f"{type(e).__name__}: {e}"})
+ 
+ 
++def _identity(path):
++    st = path.stat()
++    return st.st_dev, st.st_ino, st.st_size, st.st_mtime_ns, st.st_ctime_ns
++
++
++def _sha256(path):
++    import hashlib
++    h = hashlib.sha256()
++    with open(path, "rb") as f:
++        while chunk := f.read(16 << 20):
++            h.update(chunk)
++    return h.hexdigest()
++
++
++def _existing_xet(hub, blob_name, sb):
++    """Reuse a cached ID for this SHA, including IDs from older chunkers."""
++    import re
++    for repo in sorted(hub.iterdir()):
++        if not repo.name.startswith(("models--", "datasets--")) or not repo.is_dir() or repo.is_symlink():
++            continue
++        link = repo / "blobs" / blob_name
++        if not link.is_symlink():
++            continue
++        try:
++            target = link.resolve(strict=True)
++            if re.fullmatch(r"[0-9a-f]{64}", target.name):
++                expected = sb.shared_blob_path(hub, target.name)
++                if target == expected.resolve() and target.is_file():
++                    return target.name
++        except (OSError, RuntimeError):
++            continue
++    return None
++
++
+ def share(args):
+-    import hashlib
++    import re
+     from pathlib import Path
+     from huggingface_hub.utils import _shared_blobs as sb
+ 
++    hash_missing = args.hash_missing or (args.verify and os.environ.get("SPARKNEST_HF_HASH_MISSING") == "1")
++    if hash_missing and not args.verify:
++        raise ValueError("--hash-missing requires --verify")
+     hub = Path(args.cache_dir)
+     repo = hub / args.repo
+     blobs = repo / "blobs"
+@@ -164,12 +206,31 @@
+     moved = linked = skipped = kept = freed = 0
+     for p in local:
+         info = known.get(p.name)
++        before = _identity(p)
++        verified = False
++        xet_source = "metadata"
++        if hash_missing and (info is None or not info[2]) and re.fullmatch(r"[0-9a-f]{64}", p.name):
++            # Explicit HF maintenance only: no backend hash index or new store.
++            if _sha256(p) != p.name:
++                emit({"blob": p.name, "action": "skip", "why": "content differs from its SHA-256 name"})
++                skipped += 1
++                continue
++            verified = True
++            xet = _existing_xet(hub, p.name, sb)
++            xet_source = "cached-link" if xet else "local"
++            if not xet:
++                from hf_xet import hash_files
++                result = hash_files([str(p)])
++                if len(result) != 1 or result[0].file_size != before[2] or not re.fullmatch(r"[0-9a-f]{64}", result[0].hash):
++                    raise ValueError("invalid local Xet hash result")
++                xet = result[0].hash
++            info = ((info[0] if info else p.name), before[2], xet, p.name)
+         if info is None:
+             emit({"blob": p.name, "action": "skip", "why": "not in the repo's trees, nor on the Hub"})
+             skipped += 1
+             continue
+         name, size, xet, sha = info
+-        rec = {"blob": p.name, "name": name, "size": p.stat().st_size}
++        rec = {"blob": p.name, "name": name, "size": p.stat().st_size, "xet_source": xet_source}
+         if not xet:
+             kept += 1
+             continue
+@@ -177,16 +238,20 @@
+             emit({**rec, "action": "skip", "why": f"size {p.stat().st_size}, recorded {size}"})
+             skipped += 1
+             continue
+-        if args.verify and sha:
+-            h = hashlib.sha256()
+-            with open(p, "rb") as f:
+-                while chunk := f.read(16 << 20):
+-                    h.update(chunk)
+-            if h.hexdigest() != sha:
++        if args.verify and sha and not verified:
++            if _sha256(p) != sha:
+                 emit({**rec, "action": "skip", "why": "content differs from its recorded sha256"})
+                 skipped += 1
+                 continue
++        if _identity(p) != before:
++            emit({**rec, "action": "skip", "why": "source changed while verifying"})
++            skipped += 1
++            continue
+         store = sb.shared_blob_path(hub, xet)
++        if store.is_file() and args.verify and sha and _sha256(store) != sha:
++            emit({**rec, "action": "skip", "why": "existing shared payload differs from its recorded sha256"})
++            skipped += 1
++            continue
+         exists = store.is_file()
+         action = "link" if exists else "move"
+         if args.dry_run:
+@@ -222,7 +287,11 @@
+             s.add_argument("--dry-run", action="store_true")
+             s.add_argument("--verify", action="store_true")
+             s.add_argument("--offline", action="store_true")
++            s.add_argument("--hash-missing", action="store_true",
++                           help="with --verify, compute missing Xet IDs locally; may differ from older Hub IDs")
+     args = p.parse_args()
++    if args.cmd == "share" and args.hash_missing and not args.verify:
++        p.error("--hash-missing requires --verify")
+     if args.cmd == "fetch" and not args.revision:
+         p.error("fetch needs --revision COMMIT (from plan)")
+     {"plan": plan, "fetch": fetch, "refs": refs, "share": share}[args.cmd](args)

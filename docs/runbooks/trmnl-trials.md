@@ -6,20 +6,18 @@ These are four temporary, independent deployments for choosing a self-hosted TRM
 
 Use the home LAN or a VPN route to the admin network. Each URL uses the private admin Gateway and the existing `*.home.kelch.io` certificate; these servers have no public route or external DNS record. They use their own application login rather than the homelab OIDC layer, so device APIs can work without browser SSO.
 
-| Server | URL | First visit |
+| Server | URL | 1Password Login item |
 |---|---|---|
-| Terminus | <https://terminus.home.kelch.io> | Register an account. The first account is verified automatically. |
-| LaraPaper | <https://larapaper.home.kelch.io> | Register an account; production mode does not seed the development admin account. |
-| Inker | <https://inker.home.kelch.io> | Sign in with the generated trial PIN, retrieved below. |
-| BYOS Next.js | <https://byos-next.home.kelch.io/setup> | Create the first administrator; the trial database is initialized. |
+| Terminus | <https://terminus.home.kelch.io> | `TRMNL - Terminus` |
+| LaraPaper | <https://larapaper.home.kelch.io> | `TRMNL - LaraPaper` |
+| Inker | <https://inker.home.kelch.io> | `TRMNL - Inker` |
+| BYOS Next.js | <https://byos-next.home.kelch.io/sign-in> | `TRMNL - Next.js` |
 
-Retrieve the Inker PIN from the cluster; it is also stored encrypted in the trial Secret manifest:
+All four Login items are in the **Project - home-lab** vault in 1Password. Inker uses its password field as the administrator PIN; the other items contain the email/password accounts created through each application's registration flow. The saved credentials were read back from 1Password and used to verify fresh sign-ins on 2026-11-08. No browser passwords are stored in Git.
 
-```sh
-kubectl -n trmnl-trials get secret inker-trial -o jsonpath='{.data.ADMIN_PIN}' | base64 --decode
-```
+The Inker PIN also remains in Kubernetes Secret `trmnl-trials/inker-trial`, key `ADMIN_PIN`, and in the encrypted trial Secret manifest. Application encryption keys and database credentials remain SOPS encrypted in Git.
 
-The applications use separate Longhorn volumes. Terminus and Next.js each have a dedicated PostgreSQL container within their own pod; Terminus also has its own worker and persistent Valkey queue. There are no shared application accounts, databases, API keys or playlists. Credentials and application encryption keys are SOPS encrypted in Git. RWO volumes use one replica and `Recreate` updates. PVCs are retained when a release is removed, so removing a trial does not silently erase its data.
+The applications use separate Longhorn volumes. Terminus and Next.js each have a dedicated PostgreSQL container within their own pod; Terminus also has its own worker and persistent Valkey queue. There are no shared application accounts, databases, API keys or playlists. RWO volumes use one replica and `Recreate` updates. PVCs are retained when a release is removed, so removing a trial does not silently erase its data.
 
 ## Compare with the same task
 
@@ -31,7 +29,31 @@ Start in Terminus, then repeat the workflow in each candidate where it has the c
 4. If testing hardware, point one physical device at one server at a time. Verify that it receives the image, advances the playlist and reports its battery/Wi-Fi status. Browser previews alone do not prove device compatibility.
 5. Record the preferred server and anything worth exporting in #1219. Selection is based on the workflows you use, rather than the implementation language.
 
-The servers can fetch public HTTP/HTTPS recipes and pages. Their network policy blocks connections to private homelab services, including the shared admin Gateway, and their database/cache ports have no Service. Rendering a private Grafana dashboard or another internal page needs an explicit additional egress decision.
+The trial namespace has no Kubernetes NetworkPolicy or CiliumNetworkPolicy restrictions. The servers can fetch public recipes and private homelab services, including the shared admin Gateway, subject to destination policies and application authentication. Their database/cache ports have no Service. The admin Gateway retains its backend allowance so the trial URLs continue to work.
+
+## Grafana in Inker
+
+The installed Grafana plugin has a connection named **Homelab Grafana**, pointing at <https://grafana.home.kelch.io>. It uses the dedicated `trmnl-inker` Grafana service account with the **Viewer** role. Its token is stored in the **Grafana - Inker** API Credential item in the **Project - home-lab** 1Password vault, in the `credential` field. Inker stores its copy in the connection's encrypted settings on its persistent volume. Its **Allow Local Network** setting is enabled for rendering the private Grafana URL.
+
+On 2026-11-08, the connection successfully listed 95 dashboards and the panels in the Home dashboard, then rendered the Home dashboard's **Needs attention** panel as an 800×480 PNG. The temporary verification screen was removed. Open the Grafana connection in Inker to choose a dashboard and panel or section for a screen.
+
+The token has no expiration. To rotate it, create a replacement token under Grafana's `trmnl-inker` service account, update the 1Password item and Inker connection, verify rendering, then revoke the old token. No Grafana administrator credential is stored in Inker.
+
+Inker's memory request is 512 MiB and its limit is 4 GiB to accommodate concurrent Chromium renders for Grafana section previews. The original 1 GiB limit caused out-of-memory kills while previewing the Home dashboard's **Everything** section. Inker keeps login sessions in memory, so a backend restart also logs users out. If screen creation fails and the browser returns to login, check the pod's restart count and last termination reason before changing the Grafana credentials.
+
+### E-paper overview
+
+[Home · E-paper](https://grafana.home.kelch.io/d/home-eink?theme=light&kiosk) is a separate 1600×1200 overview of the entire lab using four gray tones. Seven sections cover Kubernetes, network, Sparks, Proxmox, Athena, power and devices with current metrics, 24-hour charts and capacity or runtime bars. The headline and section states use Home's existing health definitions. The attention area shows the three worst current issues and any remaining count, including alerts outside the seven systems; while healthy it shows how long the lab has been free of warnings and the latest warning or critical alert within seven days. Advisory states use light gray, warnings dark gray and critical states black. A timestamp and a seven-day alert strip provide freshness and history; darker shades indicate higher severity.
+
+The source is [home/eink.py](../../scripts/grafana/home/eink.py), which reuses Home's query definitions. Regenerate [home-eink-dashboard.json](../../kubernetes/apps/observability/grafana/app/home-eink-dashboard.json) with `python3 scripts/grafana/render-home.py`. The existing Home dashboard CI check verifies both generated files, shared health definitions, query length and the fixed page layout.
+
+Inker's **Home lab · E-paper** screen (instance `9`) captures the **whole dashboard** (`panel_id: full`) at 1600×1200. Use whole-dashboard capture instead of the section compositor, which rearranges panels into equal-sized cells. The [image](https://inker.home.kelch.io/api/plugins/instances/9/render?mode=preview) requires no application login and is reachable through the private admin Gateway. Use `mode=preview` to preserve gray tones; `mode=einkPreview` converts to black and white. Preview mode also bypasses Inker's 90 kB downscaling limit. On 2026-11-08, a real grayscale Inker render, including an advisory state, was visually verified at 1600×1200: it took about 4.2 seconds and produced a 209,769-byte PNG without restarting Inker. Warning and critical cases were previously checked in a separate local Grafana instance; their grayscale text contrast was checked against Grafana's rendering code. Physical-display acceptance remains open.
+
+For VSS, use `http://inker.trmnl-trials.svc.cluster.local/api/plugins/instances/9/render?mode=preview`. This stays inside the cluster and uses the Visionect policy's explicit Inker service allowance on TCP/80, limited to GET requests for instance-render paths. The admin-Gateway hostname remains blocked by VSS's egress policy. If Inker is retired, remove the VSS allowance and update any VSS sessions using this image URL.
+
+On 2026-11-08, Flux applied [PR #1384](https://github.com/kelchm/home-lab/pull/1384) at `f56e98c91fb93b507504e34d89e89d7be66c5d58`. Grafana adopted the dashboard through file provisioning (`Overview/home-eink.json`). An anonymous fetch from the VSS app container returned HTTP 200 with a 1600×1200 PNG (206,604 bytes) in about 4.1 seconds; GET requests to `/health` and `/api/plugins/instances` returned HTTP 403. Inker remained Ready with zero restarts. These checks verify server connectivity and image generation; physical-display acceptance remains open.
+
+The VSS session must also save the internal service URL in `Backend.Fields.url`; deploying the access rule does not rewrite existing sessions. The trial session on `pnp13-display-3` still used the admin-Gateway URL with `mode=einkPreview` and timed out after the rule was deployed. On 2026-11-08, that session was updated through the VSS session API to the internal URL with `mode=preview`. WebKit finished loading it, VSS pushed the image, and the live-view API's cached and device images matched byte for byte (1600×1200, 74,207 bytes). This verifies the actual VSS rendering and delivery path, beyond the earlier container-only fetch. The session's automatic page reload remains disabled; a static image URL needs [automatic page reload](https://docs.visionect.com/VisionectSoftwareSuite/ManagementInterface.html#other-important-settings) configured for periodic updates.
 
 ## Physical device
 
@@ -44,9 +66,9 @@ A device must resolve the private hostnames and reach `10.32.130.1:443`. An IoT 
 ## Enrollment differences
 
 - **Terminus:** `/api/setup` can provision a new MAC and its welcome playlist. Send a recognized `Model` (for example `og`) and a semantic `FW-Version`. The trial defaults firmware updates off.
-- **LaraPaper:** register the first user (further signups are closed unless `MULTIUSER_REGISTRATION_ENABLED=true`), then enable Permit Auto-Join or create the device manually. Since 0.46.0, Auto-Join turns itself off after 15 minutes, and re-pairing a device that has connected before needs it on again. Configure its model and dimensions before using the display endpoint.
+- **LaraPaper:** sign in with the saved account (further signups are closed unless `MULTIUSER_REGISTRATION_ENABLED=true`), then enable Permit Auto-Join or create the device manually. Since 0.46.0, Auto-Join turns itself off after 15 minutes, and re-pairing a device that has connected before needs it on again. Configure its model and dimensions before using the display endpoint.
 - **Inker:** `/api/setup` auto-provisions the MAC and recognizes model/width/height headers. Use the returned API key as `Access-Token`.
-- **Next.js:** the deployed trial has its database initialized and built-in recipes seeded. Create the first administrator at `/setup`, then add/claim the device through the authenticated UI. For a fresh empty database, initialize it at `/setup` and restart the pod once before adding devices. An unauthenticated device cannot become an owned device by itself.
+- **Next.js:** the deployed trial has its database initialized, built-in recipes seeded and an administrator account in 1Password. Sign in, then add/claim the device through the authenticated UI. For a fresh empty database, initialize it and create the first administrator at `/setup`, then restart the pod once before adding devices. An unauthenticated device cannot become an owned device by itself.
 
 ## Candidate selection
 
@@ -80,12 +102,14 @@ Check that all HTTPRoutes have `Accepted=True` and `ResolvedRefs=True`, the work
 
 To pause one server without deleting its state, commit `controllers.main.replicas: 0` in that server's HelmRelease. To resume, restore it to `1`. Do not scale imperatively while Flux continues to manage the value.
 
-After the owner chooses a winner, export useful settings/images, then remove unwanted HelmRelease references and manifests from the app Kustomization. Keep their Secrets and retained PVCs until data deletion is explicitly wanted. For complete retirement, remove the namespace's `ks.yaml` reference first so Flux uninstalls the Helm releases and removes routes/policy, remove the TRMNL allowance from the Traefik admin policy, and then remove the remaining trial configuration. Namespace pruning is disabled and Helm PVC retention is enabled; explicitly deleting the namespace or PVCs destroys trial data and needs a deliberate final decision. A rollback to a previous application image may not reverse database migrations.
+After the owner chooses a winner, export useful settings/images, then remove unwanted HelmRelease references and manifests from the app Kustomization. Keep their Secrets and retained PVCs until data deletion is explicitly wanted. For complete retirement, remove the namespace's `ks.yaml` reference first so Flux uninstalls the Helm releases and removes routes, remove the TRMNL allowance from the Traefik admin policy, and then remove the remaining trial configuration. Namespace pruning is disabled and Helm PVC retention is enabled; explicitly deleting the namespace or PVCs destroys trial data and needs a deliberate final decision. A rollback to a previous application image may not reverse database migrations.
 
 ## Verification record
 
 The initial eight-server deployment was adopted by Flux on 2026-11-01 at `f8687927e4f648ae818ce9b9f035a2dcda676d0b`. All eight releases and private routes were healthy. Synthetic device setup/display/image requests succeeded through HTTPS for Terminus and Inker (800×480 PNG) and the four subsequently retired experimental servers (800×480 BMP). Those results established basic protocol and rendering behavior, rather than project maturity or physical-board compatibility.
 
-For the remaining candidates, Terminus and Inker have synthetic devices at `02:00:00:00:00:01` and `02:00:00:00:00:03`. Next.js initialized all 21 migrations and seeded 11 built-in recipes. Its first administrator and LaraPaper's first user are left for the owner to register; their owned-device flows still need acceptance after account setup. The stock-firmware guard was checked in the Next.js container, and Terminus setup/display returned firmware update/reset flags false. Private-LAN and shared admin Gateway HTTPS connection attempts from a trial pod were blocked.
+For the remaining candidates, Terminus and Inker have synthetic devices at `02:00:00:00:00:01` and `02:00:00:00:00:03`. Next.js initialized all 21 migrations and seeded 11 built-in recipes. The stock-firmware guard was checked in the Next.js container, and Terminus setup/display returned firmware update/reset flags false. Initial isolation tests blocked private-LAN and shared admin Gateway HTTPS connections.
+
+On 2026-11-08, the owner requested removal of the trial network restrictions. Flux applied `e4e1ea0148843a8d0e308cdf86790169afd9e356`; the trial namespace has no NetworkPolicy or CiliumNetworkPolicy resources, and all four application containers reached the private Grafana HTTPS endpoint and received its expected HTTP 307 authentication redirect. All four releases and pods remained Ready. Existing human accounts were absent: Terminus and LaraPaper had no users, and Next.js had only its built-in mono-user placeholder. Fresh trial accounts were registered for those three applications, Next.js's first real user was verified as an administrator, and all four 1Password logins were tested successfully. Owned-device and physical-board flows still need acceptance.
 
 Physical-board acceptance, custom panel/firmware compatibility, and any necessary IoT VLAN access remain open in #1219. The completed server rollout does not imply that a physical board has been enrolled.

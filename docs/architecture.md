@@ -109,7 +109,7 @@ Removing or moving many dashboards at once can leave stale files in the Grafana 
 | VLAN | Name | Subnet | Purpose |
 |---|---|---|---|
 | 1 | Default | 10.32.1.0/24 | UniFi management |
-| 5 | Cameras | 10.32.5.0/24 | Existing |
+| 5 | Cameras | 10.32.5.0/24 | Cameras; no Internet access |
 | 10 | Main | 10.32.10.0/24 | Trusted household devices |
 | 19 | Remote Admin | 10.32.19.0/24 | Isolated remote-access routing-peer transit |
 | 20 | Infra Mgmt | 10.32.20.0/24 | Classic mgmt planes for non-Talos tenants |
@@ -117,8 +117,8 @@ Removing or moving many dashboards at once can leave stale files in the Grafana 
 | 25 | Storage | 10.32.25.0/24 | NFS/iSCSI to Synology |
 | 30 | K8s Prod | 10.32.30.0/24 | Prod cluster compute (nodes + API VIP only) |
 | 31 | K8s 2 | 10.32.31.0/24 | Second Kubernetes cluster compute (reserved) |
-| 90 | IoT | 10.32.90.0/24 | Existing |
-| 99 | Guest | 10.32.99.0/24 | Existing |
+| 90 | IoT | 10.32.90.0/24 | Household appliances and media devices |
+| 99 | Guest | 10.32.99.0/24 | Visitors (household devices are moving to IoT) |
 
 VLAN 40 (Lab Services) is being retired — it existed only to host node subinterfaces required by Cilium L2 announcements. Under BGP, LB IPs are routed (not bridged) so no node interface on the pool subnet is needed. The legacy L2 pools and node subinterfaces remain in place pending a final maintenance window.
 
@@ -133,6 +133,39 @@ VLAN 40 (Lab Services) is being retired — it existed only to host node subinte
 - PVE and K8s storage identities → Storage: scope to named peers and services
 - K8s Prod, K8s 2, and Workloads → Internet: allow subject to normal DNS and egress controls
 - Per-pool LB rules: see [LB Pool Allocation](#lb-pool-allocation)
+
+### Firewall zones
+
+Zones are trust levels, not one per VLAN. A network joins the zone whose baseline policy it shares, and named rules carry the exceptions. Custom zones block routed traffic between their own member networks by default, so sharing a zone grants no access between members. The migration is tracked in [#348](https://github.com/kelchm/home-lab/issues/348); [`network/unifi/README.md`](../network/unifi/README.md#firewall-zones-applied-state) records the applied state.
+
+| Zone | Target networks | Baseline |
+|---|---|---|
+| Internal (built-in) | Main | Household clients. A short list of admin devices with reserved addresses gets management access; other Main clients get household services only. |
+| Infrastructure | Default, Infra Mgmt, Workloads, K8s Prod | Servers and management planes. Members are blocked from each other except for named dependencies; management is reachable only from admin devices and approved remote access. |
+| Untrusted | IoT, Cameras, Guest | Devices and visitors that are not managed here. Internet access (Cameras excepted) and named local services only; members are blocked from each other. |
+| Remote Admin | Remote Admin | NetBird routing peer with per-resource allows. |
+
+Storage, Services (VLAN 40), K8s Sandbox and the temporary SDR management VLAN are transitional and are not assigned a target zone: Storage loses its gateway once its routed dependencies are resolved, VLAN 40 retires through the Talos procedure, and the other two retire after dependency checks. Guest joins Untrusted once the household devices on it have moved to IoT and its shared key is replaced.
+
+Home Assistant is the deliberate exception to the generic rules. Household clients reach it, and it initiates connections to devices across Untrusted, Main and the UPS servers, through its own named rule set ([#1365](https://github.com/kelchm/home-lab/issues/1365)).
+
+**Rule conventions:**
+
+- Name rules `<Source> to <Purpose>`, for example `Guest to Lab Networks` or `Home Assistant to Thermostats`. Leave out Allow/Block: the console's Action column and the flow logs' action field carry the verdict, and the name stays true if the action changes. The source is the zone, network or list the rule matches; the purpose is the role or service reached, never a list of what the rule contains. Put the distinctive words first and keep names to about 30 characters, because the console's Name column cannot be widened. Use plain ASCII and keep names unique.
+- Give every rule a one-sentence description of why it exists.
+- Match the whole zone where the rule covers it. Use a network selector only for a network that will not change zone: when a network moves zone, UniFi removes it from network selectors in other rules and pauses any rule left empty. Put anything more specific in a Network List, even if only one rule uses it, so the policy table reads as names. Only a single standard port that UniFi labels as a service (DNS, NTP, HTTP, HTTPS, SSH) stays inline.
+- Blocks match new connections only and log, so replies are never caught and each blocked flow names its rule.
+- Restricted zones reach the gateway through `Gateway Services` (DNS, DHCP, NTP, mDNS), ping and mDNS proxy replies, followed by a block.
+- BGP pool destinations are classified as External from Internal and Untrusted sources, so pool denies go in that cell, ahead of the Internet allow.
+- Access is defined only in firewall rules. Client groups and the Object Manager generate their own rules and are not used.
+
+**Network List conventions:**
+
+- Name lists for the role in plain words, without a type prefix: IP lists for what the members are (`Time Servers`), port lists for the listening service (`Home Assistant Web`), domain lists for what the domains serve (`Thingino Update Hosts`).
+- Use the list description for what the members are and how each address stays fixed, or for what each port is for.
+- Every address in a list is statically configured, a DHCP reservation, or pinned by Cilium. A plain DHCP lease eventually changes and silently breaks the rule.
+
+**Changes:** take a Control Plane backup and a JSON snapshot before each batch, then compare every rule's effective match against the snapshot afterwards. Renaming a rule does not change past flow records, so settle names once; [`network/unifi/README.md`](../network/unifi/README.md#names-before-2026-11-08) maps earlier names.
 
 ## IP Addressing Convention
 
@@ -268,16 +301,16 @@ API VIP is managed by the Talos `vipController` (GARP-based at the machine-confi
 10.32.20.1        gateway-infra            Router interface
 10.32.20.5        nas                      Synology admin interface
 10.32.20.7        pbs                      (planned) PBS appliance, aligned with pbs-storage
-10.32.20.10       glkvm                    GL-RM1PE KVM (currently a DHCP fixed assignment; prefer on-device static — the recovery console should not depend on DHCP)
+10.32.20.10       kvm-compute-rack         GL-RM1PE KVM; static on the device, UniFi fixed assignment kept as a guard (devices/glkvm/README.md)
 10.32.20.20       pdm                      (reserved) Proxmox Datacenter Manager
 10.32.20.21-.23   pve-sbx-{1,2,3}          PVE UI/API, SSH, Corosync link 0
 10.32.20.24-.29   (reserved, pve-sbx expansion)
 10.32.20.30-.99   (existing static devices — switches, APs; new static infra devices allocate from .100-.199)
 10.32.20.110-.119 (UPS/NUT monitor family, 1-indexed; upsmon clients reference these IPs directly)
 10.32.20.111      ups-compute-rack         NixOS Pi, compute-rack UPS monitor
-10.32.20.112      ups-office               NixOS Pi, office UPS monitor — Starlink/T-Mobile gateways
+10.32.20.112      ups-office               NixOS Pi 5, office UPS monitor — Starlink/T-Mobile gateways; NTP; ADS-B receiver feeding FlightAware
 10.32.20.120-.129 (ADS-B receiver family, 1-indexed)
-10.32.20.121      adsb-office              NixOS Pi 3B, ADS-B receiver feeding FlightAware (UniFi fixed IP)
+10.32.20.121      adsb-office              NixOS Pi 3B, retired 2026-11-14 (ADS-B moved to ups-office)
 ```
 
 Talos nodes do NOT have IPs on Infra Mgmt. Talos has no classic management plane — `talosctl` and `kubectl` (both mTLS) are the entire management surface, and run over VLAN 30 alongside workload traffic. Network-level isolation is replaced by cryptographic isolation. Infra Mgmt exists for tenants that *do* need a classic mgmt plane.
@@ -288,10 +321,11 @@ Talos nodes do NOT have IPs on Infra Mgmt. Talos has no classic management plane
 10.32.19.1        gateway-remote-admin       Router interface; DNS and Internet egress
 10.32.19.101      tailscale-router-1         Retired; VM destroyed 2026-10-28, address unused (#1069)
 10.32.19.102      tailscale-router-2         Retired; VM destroyed 2026-10-28, address unused (#1069)
-10.32.19.103      netbird-pilot-router       NetBird routing peer on pve-sbx-1 (#625)
+10.32.19.103      netbird-router-1           NetBird routing peer on pve-sbx-1 (#625)
+10.32.19.104      netbird-router-2           NetBird routing peer on pve-sbx-2 (#1097)
 ```
 
-DHCP and IPv6 are disabled on this network. Its VMs are single-homed VLAN-local endpoints and therefore sit outside the cross-VLAN system identity rule. VLAN 19 has its own UniFi zone: it can reach the gateway and Internet for coordination, and reaches Internal only through per-source allow rules whose generated reverse rules accept only established and related traffic. UniFi evaluates the BGP-routed `10.32.130.0/24` and `10.32.140.0/24` paths through the Internal transition for this custom source zone, so an allow toward a VIP must name that exact prefix or address. The Tailscale router VMs `.101/.102` were destroyed on 2026-10-28; their two UniFi forward policies and generated returns were removed on 2026-10-29 under #1069. Main cannot reach `.103` directly; manage it through its hosting PVE node's guest agent on `pve-sbx-1` (`sudo qm guest exec 103 -- hostname` was verified October 27). `.103` is the only routed remote path, using NetBird, Matt's selected replacement for Tailscale; setup and comprehensive testing remain in #625. Separate UniFi policies permit only TCP 443 to `10.32.140.1` (household services) and `10.32.130.1` (admin HTTPS). NetBird advertises those two `/32` resources, whose HTTPS policies retain the Main-network posture exclusion, plus the existing gateway resolver at `10.32.30.1/32`. See the [NetBird runbook](runbooks/netbird-remote-access.md) for the applied extension and Matt's accepted remote iPhone login and dashboard check.
+DHCP and IPv6 are disabled on this network. Its VMs are single-homed VLAN-local endpoints and therefore sit outside the cross-VLAN system identity rule. VLAN 19 has its own UniFi zone: it can reach the gateway and Internet for coordination, and reaches Internal only through per-source allow rules whose generated reverse rules accept only established and related traffic. UniFi evaluates the BGP-routed `10.32.130.0/24` and `10.32.140.0/24` paths through the Internal transition for this custom source zone, so an allow toward a VIP must name that exact prefix or address. The Tailscale router VMs `.101/.102` were destroyed on 2026-10-28; their two UniFi forward policies and generated returns were removed on 2026-10-29 under #1069. Main cannot reach `.103` or `.104` directly; manage each through its hosting PVE node's guest agent (`sudo qm guest exec 103 -- hostname` on `pve-sbx-1` was verified October 27, and `sudo qm guest exec 104 -- netbird status` on `pve-sbx-2` on November 8). The two routing peers `.103` and `.104` are the only routed remote path, using NetBird, Matt's selected replacement for Tailscale; #625 qualified it and closed by owner decision, leaving the remaining checks to normal use. Separate UniFi policies permit only TCP 443 to `10.32.140.1` (household services) and `10.32.130.1` (admin HTTPS). NetBird advertises those two `/32` resources, whose HTTPS policies retain the Main-network posture exclusion, plus the existing gateway resolver at `10.32.30.1/32`. See the [NetBird runbook](runbooks/netbird-remote-access.md) for the applied extension and Matt's accepted remote iPhone login and dashboard check.
 
 ## LB Pool Allocation
 
@@ -344,20 +378,20 @@ Add carve-out firewall rules per allocated IP+port — never pool-wide allows.
 
 ### Firewall posture per pool
 
-Configured in UniFi (no committable artifact lives in this repo; intent in [`network/unifi/README.md`](../network/unifi/README.md)):
+Internal-to-Internal traffic is allowed by default, so this posture is enforced only where a rule or a custom zone applies. Untrusted (IoT and Cameras) is restricted from every pool except Visionect, and Guest only from `admin-prod`; Main clients still reach `admin-prod` without an admin-device restriction. Both Traefik gateways admit every source in their Cilium policies, so they don't enforce the boundary either. Applying these rules is tracked in [#348](https://github.com/kelchm/home-lab/issues/348). No committable artifact lives in this repo; [`network/unifi/README.md`](../network/unifi/README.md) records the intended rules and the applied state.
 
-```
-VLAN 10 Main  → admin-prod          : allow (admin device group only)
-VLAN 10 Main  → services-prod       : allow
-VLAN 21 Workloads → services-prod    : allow
-VLAN 90 IoT   → admin-prod          : deny
-VLAN 90 IoT   → services-prod       : deny
-VLAN 99 Guest → admin-prod          : deny
-VLAN 99 Guest → services-prod       : deny
-VLAN 90       → 10.32.150.30 TCP/11113 : allow (Visionect devices)
-VLAN 10       → 10.32.150.30 TCP/443   : allow (Visionect management UI)
-other clients → 10.32.150.30 any       : deny
-```
+| Source | Destination | Target | Current state |
+|---|---|---|---|
+| VLAN 10 Main | `admin-prod` | allow, admin device group only | allowed from every Main client by the default |
+| VLAN 10 Main | `services-prod` | allow | allowed by the default |
+| VLAN 21 Workloads | `services-prod` | allow | allowed by the default |
+| VLAN 21 Workloads | `admin-prod` | deny, except Hermes → `10.32.130.1` TCP/443 | applied (`Workloads to Admin Prod`) |
+| VLANs 5 and 90 (Untrusted) | `admin-prod`, `services-prod`, `shared-prod` | deny, except Visionect below | applied (`Untrusted to Service Pools`) |
+| VLAN 99 Guest | `admin-prod` | deny | applied (`Guest to Admin Prod`) |
+| VLAN 99 Guest | `services-prod` | deny | not applied; household devices on Guest still use it until they move to IoT |
+| VLAN 90 IoT | `10.32.150.30` TCP/11113 | allow (Visionect devices) | applied |
+| VLAN 10 Main | `10.32.150.30` TCP/443 | allow (Visionect management UI) | applied |
+| other clients | `10.32.150.30` any | deny | applied |
 
 ## Service categorization & exposure
 
@@ -576,7 +610,7 @@ gitignored.
 - **Second Kubernetes cluster remains a reservation, not a hardware assignment**:
   VLAN 31 and its BGP/storage identities can support Talos VMs on PVE or future
   bare metal without renumbering the cluster.
-- **BGP for LB delivery, Traefik for HTTP+auth aggregation**: Different layers. BGP handles packet delivery and ECMP; Traefik aggregates TLS + auth for apps that lack native versions. Cilium Gateway API will displace Traefik when Cilium implements GEP-1494 (external auth filter) — until then Traefik's middleware story is irreducible for auth-less app UIs.
+- **BGP for LB delivery, Traefik for HTTP+auth aggregation**: Different layers. BGP handles packet delivery and ECMP; Traefik aggregates TLS + auth for apps that lack native versions. Cilium 1.20 implements the HTTPRoute `ExternalAuth` filter (GEP-1494), but the filter is still experimental in Gateway API, and replacing Traefik is undecided; see the [roadmap](roadmap.md#out-of-scope-future-considerations) for the revisit trigger.
 - **Three pool classes (admin / services / shared)**: pool == firewall policy class. Shared exists specifically to let cluster-wide services like DNS take per-IP+port carve-outs from untrusted VLANs without diluting the admin/services posture.
 - **Per-service IPs for native-auth household apps**: BGP makes IPs cheap; offloading from Traefik reduces middleware sprawl and lets each app own its own TLS path via cert-manager.
 - **Admin gateway is the default for operator surfaces regardless of native auth**: native auth solves the login screen but not consistent IP allowlisting, future SSO, or uniform security headers. Centralize that policy in Traefik admin.

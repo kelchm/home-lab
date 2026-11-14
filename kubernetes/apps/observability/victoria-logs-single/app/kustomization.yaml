@@ -11,3 +11,4 @@ resources:
   - ./unifi-alerts.yaml
   - ./kanidm-alerts.yaml
   - ./spark-alerts.yaml
+  - ./adsb-alerts.yaml

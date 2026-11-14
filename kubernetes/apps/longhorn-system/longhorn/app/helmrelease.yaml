@@ -7,7 +7,7 @@ spec:
   chart:
     spec:
       chart: longhorn
-      version: 1.12.1
+      version: 1.12.2
       sourceRef:
         kind: HelmRepository
         name: longhorn
@@ -104,6 +104,12 @@ spec:
       # while freeing capacity above the architecture-doc target.
       storageMinimalAvailablePercentage: "15"
 
+      # Space each node's default disk reserves for non-Longhorn use, applied
+      # only when Longhorn creates that disk. Pinned to the upstream default the
+      # current disks were created with (30% of 829 GiB, ~249 GiB) so a rebuild
+      # reproduces them; the live value had drifted to 0 outside Git.
+      storageReservedPercentageForDefaultDisk: 30
+
       # Prefer placing one replica on the requesting node when possible — small
       # latency win for read-heavy stateful workloads on local NVMe.
       defaultDataLocality: best-effort
@@ -121,8 +127,9 @@ spec:
       # then drops the surplus, so numberOfReplicas is never undercut mid-move.
       replicaAutoBalance: best-effort
 
-    # Backup target is managed as a BackupTarget CR (backuptarget.yaml in
-    # this dir), not via defaultSettings — Longhorn 1.7+ moved backup-target
-    # out of the settings space and the chart's defaultSettings.backupTarget
-    # value is silently ignored on existing installs (it only populates the
-    # CR at the chart's first bootstrap, which has long passed for us).
+    # Backup target is managed as a BackupTarget CR
+    # (longhorn-config/app/backuptarget.yaml), not via defaultSettings —
+    # Longhorn 1.7+ moved backup-target out of the settings space and the
+    # chart's defaultSettings.backupTarget value is silently ignored on
+    # existing installs (it only populates the CR at the chart's first
+    # bootstrap, which has long passed for us).

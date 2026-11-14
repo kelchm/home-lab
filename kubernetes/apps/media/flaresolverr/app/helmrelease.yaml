@@ -1,6 +1,7 @@
 ---
 # Flaresolverr — Cloudflare/DDoS-Guard challenge bypass proxy. Cluster-internal
-# only; Prowlarr targets http://flaresolverr.media.svc.cluster.local:8191.
+# only; Prowlarr targets http://flaresolverr.media.svc.cluster.local:8191, and
+# networkpolicy.yaml admits only Prowlarr.
 apiVersion: helm.toolkit.fluxcd.io/v2
 kind: HelmRelease
 metadata:

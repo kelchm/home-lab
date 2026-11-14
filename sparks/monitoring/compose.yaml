@@ -1,4 +1,4 @@
-# Host and collector metrics, and the journal, for one Spark. Identical on every Spark: node
+# Host and collector metrics, the journal and inference logs, for one Spark. Identical on every Spark: node
 # identity comes from the host's ingestion token, not from this file.
 name: monitoring
 
@@ -50,7 +50,7 @@ services:
   # the host does.
   apt-metrics:
     <<: *service
-    image: docker.io/library/ubuntu:24.04@sha256:fe81560990fae86dc4743202b2cb4d3df98d0bcf949173cecef15ce1127ef852
+    image: docker.io/library/ubuntu:24.04@sha256:2198e4c65076e9cb0b3d695219df667c0e3b0072da64ca3c2648aca17dcecaf5
     # Root without capabilities, to write the root-owned textfile volume.
     user: "0:0"
     entrypoint: ["/bin/sh", "/usr/local/bin/apt-metrics"]
@@ -71,7 +71,7 @@ services:
   # by hand if this service is retired.
   apt-list-refresh:
     <<: *service
-    image: docker.io/library/ubuntu:24.04@sha256:fe81560990fae86dc4743202b2cb4d3df98d0bcf949173cecef15ce1127ef852
+    image: docker.io/library/ubuntu:24.04@sha256:2198e4c65076e9cb0b3d695219df667c0e3b0072da64ca3c2648aca17dcecaf5
     user: "0:0"
     restart: "no"
     labels:
@@ -83,7 +83,7 @@ services:
 
   vmagent:
     <<: *service
-    image: docker.io/victoriametrics/vmagent:v1.155.0@sha256:8e3c03905be15bba8312d4868e8ae6f9fc2fefee0a41d544472034249ca42bb4
+    image: docker.io/victoriametrics/vmagent:v1.156.0@sha256:d3229ab469c54ae5266e86246932266bad29b06668b5371acbd6d3de1b3035e7
     command:
       - -httpListenAddr=127.0.0.1:8429
       - -promscrape.config=/etc/vmagent/scrape.yaml
@@ -100,16 +100,19 @@ services:
     mem_limit: 256m
     stop_grace_period: 30s
 
-  # Sends this host's journal to VictoriaLogs; see logs/fluent-bit.yaml.
+  # Sends this host's journal and the inference server's output to VictoriaLogs; see
+  # logs/fluent-bit.yaml and inference-logs/inference.yaml.
   fluent-bit:
     <<: *service
-    image: docker.io/fluent/fluent-bit:5.1.5@sha256:2740f387f6e68fab66d28e4fa6a853387b9cab6ffb4cb78958f69bba4eb0e7b4
+    image: docker.io/fluent/fluent-bit:5.2.0@sha256:a48190bf67679495a332fd61025421a46e7e4d168380185a8e16da2e9acc3126
     # Root without capabilities, to read the root-owned journal and token.
     user: "0:0"
-    command: ["-c", "/fluent-bit/etc/fluent-bit.yaml"]
+    command: ["-c", "/fluent-bit/etc/inference.yaml"]
     volumes:
       - ./logs/fluent-bit.yaml:/fluent-bit/etc/fluent-bit.yaml:ro
       - ./logs/host.lua:/fluent-bit/etc/host.lua:ro
+      - ./inference-logs/inference.yaml:/fluent-bit/etc/inference.yaml:ro
+      - ./inference-logs/inference.lua:/fluent-bit/etc/inference.lua:ro
       - /var/log/journal:/var/log/journal:ro
       - /run/log/journal:/run/log/journal:ro
       - /etc/machine-id:/etc/machine-id:ro

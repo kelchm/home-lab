@@ -23,7 +23,8 @@ tasks:
     cmds:
       - task: generate-config
       - yq '"Requested Talos " + .talosVersion + " and Kubernetes " + .kubernetesVersion' talenv.yaml
-      - talhelper gencommand apply --node {{.IP}} --extra-flags '--mode={{.MODE}} --dry-run' | bash
+      - >-
+        {{.ROOT_DIR}}/scripts/talos/run-gencommand.sh apply --node {{.IP}} --extra-flags '--mode={{.MODE}} --dry-run'
       - task: apply-node-confirmed
         vars:
           IP: '{{.IP}}'
@@ -39,7 +40,8 @@ tasks:
     internal: true
     dir: '{{.TALOS_DIR}}'
     prompt: Apply the configuration shown above to {{.IP}} with --mode={{.MODE}}?
-    cmd: talhelper gencommand apply --node {{.IP}} --extra-flags '--mode={{.MODE}}' | bash
+    cmd: >-
+      {{.ROOT_DIR}}/scripts/talos/run-gencommand.sh apply --node {{.IP}} --extra-flags '--mode={{.MODE}}'
     requires:
       vars: [IP, MODE]
 
@@ -53,7 +55,7 @@ tasks:
       # shutdown handoff. powercycle bypasses kexec and must remain explicit.
       - >-
         {{.ROOT_DIR}}/.agents/skills/talos-rollout/scripts/with-node-client.sh {{.IP}}
-        bash -euo pipefail -c 'talhelper gencommand upgrade --node {{.IP}} --extra-flags "--endpoints={{.IP}} --drain-timeout=15m --timeout=20m --reboot-mode=powercycle" | bash'
+        {{.ROOT_DIR}}/scripts/talos/run-gencommand.sh upgrade --node {{.IP}} --extra-flags "--endpoints={{.IP}} --drain-timeout=15m --timeout=20m --reboot-mode=powercycle"
     requires:
       vars: [IP]
     preconditions:
@@ -62,7 +64,8 @@ tasks:
   upgrade-k8s:
     desc: Upgrade Kubernetes
     dir: '{{.TALOS_DIR}}'
-    cmd: talhelper gencommand upgrade-k8s --extra-flags "--to '{{.KUBERNETES_VERSION}}'" | bash
+    cmd: >-
+      {{.ROOT_DIR}}/scripts/talos/run-gencommand.sh upgrade-k8s --extra-flags "--to '{{.KUBERNETES_VERSION}}'"
     vars:
       KUBERNETES_VERSION:
         sh: yq '.kubernetesVersion' {{.TALOS_DIR}}/talenv.yaml
@@ -75,6 +78,7 @@ tasks:
     desc: Resets nodes back to maintenance mode
     dir: '{{.TALOS_DIR}}'
     prompt: This will destroy your cluster and reset the nodes back to maintenance mode... continue?
-    cmd: talhelper gencommand reset --extra-flags="--reboot {{- if eq .CLI_FORCE false }} --system-labels-to-wipe STATE --system-labels-to-wipe EPHEMERAL{{ end }} --graceful=false --wait=false" | bash
+    cmd: >-
+      {{.ROOT_DIR}}/scripts/talos/run-gencommand.sh reset --extra-flags="--reboot {{- if eq .CLI_FORCE false }} --system-labels-to-wipe STATE --system-labels-to-wipe EPHEMERAL{{ end }} --graceful=false --wait=false"
     preconditions:
       - which talhelper

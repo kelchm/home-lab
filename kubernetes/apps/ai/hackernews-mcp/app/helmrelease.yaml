@@ -20,7 +20,7 @@ spec:
           app:
             image:
               repository: ghcr.io/cyanheads/hn-mcp-server
-              tag: 0.6.0@sha256:27768c8da748314e22fef634236a9cea016e66f6dcc46c223d49c248b79538b1
+              tag: 0.7.0@sha256:d899b129fdb5bb9d57c79f4daa7dcdf9297c54dc05f0fe7e4d7e6b6a933bdbeb
             env:
               NODE_ENV: production
               MCP_TRANSPORT_TYPE: http

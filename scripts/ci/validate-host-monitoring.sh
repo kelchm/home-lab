@@ -128,7 +128,6 @@ fi
 if ! diff -r -q "${ROOT_DIR}/proxmox/monitoring/logs" "${ROOT_DIR}/sparks/monitoring/logs" >/dev/null; then
     violation "proxmox/monitoring/logs and sparks/monitoring/logs must be identical"
 fi
-
 if ! diff -r -q "${ROOT_DIR}/proxmox/monitoring/logs" "${ROOT_DIR}/synology/monitoring/logs" >/dev/null; then
     violation "proxmox/monitoring/logs and synology/monitoring/logs must be identical"
 fi

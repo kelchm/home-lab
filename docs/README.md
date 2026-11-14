@@ -34,19 +34,23 @@ or fixing.
 | [logging](runbooks/logging.md) | Querying Kubernetes, Talos node and UniFi console logs, rolling out Talos log delivery, the UniFi log alerts, and diagnosing the Fluent Bit-to-VictoriaLogs ingestion path. |
 | [local-ntp](runbooks/local-ntp.md) | Connecting Talos and DHCP clients to the UPS Pi time servers, the current UniFi change, client acceptance and rollback. |
 | [longhorn-backup-restore](runbooks/longhorn-backup-restore.md) | Restoring a PV from a Longhorn backup; DR drills. |
+| [longhorn-engine-upgrades](runbooks/longhorn-engine-upgrades.md) | Consolidating V1 engines with a recovery-tested canary and one-volume-at-a-time checks. |
 | [cnpg-backup-restore](runbooks/cnpg-backup-restore.md) | CloudNativePG WAL archiving and base backups to the NAS S3 endpoint: alerts, the emergency archiver switch, and the three restore paths. |
 | [longhorn-storage-network-cutover](runbooks/longhorn-storage-network-cutover.md) | Moving Longhorn replica traffic onto the dedicated storage VLAN. |
 | [longhorn-storage-boundary](runbooks/longhorn-storage-boundary.md) | Preparing and, after a separate decision, running the eight bounded tenant-to-Longhorn storage-network attempts for #226. |
-| [kanidm-restore](runbooks/kanidm-restore.md) | Recovering Kanidm from DB corruption or PVC loss. |
+| [kanidm-restore](runbooks/kanidm-restore.md) | Restoring the three-replica Kanidm cluster from a backup or after losing claims. |
 | [kanidm-kaniop-cutover](runbooks/kanidm-kaniop-cutover.md) | Migrating Kanidm from the hand-rolled StatefulSet to the kaniop operator. |
 | [kanidm-oauth2-client-drift](runbooks/kanidm-oauth2-client-drift.md) | Recovering a KanidmOAuth2Client when its K8s secret drifts. |
+| [kanidm-person-accounts](runbooks/kanidm-person-accounts.md) | Adding a person and setting their first credentials without a reset link in Events. |
 | [arr-suite-bootstrap](runbooks/arr-suite-bootstrap.md) | The *arr suite's NAS identity, ACL layout, and NFS export — current state. |
 | [seerr-bootstrap](runbooks/seerr-bootstrap.md) | Wiring Seerr to Jellyfin/Radarr/Sonarr, household request policy, and break-glass admin (the non-GitOps UI steps). |
 | [multus-conf-absent-recovery](runbooks/multus-conf-absent-recovery.md) | Recovering pods stuck on an absent Multus network config. |
 | [multus-fail-closed-cutover](runbooks/multus-fail-closed-cutover.md) | Moving Cilium's conflist out of containerd's live CNI directory so Multus is the only publisher. |
 | [metamcp-bootstrap](runbooks/metamcp-bootstrap.md) | Retirement notice and pointer to the current MCPHub gateway. |
 | [ai-mcp-reliability-and-containment](runbooks/ai-mcp-reliability-and-containment.md) | Post-deploy checks for MCPHub/backend connectivity and Grafana MCP functional monitoring. |
+| [scrobl](runbooks/scrobl.md) | Accepting and observing the nightly Last.fm sync, keeping one writer, and managing its intentionally unbacked database. |
 | [bambuddy-bootstrap](runbooks/bambuddy-bootstrap.md) | Bringing up Bambuddy, validating printer containment and OIDC, and exercising backup recovery. |
+| [dawarich](runbooks/dawarich.md) | Dawarich location history: first-start admin, database backup activation, Google Timeline import and privacy notes. |
 | [trmnl-trials](runbooks/trmnl-trials.md) | Opening, comparing, validating and retiring the isolated TRMNL server trials. |
 | [visionect-migration](runbooks/visionect-migration.md) | Staging, cutting over, validating, and rolling back the Synology-to-k8s Visionect migration. |
 | [host-monitoring](runbooks/host-monitoring.md) | Enrolling, verifying, and removing PVE and DGX Spark hosts in metrics collection; the Proxmox API exporter. |

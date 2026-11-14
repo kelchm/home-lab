@@ -28,8 +28,8 @@ spec:
           labels:
             severity: critical
           annotations:
-            summary: AI/MCP functional probe is failing
-            description: The latest Grafana functional probe failed or no successful initialize/list_datasources/delete cycle has completed in the last 10 minutes.
+            summary: MCPHub homelab-read check is failing
+            description: The five-minute gateway check failed or has no success in ten minutes. Check the grafana-mcp-functional-probe Job logs, its bearer key, the admin gateway route and MCPHub's Grafana backend.
 
         # last_successful_time does not exist until the first success and can
         # disappear if the CronJob or kube-state-metrics coverage is lost. Give
@@ -40,5 +40,5 @@ spec:
           labels:
             severity: warning
           annotations:
-            summary: AI/MCP functional probe has no success metric
-            description: The scheduled Grafana functional probe has not produced a success metric for 12 minutes.
+            summary: MCPHub homelab-read check has no success metric
+            description: No gateway check success metric has appeared for twelve minutes. Check the grafana-mcp-functional-probe CronJob, its Secret and kube-state-metrics coverage.

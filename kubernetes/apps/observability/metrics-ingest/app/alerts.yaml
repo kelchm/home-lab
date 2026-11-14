@@ -12,9 +12,12 @@ spec:
     - name: hosts
       rules:
         # A node is enrolled once it has reported; one that falls silent keeps
-        # alerting for a week, after which it counts as retired.
+        # alerting for a week, after which it counts as retired. A node retired on
+        # purpose is left out by instance until its last sample is a week old.
+        # adsb-office: the Pi 3 ADS-B receiver, retired 2026-11-14; drop it from
+        # the list after 2026-11-21.
         - alert: NodeMetricsMissing
-          expr: time() - tlast_over_time(up{job=~"(pve|spark|synology|pi)-node"}[7d]) > 600
+          expr: time() - tlast_over_time(up{job=~"(pve|spark|synology|pi)-node", instance!~"adsb-office"}[7d]) > 600
           labels:
             severity: warning
           annotations:
@@ -183,18 +186,29 @@ spec:
             summary: "{{ $labels.instance }} is running undervolted"
             description: 'The Pi firmware on {{ $labels.instance }} has reported undervoltage for 15 minutes. An undervolted Pi throttles its CPU. Check the power supply and its cable: a long or thin USB cable drops voltage.'
 
-        # Read over the window rather than held with for:, so an evaluator restart doesn't reset the wait.
-        - alert: NodeSecurityUpdatesPending
+        # New security updates soak for two weeks before they are installed. The first to arrive on an up-to-date host
+        # notifies once, so the soak starts known; nothing more notifies until it ends. Both rules read over a window
+        # rather than holding with for:, so an evaluator restart doesn't reset the wait.
+        - alert: NodeSecurityUpdatesAvailable
           expr: |
             apt_security_upgrades_pending{job=~"(pve|spark)-node"} > 0
-            and min_over_time(apt_security_upgrades_pending{job=~"(pve|spark)-node"}[3d]) > 0
-            and apt_security_upgrades_pending{job=~"(pve|spark)-node"} offset 3d > 0
+            and min_over_time(apt_security_upgrades_pending{job=~"(pve|spark)-node"}[6h]) == 0
           labels:
-            # New updates soak for a couple of weeks before they are installed.
-            severity: info
+            severity: warning
           annotations:
-            summary: "{{ $labels.instance }} has had security updates waiting for three days"
-            description: 'Packages from a security archive have had upgrades available on {{ $labels.instance }} for three days; {{ $value }} are waiting now. Install them, then reboot the host if they need it.'
+            summary: "{{ $labels.instance }} has security updates to install"
+            description: '{{ $value }} packages from a security archive have upgrades available on {{ $labels.instance }}, which had none waiting. They soak for two weeks; NodeSecurityUpdatesOverdue notifies if they are still waiting then. Install them sooner if one fixes a vulnerability being exploited.'
+
+        - alert: NodeSecurityUpdatesOverdue
+          expr: |
+            apt_security_upgrades_pending{job=~"(pve|spark)-node"} > 0
+            and min_over_time(apt_security_upgrades_pending{job=~"(pve|spark)-node"}[14d]) > 0
+            and apt_security_upgrades_pending{job=~"(pve|spark)-node"} offset 14d > 0
+          labels:
+            severity: warning
+          annotations:
+            summary: "{{ $labels.instance }} has had security updates waiting for two weeks"
+            description: 'Packages from a security archive have had upgrades available on {{ $labels.instance }} for two weeks without a break, the end of the soak; {{ $value }} are waiting now. Install them, then reboot the host if they need it. If one cannot be installed yet, hold it and record why, as the host-monitoring runbook describes.'
 
         - alert: NodePackageListsStale
           expr: time() - apt_package_lists_refreshed_timestamp_seconds{job=~"(pve|spark)-node"} > 2 * 86400
@@ -242,10 +256,14 @@ spec:
 
         # Three minutes of unbroken decoding with no new token. The window sits in the
         # expression, not in `for`, so a stream that has only just started does not count.
-        # A long prefill holds no stream in the decoding state.
+        # The window skips steps where the series is missing, so all 12 steps must be there:
+        # a new or restarted engine is not judged on its first seconds, nor on samples from
+        # before a restart. A long prefill holds no stream in the decoding state.
         - alert: InferenceEngineStalled
           expr: |
             min_over_time((sum by (instance, platform, model) (tensorfold_health:streams{job="spark-inference", state="decoding"}))[3m:15s]) > 0
+            and
+            count_over_time((sum by (instance, platform, model) (tensorfold_health:streams{job="spark-inference", state="decoding"}))[3m:15s]) >= 12
             and
             sum by (instance, platform, model) (increase(tensorfold_health:completion_tokens_total{job="spark-inference"}[3m])) == 0
           labels:

@@ -13,7 +13,7 @@ State as of 2026-10-05: running on Athena. The first snapshot (90.6 GB, 81,844 f
 | Lock | Compliance mode, 30 days, renewed by daily full maintenance while data is still referenced |
 | Bucket lifecycle | Hidden and superseded versions are removed 30 days later, once unlocked |
 | Snapshots kept | 14 daily, 4 weekly, 3 latest (repository global policy) |
-| Schedule | 10:00 UTC daily: start ping, snapshot every directory under `/sources`, full maintenance, then a ping with the exit status |
+| Schedule | 10:00 UTC daily: start ping, source checks, snapshot every directory under `/sources`, full maintenance, then a ping with the exit status |
 | Dead-man check | healthchecks.io `athena-offsite-backup`, cron `0 10 * * *` UTC, 3 hours grace, Pushover and email |
 | Runtime state | `/volume1/docker/offsite-backup/{cache,logs}`; disposable |
 
@@ -26,7 +26,9 @@ Sources:
 
 As of 2026-10-29 UTC, `/sources/object-storage` is mounted read-only and both live databases have accepted base backups and advancing WAL on Athena. No completed Kopia snapshot of this new source was observed at database sign-off; the subsequent normal run completed at 10:32:48 UTC with both accepted base archives and selected WAL objects verified in its immutable catalog. The [dated database runbook record](../../docs/runbooks/cnpg-backup-restore.md#first-normal-object-storage-snapshot-2026-10-29) identifies the snapshot and limits: payload readability, complete required WAL continuity and a CNPG restore from B2 remain unverified.
 
-To add a source, mount another share read-only under `/sources/`. It is picked up on the next run.
+Before each scheduled snapshot, the job requires at least one nonempty regular `backupstore/volumes/*/*/*/volume.cfg` file in the Longhorn source and one `base/*/backup.info` file in each expected CloudNativePG archive: `k8s-prod-visionect-db/visionect-db-pg17`, `k8s-prod-bambuddy-db/bambuddy-db-pg18`, and `k8s-prod-dawarich-db/dawarich-db-pg17` under the object store's `data/`. Missing or empty markers log the affected archive, skip both snapshot and maintenance, and send a failure ping; the container waits for the next daily run. These checks detect missing or emptied archives, not backup integrity or freshness.
+
+To add a source, mount another share read-only under `/sources/` and add a representative nonempty archive marker to `check_sources` in `compose.yaml`. Update that check when adding, retiring or renaming a database archive. Every mounted source is still picked up on the next successful run.
 
 Every source shares this one repository, and with it one lock period, one password and one key. Data that needs a different lock period or its own password gets a second repository under its own prefix; repositories do not deduplicate against each other. The lock period for new uploads can be changed with `kopia repository set-parameters --retention-period`, but a lock already applied to an object can only be extended.
 
@@ -114,8 +116,8 @@ A first attempt through a second Longhorn backup target on `k8s-prod` restored f
 
 | | |
 |---|---|
-| Data age (RPO) | At worst, 27 hours plus the duration of the run in progress, when runs succeed. Longhorn backs up at 07:00 UTC and this job starts at 10:00 UTC, so when a run starts the newest off-site backup is already 27 hours old, and it stays the newest until that run completes. The first run took 7h25m; an ordinary daily run uploads only what changed and has not been timed yet. Each failed or unfinished run adds a day; the dead-man check reports those |
-| Time to restore (RTO) | Not measured for the full store. One 70 MB volume directory took 17 seconds; 90 GB depends on the downlink |
+| Data age (RPO) | At worst, 27 hours plus the duration of the run in progress, when runs succeed. Longhorn backs up at 07:00 UTC and this job starts at 10:00 UTC, so when a run starts the newest off-site backup is already 27 hours old, and it stays the newest until that run completes. The first run took 7h25m. Daily runs from 2026-10-31 to 11-07 snapshotted `/sources/longhorn` in 6m24s–14m35s and `/sources/object-storage` in 1m24s–33m01s, measured from the container log. The worst observed age of off-site Longhorn data was therefore about 27h15m, and of database WAL about 24h40m; see [measured data age](../../docs/runbooks/longhorn-backup-restore.md#measured-data-age-2026-11-08). Each failed or unfinished run adds a day; the dead-man check reports those |
+| Time to restore (RTO) | Not measured for the full store. On 2026-11-08 the 2026-11-07 snapshot of `/sources/longhorn` held 112.7 GB in 34 volume directories. VictoriaMetrics (55.2 GB), Jellyfin (27.2 GB) and VictoriaLogs (9.2 GB) account for 91.6 GB; every other volume totals 21.2 GB. One 1.13 GB volume directory (`visionect-db-1`) restored to a workstation in 135 seconds, about 8.4 MB/s with Kopia 0.23.1 at parallelism 8. At that rate the full store takes about 3.7 hours and the store without those three volumes about 42 minutes. These are estimates from one sample; higher parallelism was not tried ([#224](https://github.com/kelchm/home-lab/issues/224#issuecomment-6715151256)). Earlier, one 70 MB volume directory took 17 seconds |
 | History | 14 daily and 4 weekly snapshots of the store, each holding Longhorn's own 7 daily and 4 weekly backups |
 | Drill cadence | None fixed. Repeat the drill above after changing the Kopia version, the repository layout or the provider |
 

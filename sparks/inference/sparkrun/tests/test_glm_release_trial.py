@@ -17,7 +17,7 @@ import yaml
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / 'plugins'))
-from tensorfold import TensorFoldRuntime, hf_snapshot_path, _FABRIC_MASTER
+from tensorfold import SERVE_OUTPUT, TensorFoldRuntime, hf_snapshot_path, _FABRIC_MASTER
 from sparkrun.core.recipe import Recipe
 from sparkrun.core.validation import ERROR
 from sparkrun.orchestration.executors.docker import DockerExecutor
@@ -98,7 +98,10 @@ def test_missing_or_ambiguous_startup_receipts_fail(log):
 
 
 def parse(command):
+    output, _, command = command.partition('\n')
+    assert output == SERVE_OUTPUT
     tokens = shlex.split(command)
+    assert tokens[0] == 'env'
     env = {}
     for token in tokens[1:]:
         if '=' not in token or token.startswith('/'):

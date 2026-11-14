@@ -45,6 +45,12 @@ kustomize-controller runs with `GroupChangeLog`, so its applied-object log lists
 
 To give a workload a better service name than its labels produce, set `resource.opentelemetry.io/service.name` on its pod template.
 
+### Query-string redaction
+
+Clients that authenticate with a query parameter put the credential in the request path: SABnzbd's `apikey`, the *arr SignalR `access_token`, Jellyfin's `ApiKey`, Bambuddy's `token`, and the OAuth `code` and `state` on `/oidc/callback` and similar sign-in callbacks. `normalize.lua` replaces the value of each parameter in its `SECRET_PARAMS` list with `REDACTED` in Traefik's `RequestPath` before the message and `url.query` are built, and in the raw line of a record that fails mapping. Names match case-insensitively and whole, so `codeMode` and `limit` stay; an empty value stays empty. `events.lua` applies the same list to [Kubernetes event](#event-fields) messages, which covers kaniop's credential reset link (`/ui/reset?token=`). Add a parameter to both lists, with a fixture, when a new client sends one. Application log lines are not redacted: an application that logs its own request URLs keeps them.
+
+Rows stored before the redaction was deployed age out with VictoriaLogs' 30-day retention.
+
 Record time is the container runtime's timestamp for the line. Application timestamp fields stay application fields, except on Traefik access lines: `time` (the record time, to the second) and `StartLocal` (a copy of `StartUTC`) are dropped. Integers above 2^53 lose precision in Fluent Bit's Lua filter, which converts every number to a double.
 
 Levels come from structured fields (JSON, logfmt, PostgreSQL's `record.error_severity`), klog's leading letter, or a level token at a fixed position in known plain-text formats. Words elsewhere in a line never set severity; an unknown level is stored as unspecified rather than guessed. Terminal colour codes are removed before parsing, and blank lines are dropped. Each line is one record, so continuation lines (Python tracebacks, mcphub's multi-line JSON) are the main unspecified source; read a whole event with **Show context**. The [evaluation](../evaluations/log-schema-and-collector.md#multi-line-events) records why lines are not grouped at collection.
@@ -94,7 +100,7 @@ The `unifi_syslog` parser in [parsers.conf](../../kubernetes/apps/observability/
 
 Plain syslog from the gateway and adopted devices carries no `cef.*` fields, so the CEF stream filters and alerts never match it. Its severity is what the firmware states: access points log routine Wi-Fi driver messages such as `kernel: … recv auth frame …` at `err`, and switches log DHCP snooping counters at `debug`.
 
-Event classes. "Seen" means stored from this console between October 18 and 19, 2026; the others come from Ubiquiti's examples and published captures of Network 9.3–10.6.
+Event classes. "Seen" means stored from this console between October 18 and 19, 2026, or on the date given; the others come from Ubiquiti's examples and published captures of Network 9.3–10.6.
 
 | Class | Name | Seen | Notes |
 | --- | --- | --- | --- |
@@ -102,11 +108,13 @@ Event classes. "Seen" means stored from this console between October 18 and 19, 
 | 101 | Multiple Internet Disconnections | yes | UniFi's own summary when a WAN has dropped more than once in 24 hours; each drop also arrives as 100. |
 | 107 | Internet Restored | yes | `UNIFIreportedDuration` gives the outage length. Published captures report short drops as restored "after a temporary disconnection" in `msg`; this console has not. |
 | 112, 113 | High Latency Detected, Packet Loss Detected | yes | `UNIFIwanLatency` on 112 |
-| 200 | Threat Detected | yes | `src`, `dst`, `UNIFIipsSignature`, `UNIFIipsSignatureId`, `UNIFIrisk`. IPS runs detect-only, so 201 (Threat Detected and Blocked) is not expected. |
+| 200 | Threat Detected | yes | `src`, `dst`, `UNIFIipsSignature`, `UNIFIipsSignatureId`, `UNIFIrisk`, and `UNIFIdirection` (`local`, `incoming` or `outgoing`). Since Network 10.6.109 an `outgoing` detection, on traffic through a WAN, has no `src` or `dst`: only the client as `UNIFIsrcClientAlias` and `UNIFIsrcClientMac`, and the WAN as `deviceOutboundInterface`. IPS runs detect-only, so 201 (Threat Detected and Blocked) is not expected. |
 | 202 | Honeypot Triggered | yes | The client as `UNIFIclientAlias`, `UNIFIclientHostname` and `UNIFIclientMac`; no `src` address. |
+| 203 | Blocked by Firewall | Nov 11, 2026 | `UNIFIpolicyName`, the client and `dst`. Sent only for policies that report flows (`report_flow` in the policy API): custom policies and the predefined Isolated Networks rules, not the predefined Block All Traffic rules. A policy's `logging` setting controls the separate kernel `DESCR=` lines instead. |
 | 400–404 | Wi-Fi and wired client connected, disconnected and roamed | yes | `UNIFIclientAlias`, `UNIFIclientIp`, `UNIFIclientMac` |
 | 510 | Device Updated | yes | `UNIFIdeviceName`, `UNIFIdeviceVersion`, `UNIFIdevicePriorVersion` |
 | 512, 513 | Device Offline, Device Reconnected | no | `UNIFIdeviceName` |
+| 542, 543 | Policy-Based Routing Started, Stopped | Nov 11, 2026 | Network 11 and later. One per client each time a policy-based route moves it, about 25 an hour here from the Starlink routes. |
 | 544–549 | Admin access and configuration changes | 544–546, 549 | `UNIFIadmin`, `UNIFIaccessMethod` |
 
 ### Example queries
@@ -117,7 +125,7 @@ Event classes. "Seen" means stored from this console between October 18 and 19, 
 - One access point's client events: `service.name:=BasementAP _msg:~"stahtd|hostapd"`
 - Events by class: `{cef.device_product="UniFi Network"} | stats by (cef.device_event_class_id, cef.name) count()`
 - WAN events: `{cef.device_product="UniFi Network"} cef.extension.UNIFIcategory:="Internet and WAN" | fields _time, cef.name, cef.extension.UNIFIwanName, _msg`
-- IDS detections by pair: `{cef.device_product="UniFi Network", cef.device_event_class_id=~"200|201"} | stats by (cef.extension.src, cef.extension.dst, cef.extension.UNIFIipsSignature) count()`
+- IDS detections by pair: `{cef.device_product="UniFi Network", cef.device_event_class_id=~"200|201"} | stats by (cef.extension.UNIFIdirection, cef.extension.UNIFIsrcClientAlias, cef.extension.src, cef.extension.dst, cef.extension.UNIFIipsSignature) count()`
 - One client's connections: `{cef.device_product="UniFi Network"} cef.extension.UNIFIclientAlias:="Hyperion" | fields _time, cef.name, _msg`
 - Devices going offline: `{cef.device_product="UniFi Network", cef.device_event_class_id="512"}`
 - Admin activity: `cef.extension.UNIFIadmin:* OR cef.extension.UNIFIcategory:=Audit OR {cef.device_product="UniFi OS"}` (Network 10.x files admin events under `Audit`; 9.3 used `System` with `UNIFIsubCategory=Admin`)
@@ -134,16 +142,18 @@ The console's own system log for the 30 days to October 18, 2026 held 7,439 even
 
 ### Alerts
 
-`vmalert-victoria-logs` evaluates the LogsQL rules in [unifi-alerts.yaml](../../kubernetes/apps/observability/victoria-logs-single/app/unifi-alerts.yaml) every minute and sends them through VMAlertmanager like any other `evaluator=vmalert` alert ([alerting runbook](alerting.md)). Each expression sets its own `_time` window, so one event keeps its alert firing for that long and then it resolves. The metrics vmalert never loads these rules, and a broken expression raises `AlertingRulesError` from the chart's vmalert rules.
+`vmalert-victoria-logs` evaluates the LogsQL rules in [unifi-alerts.yaml](../../kubernetes/apps/observability/victoria-logs-single/app/unifi-alerts.yaml) every minute and sends them through VMAlertmanager like any other `evaluator=vmalert` alert ([alerting runbook](alerting.md)), and records them in `ALERTS` in VictoriaMetrics. Each expression sets its own `_time` window, so one event keeps its alert firing for that long and then it resolves. The metrics vmalert never loads these rules, and a broken expression raises `AlertingRulesError` from the chart's vmalert rules.
 
 | Alert | Fires when | Severity |
 | --- | --- | --- |
 | `UniFiWANFlapping` | Three or more Internet Down, temporary-disconnection or failover events for one WAN within an hour. `UniFiWANDown` already pages a WAN down for 5 minutes; this catches shorter repeated drops. | warning |
-| `UniFiIntrusionDetectedOutbound` | An IDS detection, in the last 15 minutes, whose destination is outside private, CGNAT, link-local and multicast space. Lab-internal detections are queryable but do not page, because the baseline is dominated by operator traffic. | warning |
+| `UniFiIntrusionDetectedOutbound` | An IDS detection, in the last 15 minutes, marked `outgoing` or whose destination is outside private, CGNAT, link-local and multicast space, by client, destination and signature. An `outgoing` detection names no remote address, so the alert says so. Flows from the client around that time on the UniFi / Flows dashboard are candidates, not a match: a busy client has several, and a connection still open has no row yet. Lab-internal detections are queryable but do not page, because the baseline is dominated by operator traffic. CINS and Dshield groups are reputation lists that ET regenerates daily, so a signature ID names a different set of addresses each day; do not exclude one to silence a single benign host. | warning |
 | `UniFiHoneypotTriggered` | Any honeypot event (class 202) in the last 15 minutes, by client alias and MAC address. The honeypot listens at `10.32.1.2` on the Default network. | warning |
 | `UniFiSyslogIngestionSilent` | For an hour, Fluent Bit's `fluentbit_input_records_total{name="unifi"}`, summed over nodes, shows no datagrams in the last two days, or the input is missing. It is a MetricsQL rule in the `fluent-bit-pipeline` group, so it does not depend on the log store, and is sized above the 29-hour baseline gap. Gateway daemon and device syslog count too, so it catches a dead listener path or a disabled export rather than a quiet CEF stream. | warning |
 
-CI evaluates each rule against fixtures, including internal and multicast detections that must stay quiet; see [Log alerts](#log-alerts). Checked against this console's records on October 19, 2026: Internet Down (100) and Threat Detected (200) arrive with the class IDs the rules select, and every detection carried `dst`. The temporary-disconnection text that `UniFiWANFlapping` also matches has not appeared, in Internet Restored (107) or elsewhere; the rule still counts every drop through class 100. Honeypot contact from the operator Mac produced class 202 with the client but no `src`, and `UniFiHoneypotTriggered` reached Pushover. A synthetic event sent to the syslog input earlier that day (`service.name=delivery-test`, `src=192.0.2.250`) also reached Pushover and resolved, with no failed notifications. To silence a benign signature, exclude its `cef.extension.UNIFIipsSignatureId` in the rule rather than adding an Alertmanager silence.
+CI evaluates each rule against fixtures, including internal and multicast detections that must stay quiet; see [Log alerts](#log-alerts). Checked against this console's records on October 19, 2026: Internet Down (100) and Threat Detected (200) arrive with the class IDs the rules select, and every detection carried `dst`. The temporary-disconnection text that `UniFiWANFlapping` also matches has not appeared, in Internet Restored (107) or elsewhere; the rule still counts every drop through class 100. Honeypot contact from the operator Mac produced class 202 with the client but no `src`, and `UniFiHoneypotTriggered` reached Pushover. A synthetic event sent to the syslog input earlier that day (`service.name=delivery-test`, `src=192.0.2.250`) also reached Pushover and resolved, with no failed notifications. To silence a benign behavioural signature, exclude its `cef.extension.UNIFIipsSignatureId` in the rule rather than adding an Alertmanager silence; this does not apply to the CINS and Dshield reputation groups, whose addresses change daily.
+
+Rechecked on November 11, 2026, after the console moved from Network 10.6.109 to 11.0.99. Class IDs and the fields the rules read were unchanged, but the rule had missed every outbound detection since 10.6.109: all 17 were `outgoing` with no `dst`. Fourteen were `ET DROP Dshield Block Listed Source group 1` on October 27 and 28, thirteen of them TCP replies from port 443 to one MacBook. Three were `ET CINS Active Threat Intelligence Poor Reputation IP group 155` on November 11, which unifi-flows matched to Macs exchanging UDP with Cloudflare `104.29.x.x` addresses that iCloud Private Relay uses. The current rule matches all 17. A test block from `k8s-prod-1` to `10.32.21.31` reached VictoriaLogs as class 203 naming `K8s Prod to Workloads`, and as a blocked unifi-flows row with the same policy.
 
 ### Cutover from direct ingestion
 
@@ -155,7 +165,7 @@ Rows from direct ingestion keep that schema until retention removes them, about 
 
 [`unifi-flows`](../../kubernetes/apps/observability/unifi-flows/app/) copies the console's Flow View rows into VictoriaLogs, which holds them for the normal retention. The console itself keeps about 480,000 rows, roughly 27 hours here, and each query stops at 10,000. Manual CSV export is available; the Integration API has no documented flow endpoint, syslog carries no flow records, and enabling NetFlow disables Hardware Acceleration, so this reads the private endpoint the Flow View uses. [Dashboard: UniFi / Flows](https://grafana.home.kelch.io/d/unifi-flows).
 
-Every five minutes a stdlib Python Deployment, in the stock image, reads fixed time windows of at most 10 minutes as the View Only `unpoller-sa` account, then posts rows to VictoriaLogs' JSON lines endpoint. The watermark moves only when a window was read in full and VictoriaLogs accepted it. Each read goes back two minutes for flows that appear late, and rows already sent are skipped by `flow.id`. The watermark is stored as a `record.type=checkpoint` row, so a restart needs no volume and resumes from the latest visible checkpoint. Arrivals outside the overlap can be missed; row ID stability and completed-row immutability require live acceptance.
+Every five minutes a stdlib Python Deployment, in the stock image, reads fixed time windows of at most 10 minutes as the View Only `unpoller-sa` account, then posts rows to VictoriaLogs' JSON lines endpoint. The watermark moves only when a window was read in full and VictoriaLogs accepted it. Each read goes back two minutes for flows that appear late, and rows already sent are skipped by `flow.id`. The watermark is stored as a `record.type=checkpoint` row, so a restart needs no volume and resumes from the latest visible checkpoint. Arrivals outside the overlap can be missed. Sent IDs are held only in memory, so a running collector does not store a later revision of a row it already sent, but a restart can store a revised copy under the same `flow.id`; see the accepted result under **Coverage acceptance**.
 
 | Field | Content |
 | --- | --- |
@@ -171,9 +181,9 @@ Use `count_uniq(flow.id)` rather than `count()`: delivery is at-least-once, and 
 - Cross-network pairs: `{service.name="unifi-flows",record.type="flow"} flow.scope:=inter_network | stats by (source.network, destination.network) count_uniq(flow.id) as flows`
 - Coverage gaps: `{service.name="unifi-flows",record.type="gap"} | fields _time, gap.start, gap.end, gap.reason`
 
-**What it cannot show.** Rows are completed sessions, so a long-lived connection appears only when it ends, and an absent flow is not evidence that nothing depends on it. Traffic within a network never reaches the gateway. Every row so far reports `CONNTRACK`, blocked ones included, rather than the matching rule. Blocked rows are rare and no row has an external source, so this does not show what the firewall refuses; [UniFi leaves block logging off by default on a UDM Pro](https://help.ui.com/hc/en-us/articles/32201256219799-Traffic-Flows-and-Traffic-Logging-in-UniFi-Network). No row so far has an IPv6 address. A row is proof that a flow happened, not that a policy would permit it again.
+**What it cannot show.** Rows are completed sessions, so a long-lived connection appears only when it ends, and an absent flow is not evidence that nothing depends on it. Traffic within a network never reaches the gateway. Before Network 11 allowed rows reported `CONNTRACK` rather than the matching rule; since 11.0.99 they name it, such as `Allow All Traffic`, unless connection tracking matched them. Blocked rows name the blocking policy, such as `K8s Prod to Workloads`, or `CONNTRACK` for a packet dropped as invalid. Blocked rows are rare, so this does not show what the firewall refuses; [UniFi leaves block logging off by default on a UDM Pro](https://help.ui.com/hc/en-us/articles/32201256219799-Traffic-Flows-and-Traffic-Logging-in-UniFi-Network). No row so far has an IPv6 address. A row is proof that a flow happened, not that a policy would permit it again.
 
-**The private API.** A Network update can change it, and the collector has not been tested on Network 11. That version adds firewall policy names for Allow actions in Traffic Flows, so recheck `flow.policies` after upgrading. It does not guess: a response that does not add up ends the cycle as `incomplete`, holds the watermark and names the reason in `unifi_flows_incomplete_windows_total`. Check that metric after any Network update.
+**The private API.** A Network update can change it. The upgrade to 11.0.99 on November 11, 2026 kept it working: cycles failed while the console restarted, the watermark held, one catch-up window ended `incomplete` (`changing_total`) and was reread, and no gap was recorded. That version adds firewall policy names to the rows; the collector stores them, sorted and comma-separated, in `flow.policies`, which no alert or dashboard reads. It does not guess: a response that does not add up ends the cycle as `incomplete`, holds the watermark and names the reason in `unifi_flows_incomplete_windows_total`. Check that metric after any Network update.
 
 **Reading the result.** The dashboard's **Last cycle** panel and `unifi_flows_last_cycle_result` give the latest outcome:
 
@@ -192,7 +202,7 @@ Time that cannot be recovered is recorded as a `gap` row rather than hidden: `be
 
 **Coverage acceptance.** Compare an identical closed UTC hour in a private CSV export and the stored JSON rows. CSV Session Ids are blank, so first verify that `UTC Date / Time` matches JSON `time` at the CSV's actual precision, and that CSV `In`/`Out` and `Action` match the collector's network/action fields. Stop if these mappings cannot be established. Collapse identical JSON replay copies by `flow.id`, retaining conflicts for the revision check. Form a key from that UTC time, normalized protocol, source/destination IP and port, ingress/egress network and action. Compare key multiplicities, reporting missing, extra and ambiguous matches separately; grouped totals are only a cross-check. Keep ambiguous matches unresolved rather than declaring coverage complete.
 
-Separately compare two JSON reads of the same settled window, including page 1+, to check stable IDs, ID reuse and changed payloads. The collector skips a previously sent ID, so revised completed rows block acceptance until a revision policy is chosen. Keep the CSV series until the comparison passes. Polling changes no forwarding/offload setting, but console load and real dashboard panels still need checking during activation.
+Separately compare two JSON reads of the same settled window, including page 1+, to check stable IDs, ID reuse and changed payloads. **Accepted result ([#348](https://github.com/kelchm/home-lab/issues/348)).** The closed hour 2026-10-31 04:00–05:00 UTC matched a CSV export on all 16,879 rows for time, addresses, ports, networks and action, with none missing, extra or ambiguous, and a repeated read of one settled 3-minute window returned identical rows across 9 pages. On 265 of those rows the CSV's flow count was higher, and bytes differed on 41. The accepted policy is to use distinct flow IDs and observed connections for dependency mapping; stored `flow.count` and byte counters are provisional, not final traffic accounting: the collector normally stores only the first copy it sees of each ID, and after a restart the same ID can hold copies with different counters. Revisit only if row identity, endpoints, networks or action semantics prove unstable. Polling changes no forwarding/offload setting, but console load and real dashboard panels still need checking during activation.
 
 To stop collection, remove `./unifi-flows/ks.yaml` from the observability [`kustomization.yaml`](../../kubernetes/apps/observability/kustomization.yaml). Flux prunes the collector, its policy, scrape, alerts and dashboard. Stored rows stay until retention removes them, and the `unpoller-credentials` Secret stays with Unpoller.
 
@@ -270,7 +280,7 @@ The `fluent-bit-events` collector, one replica of the node collectors' chart and
 
 | Field | Content |
 | --- | --- |
-| `_msg` | The reason, involved object and message, in the order `kubectl events` shows them, as in `Unhealthy Pod/prowlarr-7d6c5b4a3-z9xwv: Readiness probe failed: …`. Events stored before this line format was deployed on October 22, 2026 hold the message alone until retention removes them. |
+| `_msg` | The reason, involved object and message, in the order `kubectl events` shows them, as in `Unhealthy Pod/prowlarr-7d6c5b4a3-z9xwv: Readiness probe failed: …`, with [credential query parameters](#query-string-redaction) redacted. Events stored before this line format was deployed on October 22, 2026 hold the message alone until retention removes them. |
 | `severity_number`, `severity_text` | `Normal` is 9 (info), `Warning` 13 (warn), `Error` 17 and `Critical` 21, with the type as the text. Any other type is stored as unspecified with `pipeline.severity_unmapped`. |
 | `k8s.namespace.name` | The involved object's namespace, absent for cluster-scoped objects such as nodes. Stream field. |
 | `k8s.object.kind`, `k8s.object.name`, `k8s.object.uid`, `k8s.object.fieldpath`, `k8s.object.api_version`, `k8s.object.resource_version` | The involved object. `fieldpath` names a container, as in `spec.containers{app}`. |
@@ -299,7 +309,7 @@ Each event's line names the reason and object, so a word such as `BackOff` or a 
 
 ## Host logs
 
-Each PVE node, Spark, Pi and the NAS sends its systemd journal, kernel messages included, to VictoriaLogs, and each PVE node also sends its [task logs](#pve-task-logs). On a PVE node, Spark or the NAS, a `fluent-bit` container in the host's monitoring stack reads the journal read-only and sends OTLP to `https://metrics-ingest.home.kelch.io/insert/opentelemetry/v1/logs` with the host's metrics token. Its configuration is [`proxmox/monitoring/logs/`](../../proxmox/monitoring/logs/), kept identical in [`sparks/monitoring/logs/`](../../sparks/monitoring/logs/) and [`synology/monitoring/logs/`](../../synology/monitoring/logs/). The host's VMUser routes that path to VictoriaLogs and adds `host.name`, `service.namespace` and the stream fields as query arguments, so, as with metrics, the configuration carries no identity and a host cannot give itself another: VMAuth drops a client's own `extra_fields` and `_stream_fields`, VictoriaLogs reads those arguments before its `VL-Extra-Fields` and `VL-Stream-Fields` headers, and `extra_fields` override the same fields in a record. The route also sets the `AccountID` and `ProjectID` headers to 0, so every record lands in the default tenant the datasource reads. A host does choose its own `service.name`, a stream field, so a host's token could create streams at will; `VictoriaLogsStreamChurnHigh` would show it. [Athena's journal](#athena-journal) has its own limits, and the GLKVM doesn't send logs ([#914](https://github.com/kelchm/home-lab/issues/914)).
+Each PVE node, Spark, Pi and the NAS sends its systemd journal, kernel messages included, to VictoriaLogs, each PVE node also sends its [task logs](#pve-task-logs), and each Spark its [inference server's output](#spark-inference-logs). On a PVE node, Spark or the NAS, a `fluent-bit` container in the host's monitoring stack reads the journal read-only and sends OTLP to `https://metrics-ingest.home.kelch.io/insert/opentelemetry/v1/logs` with the host's metrics token. Its configuration is [`proxmox/monitoring/logs/`](../../proxmox/monitoring/logs/), kept identical in [`sparks/monitoring/logs/`](../../sparks/monitoring/logs/) and [`synology/monitoring/logs/`](../../synology/monitoring/logs/). The host's VMUser routes that path to VictoriaLogs and adds `host.name`, `service.namespace` and the stream fields as query arguments, so, as with metrics, the configuration carries no identity and a host cannot give itself another: VMAuth drops a client's own `extra_fields` and `_stream_fields`, VictoriaLogs reads those arguments before its `VL-Extra-Fields` and `VL-Stream-Fields` headers, and `extra_fields` override the same fields in a record. The route also sets the `AccountID` and `ProjectID` headers to 0, so every record lands in the default tenant the datasource reads. A host does choose its own `service.name`, a stream field, so a host's token could create streams at will; `VictoriaLogsStreamChurnHigh` would show it. [Athena's journal](#athena-journal) has its own limits, and the GLKVM doesn't send logs ([#914](https://github.com/kelchm/home-lab/issues/914)).
 
 Each Pi runs the same configuration as a NixOS `fluent-bit` service from rpi-nixos's [`modules/profiles/logs`](https://github.com/kelchm/rpi-nixos/tree/main/modules/profiles/logs), with the same `host.lua` byte for byte, so a change to the mapping needs the same change there. A Pi keeps its journal in RAM (`/run/log/journal`, at most 16 MB), so its collector keeps its cursor and a 16 MiB buffer in RAM as well.
 
@@ -327,10 +337,11 @@ The mapping is [`host.lua`](../../proxmox/monitoring/logs/host.lua). The `pipeli
 - **Missing route:** VMAuth refuses a host whose ingest user has no log route, and Fluent Bit drops what it refuses rather than retrying. Make a new host's route live before its collector starts. At rollout the Sparks' collectors started about 30 seconds before their routes, and about 165 lines from each were lost.
 - **Token rotation:** Fluent Bit reads the token only when it starts, and drops records the endpoint rejects. Stop it before rotating the token; see [Rotate a token](host-monitoring.md#change-pause-rotate-remove).
 - **Endpoint outage:** records wait in the buffer, 256 MiB on disk on a PVE node, Spark or the NAS and 16 MiB in RAM on a Pi, and arrive with their original timestamps once the endpoint answers; when the buffer is full, the collector drops records. In a local test before rollout, lines written while the endpoint was down, and while the collector was stopped, all arrived once it returned, with no duplicates.
+- **Slow disk:** the cursor and the buffer are written with full sync, on Fluent Bit's engine thread, so a slow disk stalls that thread. Each output therefore sends from a worker thread of its own (`workers: 1`), which keeps delivering what is already buffered. Without it, Athena's collector retried about three times a minute and fired `NodeLogDeliveryFailing` through a RAID scrub on 2026-11-11; with it, the first 26 minutes of the same scrub saw three retries, all at startup, and the backlog cleared ([#1432](https://github.com/kelchm/home-lab/issues/1432)). The engine still reads and buffers at the disk's pace, so records arrive minutes late during a stall, and nothing new is read while the disk is fully blocked. The cost is duplicates: a collector killed during a stall, by a crash, an OOM kill or a power loss, can send again a chunk the worker had delivered but the engine had not yet removed. A local test killed one mid-stall and its receiver got 1,000 of 1,500 records twice, with none lost. VictoriaLogs does not deduplicate, so it stores every copy it accepts; add `| uniq by (host.name, _time, _msg)` to a query that must not count them. A clean stop in the same test sent nothing twice.
 - **Error responses:** Fluent Bit retries a refused connection and HTTP 429, 502, 503 and 504. Any other error status, such as a 500 from VictoriaLogs or VMAuth's 400 for a missing route, drops the batch, and `NodeLogsDropped` reports it. The cluster's collectors use the same output and behave the same way.
 - **Shutdown:** the collector stops before the host finishes shutting down. With a persistent journal, the last records should go out after the next boot, from the saved cursor; this hasn't been checked on a host yet. On a Pi, whatever wasn't sent before shutdown is gone with the RAM journal.
 
-`NodeLogDeliveryFailing` warns after 10 minutes of retries, `NodeLogsDropped` when records are dropped, and `NodeLogsSilent` when a host's collector has read nothing from its journal for two hours; `NodeCollectorDown` covers its scrape target (`pve-fluent-bit`, `spark-fluent-bit`, `synology-fluent-bit`, `pi-fluent-bit`). The quietest host, `ups-office`, writes three lines every hour, so two hours of silence means the collector has lost the journal. See [Alerts](host-monitoring.md#alerts) for host rules.
+`NodeLogDeliveryFailing` warns after 10 minutes of retries, `NodeLogsDropped` when records are dropped, and `NodeLogsSilent` when a host's collector has read nothing from its journal for two hours; `NodeCollectorDown` covers its scrape target (`pve-fluent-bit`, `spark-fluent-bit`, `synology-fluent-bit`, `pi-fluent-bit`). The quietest host, `ups-compute-rack`, writes at least 60 lines every hour, so two hours of silence means the collector has lost the journal. See [Alerts](host-monitoring.md#alerts) for host rules.
 
 ### PVE task logs
 
@@ -360,6 +371,61 @@ A node can run no task for days, so `NodeLogsSilent` watches only the journal in
 To roll out, merge: every PVE node's log route is already live, and each node applies the change on its next poll. A successful deployment recreates only `fluent-bit`. If deployment fails, doco-cd's retry can recreate the whole monitoring project and interrupt metrics too; promptly revert or fix the change, then verify both metrics and logs.
 
 After a deploy, on each node, `fluentbit_input_records_total{job="pve-fluent-bit",name="pve-tasks"}` exists, `docker logs monitoring-fluent-bit-1` has no `cannot open`, and [Verify a host](#verify-a-host) passes. A task's arrival is the final check: `service.name:=pve-task | stats by (host.name, pve.task.type) count()` lists it after the node's next task. To roll back, revert the change: the collector returns to the journal alone, with its cursor intact, and stored task records stay until retention removes them. A later redeploy resumes from `pve-tasks.db`.
+
+### Spark inference logs
+
+The collector side expects three things of whatever launches an inference engine, so a launcher other than SparkRun needs only these:
+
+- The engine's output is the container's output.
+- The container uses Docker's `fluentd` log driver with the options in `LOG_DOCKER_OPTS` in the [TensorFold adapter](../../sparks/inference/sparkrun/plugins/tensorfold/__init__.py), which send every line to `127.0.0.1:24224`.
+- The container carries the `sparkrun.recipe`, `sparkrun.served_model_name` and `sparkrun.runtime` labels, plus `sparkrun.rank` when a launch has more than one rank, and the driver's `labels` option names them. The [metrics scrape](../../sparks/monitoring/scrape.yaml) reads the same labels, so renaming them means changing both.
+
+SparkRun meets the first only with help: it runs the inference server in a container whose main process is `sleep infinity`, with the server's output in `/tmp/sparkrun_serve.log`, so it reaches neither `docker logs` nor the journal and is gone when the container is removed. The adapter's serve command therefore copies its output to the container's own (`SERVE_OUTPUT`), and the log file and `sparkrun logs` are unchanged. The adapter applies both changes at every launch, for every TensorFold recipe.
+
+[`sparks/monitoring/inference-logs/`](../../sparks/monitoring/inference-logs/) adds a `forward` input on that port to the Spark's collector. It includes the shared configuration unchanged, as the [task logs](#pve-task-logs) do, and sends through the same token and log route with an output and 256 MiB buffer of its own. These lines never pass through the journal, so they are stored once.
+
+Every engine prints one line when a request finishes, but each prints different values in different forms. [`inference.lua`](../../sparks/monitoring/inference-logs/inference.lua) reads them into the fields below. Seconds are always plain numbers. A value the engine didn't print or didn't measure is absent, never zero.
+
+| Field | Content |
+| --- | --- |
+| `service.name` | `inference`, one stream per Spark. |
+| `inference.recipe`, `inference.model`, `inference.runtime`, `inference.rank` | The recipe file name without `.yaml`, the served name, the runtime and the rank. These match the inference metrics' `recipe`, `model` and `runtime` labels. A one-Spark run has no rank, as in the metrics. |
+| `event.name` | `inference.request.done` when a request finishes, `inference.request.ended` when the client leaves or the engine fails it, and `inference.request.refused` when it is turned away. Absent on other lines. |
+| `inference.request.id` | The request's ID, such as `chatcmpl-…`. |
+| `inference.finish` | How it ended: the engine's finish reason (`stop`, `length`, `tool_calls`), or `client-left`, `error` or `refused`. `error.type` names the engine's error. |
+| `inference.tokens.prompt`, `inference.tokens.cached`, `inference.tokens.output` | Prompt tokens, how many of them came from the prompt cache, and reply tokens. |
+| `inference.thinking`, `inference.effort` | Whether thinking was on (`true` or `false`), and the reasoning level. |
+| `inference.ttft_s`, `inference.queue_s`, `inference.prefill_s`, `inference.decode_s`, `inference.total_s` | Seconds to the first token, waiting in the queue, reading the prompt, writing the reply, and in all. |
+| `inference.output_tps` | Reply tokens per second, as the engine computes it. |
+| `inference.spec.rounds`, `inference.spec.accepted`, `inference.spec.drafted`, `inference.preemptions` | Decode rounds, draft tokens accepted and proposed, and times the request was preempted. |
+| `http.request.method`, `url.path`, `http.response.status_code` | From the Zig server's line for each HTTP request. A successful request for `/metrics`, `/health` or `/stats` is dropped, since the metrics already show polling. |
+| `_msg` | The line as the engine printed it. |
+| `_time` | When Docker read the line, to the millisecond. The engines print no time of their own. |
+
+Which timings a recipe has depends on its engine:
+
+| Engine | Recipes | Timings |
+| --- | --- | --- |
+| TensorFold 0.6.0's Python server | Mia's GLM kit | `ttft_s`, `prefill_s`, `output_tps`, `preemptions` |
+| TensorFold's Zig server | Qwen TP2 v1.1, native GLM | `ttft_s`, `queue_s`, `decode_s`, `total_s`, `output_tps` |
+| Older forks of the Zig server | DeepSeek, Qwen one-Spark | None: only tokens, cache, finish and drafts |
+
+All other lines, such as model loading, `prompt cache:` summaries and tracebacks, are kept with only the common fields. A request line must start with the engine's `[tensorfold]` prefix, and the parser reads only the keys above, so a key an engine adds later is ignored rather than misread, and stays searchable in `_msg`. Other delivery behaviour:
+
+- **Before a launch:** the change applies when a container is created. An instance launched before the adapter change keeps `json-file` and sends nothing until its next launch.
+- **Collector down:** Docker's driver is asynchronous, so the container starts and the engine writes whether or not the collector is up. Docker holds up to 16,384 lines in memory while it can't connect. It drops lines beyond that, everything it holds if the Docker daemon restarts, and whatever is still queued when the container is removed. A write to the collector gives up after 5 seconds, so a collector that hangs can't stop SparkRun removing the container. Docker sends without waiting for Fluent Bit to confirm, so delivery up to the collector is best effort; from there on the collector's file buffer holds records as it does the journal's. The log file in the container still has every line, and the engine's errors are in the same stream as its output.
+- **Endpoint outage:** as for the journal, records wait in the buffer and arrive with their original timestamps.
+- **Other runtimes:** only the TensorFold adapter sets the driver. A recipe on another SparkRun runtime keeps `json-file`.
+- **Trust:** the input on port 24224 takes no key, because Docker's driver can't send one. Any process on the Spark's host network can write records there under the Spark's token, including the ranks, which use host networking and already write their own lines. Those are the same processes the host already trusts with its metrics.
+
+`NodeLogsSilent` doesn't watch this input, because a Spark can serve nothing for days. The delivery and drop alerts cover its output as they do the journal's, from the collector on; lines Docker drops before they reach it show up in no counter.
+
+To roll out:
+
+1. Merge. Each Spark's doco-cd recreates only `fluent-bit`, which then listens on port 24224. A running inference instance is not touched.
+2. Sync the adapter into the SparkRun control environment on spark-1, as [Deploy](../../sparks/inference/sparkrun/README.md#deploy) describes, with whoever owns the next launch. That launch is the first to send its lines.
+
+After the launch, `docker inspect --format '{{.HostConfig.LogConfig.Type}}' <rank container>` is `fluentd` on each Spark, and `service.name:=inference | stats by (host.name, inference.recipe) count()` lists the recipe from both. To roll back, revert the change and relaunch: the running containers keep sending to a port no one listens on, and Docker drops those lines without stopping the engine. Stored records stay until retention removes them.
 
 ### Athena journal
 
@@ -418,8 +484,13 @@ Host records carry no Kubernetes namespace, so filter on `host.name` or `service
 - Errors on every host: `service.namespace:in(pve, spark, synology, pi) severity_number:>=17`
 - Failed PVE tasks: `service.name:=pve-task "TASK ERROR"`
 - A whole task, from a UPID in the journal or a line above: `pve.task.upid:="UPID:..."`
+- Requests per recipe: `service.name:=inference event.name:=inference.request.done | stats by (inference.recipe) count()`
+- Wait for the first token, by recipe: `service.name:=inference inference.ttft_s:* | stats by (inference.recipe) quantile(0.5, inference.ttft_s) p50, quantile(0.9, inference.ttft_s) p90`
+- Share of prompt tokens read from the cache: `service.name:=inference event.name:=inference.request.done | stats sum(inference.tokens.cached) cached, sum(inference.tokens.prompt) prompt | math cached / prompt as share`
+- How requests ended: `service.name:=inference inference.finish:* | stats by (inference.finish) count()`
+- Failed and refused requests: `service.name:=inference inference.finish:in(error, refused)`
 
-`python3 scripts/logging/test-host-logs.py` runs the host configuration on the machine's own journal and checks what a pinned VictoriaLogs stores: a syslog line at two levels, a container's stdout and stderr through the `journald` driver, a kernel message, and a client header that tries to rename the host. It also checks that every host's log route stamps the identity its metrics route does, and runs the [task log](#pve-task-logs) overlay on synthetic task files through a first start with old history and index files, a running task with a half-written line, a restart, a reused inode, a silent task that resumes and an overlong line, checking that each record is stored once. It needs a Docker daemon that logs to journald, such as a GitHub runner or Colima's VM. CI runs it with the host monitoring checks. It ends with the [NAS journal test](#athena-journal), which `python3 scripts/logging/test-host-logs.py nas` runs alone on any Docker daemon.
+`python3 scripts/logging/test-host-logs.py` runs the host configuration on the machine's own journal and checks what a pinned VictoriaLogs stores: a syslog line at two levels, a container's stdout and stderr through the `journald` driver, a kernel message, and a client header that tries to rename the host. It also checks that every host's log route stamps the identity its metrics route does, and runs the [task log](#pve-task-logs) overlay on synthetic task files through a first start with old history and index files, a running task with a half-written line, a restart, a reused inode, a silent task that resumes and an overlong line, checking that each record is stored once. It sends each engine's request lines through the [inference overlay](#spark-inference-logs) with Docker's `fluentd` driver and the adapter's own options, and checks the fields each is read into; `python3 scripts/logging/test-host-logs.py inference` runs that part alone on any Docker daemon. It needs a Docker daemon that logs to journald, such as a GitHub runner or Colima's VM. CI runs it with the host monitoring checks. It ends with the [NAS journal test](#athena-journal), which `python3 scripts/logging/test-host-logs.py nas` runs alone on any Docker daemon.
 
 ### Verify a host
 
@@ -441,7 +512,7 @@ Measured 2026-09-18 over a 24-hour window with `stats by (service_name) count()`
 | mcphub | 8.3k | all | None documented in the evaluation. | Keep native output; explicit logger prefixes are covered in the later collector evaluation. |
 | multus | 7.4k | all | None established for the deployed klog emitter. | Keep native output. |
 
-Traefik access logs carry their request fields under HTTP semantic-convention names and use Traefik's own `common` line as the message. Do not infer severity from access-log text; filter on `http.response.status_code` or `error.type`. Native source-format changes, noisy-log reduction and secret/PII redaction remain separate work.
+Traefik access logs carry their request fields under HTTP semantic-convention names and use Traefik's own `common` line as the message. Do not infer severity from access-log text; filter on `http.response.status_code` or `error.type`. Credential query parameters are redacted; see [Query-string redaction](#query-string-redaction). Native source-format changes, noisy-log reduction and wider secret/PII redaction remain separate work.
 
 ## Pipeline failures
 
@@ -463,6 +534,8 @@ Log content pages only where the log is the only evidence of a failure. Crash lo
 For `KanidmReplicationFailing`, read the pod's errors with `{k8s.namespace.name="identity", service.name="kanidm"} severity_number:>=17 _msg:~"(?i)supplier|consumer|replica|RUV"`. "Unable to connect to supplier" while every pod is Ready points at the replication path on port 8444, including the kanidm CiliumNetworkPolicy. "Consumer is out of date and must be refreshed" follows a replica that was offline for more than 7 days; refresh that consumer as kanidm's [replication administration](https://kanidm.github.io/kanidm/stable/repl/administration.html) describes.
 
 For `KanidmSignInsRejected`, `{k8s.namespace.name="identity", service.name="kanidm"} ("Result::Denied" OR "Auth result: Denied" OR "Auth result: NoMatchingEntries")` lists the rejections. Each line starts with its request ID; the request line with the same ID gives the client address, which is Traefik for browser sign-ins, so match the time in Traefik's access log for `auth.home.kelch.io`.
+
+The ADS-B receiver's `ADSBReceiverStalling` and `ADSBFeedSilent` are `info`; see [ADS-B](host-monitoring.md#ads-b).
 
 `NodeGPUMemoryExhausted` warns when a Spark's kernel logs `NV_ERR_NO_MEMORY` in the last 15 minutes, because the engine may report nothing. None were stored in the 30 days to October 31, 2026. Other pairs have logged one or two isolated lines with no harm; repeats mean the engine is failing. List them with `service.namespace:=spark service.name:=kernel "NV_ERR_NO_MEMORY"`.
 

@@ -9,6 +9,13 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[2]
 NAME = re.compile(r"^[A-Z][A-Za-z0-9]*$")
 SEVERITIES = {"critical", "warning", "info"}
+# Probe absence loses notifying coverage; gateway checks retain their existing
+# notification contract when their route changes.
+PROBE_SEVERITIES = {
+    "ProbeMetricsMissing": "warning",
+    "GrafanaMCPFunctionalProbeFailed": "critical",
+    "GrafanaMCPFunctionalProbeMissing": "warning",
+}
 # Names replaced when the conventions were adopted; a rule must not bring one back.
 RETIRED = {
     "DriveAtaPendingSectors", "DriveAtaReallocatedSectors", "DriveAtaUncorrectableSectors", "DriveHealthMissing",
@@ -48,13 +55,20 @@ def rules(node):
 
 
 errors, count = [], 0
+# Both vmalerts write ALERTS and ALERTS_FOR_STATE to VMSingle, keyed by alert and group name, so a log rule's name is its own.
+evaluators = {}
 for path in sorted((ROOT / "kubernetes").rglob("*.y*ml")):
     if path.suffix not in (".yaml", ".yml") or path.stem.endswith(".sops"):
         continue
     for document in documents(path):
+        labels = ((document.get("metadata") or {}).get("labels") or {}) if isinstance(document, dict) else {}
+        logs = labels.get("alerting.home.kelch.io/datasource") == "victorialogs"
         for rule in rules(document):
             count += 1
             name, where = rule["alert"], path.relative_to(ROOT)
+            evaluators.setdefault(name, set()).add(logs)
+            if len(evaluators[name]) > 1:
+                errors.append(f"{where}: {name}: a log rule and a metrics rule share this name")
             annotations = rule.get("annotations") or {}
             if not NAME.match(name):
                 errors.append(f"{where}: {name}: a name is CamelCase and starts with a capital")
@@ -63,6 +77,9 @@ for path in sorted((ROOT / "kubernetes").rglob("*.y*ml")):
             severity = (rule.get("labels") or {}).get("severity")
             if severity not in SEVERITIES:
                 errors.append(f"{where}: {name}: severity is {severity!r}, not one of {sorted(SEVERITIES)}")
+            expected = PROBE_SEVERITIES.get(name)
+            if expected and severity != expected:
+                errors.append(f"{where}: {name}: probe severity must be {expected!r}; see the alerting runbook")
             for key in ("summary", "description"):
                 if not annotations.get(key):
                     errors.append(f"{where}: {name}: no {key} annotation")

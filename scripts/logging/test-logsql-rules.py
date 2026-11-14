@@ -24,7 +24,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[2]
 VL_IMAGE = 'victoriametrics/victoria-logs:v1.53.0@sha256:251121fa882af99b95ba0c230a4a2f412ea602d2698c64a96c58dc9842bb755d'
 VMALERT_IMAGE = 'victoriametrics/vmalert:v1.154.0@sha256:f11d77f9ff68dfd63c871d0e59ae7b479f9c3fd0e8a685fef690fb88b794d938'
-STREAM_FIELDS = 'service.name,k8s.namespace.name,k8s.pod.name,k8s.container.name,k8s.node.name,cef.device_product,cef.device_event_class_id'
+STREAM_FIELDS = 'host.name,service.name,k8s.namespace.name,k8s.pod.name,k8s.container.name,k8s.node.name,cef.device_product,cef.device_event_class_id'
 FIXTURES = json.loads((ROOT / 'scripts/logging/logsql-rules-fixtures.json').read_text())
 BASE = datetime(2026, 1, 1, tzinfo=timezone.utc)
 # vmalert's -rule.evalDelay default, which vmalert-victoria-logs keeps: it queries 30 s in the past.

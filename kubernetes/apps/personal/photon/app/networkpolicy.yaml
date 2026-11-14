@@ -1,0 +1,44 @@
+---
+# Default-deny policy for Photon. Inbound is only Dawarich. Outbound is DNS
+# and the index mirror over HTTPS; nothing that reaches Photon is forwarded.
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: photon
+spec:
+  endpointSelector:
+    matchLabels:
+      app.kubernetes.io/name: photon
+  ingress:
+    - fromEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: personal
+            app.kubernetes.io/name: dawarich
+      toPorts:
+        - ports:
+            - port: "2322"
+              protocol: TCP
+  egress:
+    # The DNS proxy is what lets the FQDN rule below learn the mirror's address.
+    - toEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: kube-system
+            k8s-app: kube-dns
+      toPorts:
+        - ports:
+            - port: "53"
+              protocol: UDP
+            - port: "53"
+              protocol: TCP
+          rules:
+            dns:
+              - matchPattern: "*"
+    # photon-docker's default index mirror (BASE_URL) for the index and its
+    # checksum. IPv6 is disabled cluster-wide; add equivalent IPv6 policy
+    # before enabling it.
+    - toFQDNs:
+        - matchName: r2.koalasec.org
+      toPorts:
+        - ports:
+            - port: "443"
+              protocol: TCP

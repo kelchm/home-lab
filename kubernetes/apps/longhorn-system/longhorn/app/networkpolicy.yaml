@@ -34,3 +34,28 @@ spec:
             http:
               - method: GET
                 path: /metrics
+---
+# The UI's nginx forwards /v1 to the longhorn-manager API on 9500, and the
+# chart's longhorn-manager NetworkPolicy admits the UI pods. Neither has
+# authentication, so a direct connection to the UI controls every volume and
+# backup. The OIDC middleware on the admin gateway is the only login, so only
+# the admin Traefik instance may reach the UI. Egress is unrestricted.
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: longhorn-ui
+  namespace: longhorn-system
+spec:
+  endpointSelector:
+    matchLabels:
+      app: longhorn-ui
+  ingress:
+    - fromEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: network
+            app.kubernetes.io/instance: traefik-admin-network
+            io.cilium.k8s.policy.serviceaccount: traefik-admin
+      toPorts:
+        - ports:
+            - port: "8000"
+              protocol: TCP

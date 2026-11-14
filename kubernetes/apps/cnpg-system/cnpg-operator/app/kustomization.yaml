@@ -6,7 +6,8 @@ resources:
   - ./helmrelease.yaml
 
 configMapGenerator:
-  # cloudnative-pg chart 0.29.1 (cluster 0.0.5) dashboard; datasource provisioning, exported_cluster, operator pod name.
+  # cloudnative-pg chart 0.29.1 (cluster 0.0.5) dashboard; datasource provisioning, exported_cluster, operator pod name,
+  # backup and recoverability panels read the barman-cloud plugin's barman_cloud_cloudnative_pg_io_* metrics.
   - name: grafana-dashboard-stock-cloudnative-pg
     files:
       - stock-cloudnative-pg.json=./dashboards/stock-cloudnative-pg.json
