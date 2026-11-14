@@ -12,9 +12,13 @@ spec:
     - name: hosts
       rules:
         # A node is enrolled once it has reported; one that falls silent keeps
-        # alerting for a week, after which it counts as retired.
+        # alerting for a week, after which it counts as retired. A parked node is
+        # switched off on purpose and kept as a fallback, so it is left out by
+        # instance; take it off the list when it returns to service or is retired.
+        # adsb-office: the Pi 3 ADS-B receiver, off since 2026-11-14 while
+        # ups-office runs ADS-B (docs/runbooks/host-monitoring.md#ads-b).
         - alert: NodeMetricsMissing
-          expr: time() - tlast_over_time(up{job=~"(pve|spark|synology|pi)-node"}[7d]) > 600
+          expr: time() - tlast_over_time(up{job=~"(pve|spark|synology|pi)-node", instance!~"adsb-office"}[7d]) > 600
           labels:
             severity: warning
           annotations:

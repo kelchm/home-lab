@@ -341,7 +341,7 @@ The mapping is [`host.lua`](../../proxmox/monitoring/logs/host.lua). The `pipeli
 - **Error responses:** Fluent Bit retries a refused connection and HTTP 429, 502, 503 and 504. Any other error status, such as a 500 from VictoriaLogs or VMAuth's 400 for a missing route, drops the batch, and `NodeLogsDropped` reports it. The cluster's collectors use the same output and behave the same way.
 - **Shutdown:** the collector stops before the host finishes shutting down. With a persistent journal, the last records should go out after the next boot, from the saved cursor; this hasn't been checked on a host yet. On a Pi, whatever wasn't sent before shutdown is gone with the RAM journal.
 
-`NodeLogDeliveryFailing` warns after 10 minutes of retries, `NodeLogsDropped` when records are dropped, and `NodeLogsSilent` when a host's collector has read nothing from its journal for two hours; `NodeCollectorDown` covers its scrape target (`pve-fluent-bit`, `spark-fluent-bit`, `synology-fluent-bit`, `pi-fluent-bit`). The quietest host, `ups-office`, writes three lines every hour, so two hours of silence means the collector has lost the journal. See [Alerts](host-monitoring.md#alerts) for host rules.
+`NodeLogDeliveryFailing` warns after 10 minutes of retries, `NodeLogsDropped` when records are dropped, and `NodeLogsSilent` when a host's collector has read nothing from its journal for two hours; `NodeCollectorDown` covers its scrape target (`pve-fluent-bit`, `spark-fluent-bit`, `synology-fluent-bit`, `pi-fluent-bit`). The quietest host, `ups-compute-rack`, writes at least 60 lines every hour, so two hours of silence means the collector has lost the journal. See [Alerts](host-monitoring.md#alerts) for host rules.
 
 ### PVE task logs
 
@@ -534,6 +534,8 @@ Log content pages only where the log is the only evidence of a failure. Crash lo
 For `KanidmReplicationFailing`, read the pod's errors with `{k8s.namespace.name="identity", service.name="kanidm"} severity_number:>=17 _msg:~"(?i)supplier|consumer|replica|RUV"`. "Unable to connect to supplier" while every pod is Ready points at the replication path on port 8444, including the kanidm CiliumNetworkPolicy. "Consumer is out of date and must be refreshed" follows a replica that was offline for more than 7 days; refresh that consumer as kanidm's [replication administration](https://kanidm.github.io/kanidm/stable/repl/administration.html) describes.
 
 For `KanidmSignInsRejected`, `{k8s.namespace.name="identity", service.name="kanidm"} ("Result::Denied" OR "Auth result: Denied" OR "Auth result: NoMatchingEntries")` lists the rejections. Each line starts with its request ID; the request line with the same ID gives the client address, which is Traefik for browser sign-ins, so match the time in Traefik's access log for `auth.home.kelch.io`.
+
+The ADS-B receiver's `ADSBReceiverStalling` and `ADSBFeedSilent` are `info`; see [ADS-B](host-monitoring.md#ads-b).
 
 `NodeGPUMemoryExhausted` warns when a Spark's kernel logs `NV_ERR_NO_MEMORY` in the last 15 minutes, because the engine may report nothing. None were stored in the 30 days to October 31, 2026. Other pairs have logged one or two isolated lines with no harm; repeats mean the engine is failing. List them with `service.namespace:=spark service.name:=kernel "NV_ERR_NO_MEMORY"`.
 
