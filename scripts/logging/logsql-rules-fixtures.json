@@ -1211,8 +1211,19 @@
   },
   {
    "rule": "ADSBFeedSilent",
-   "name": "a host still logging with no piaware heartbeat fires",
+   "name": "a host logging through the hour with no piaware heartbeat fires",
    "records": [
+    {
+     "fields": {
+      "host.name": "ups-office",
+      "service.namespace": "pi",
+      "service.name": "systemd",
+      "severity_number": 9,
+      "severity_text": "info",
+      "_msg": "dump1090-fa.service: Scheduled restart job, restart counter is at 2."
+     },
+     "offset": -3000
+    },
     {
      "fields": {
       "host.name": "ups-office",
@@ -1238,6 +1249,17 @@
    "rule": "ADSBFeedSilent",
    "name": "heartbeats from another host do not count for ups-office, and that host is not judged",
    "records": [
+    {
+     "fields": {
+      "host.name": "ups-office",
+      "service.namespace": "pi",
+      "service.name": "systemd",
+      "severity_number": 9,
+      "severity_text": "info",
+      "_msg": "dump1090-fa.service: Scheduled restart job, restart counter is at 2."
+     },
+     "offset": -3000
+    },
     {
      "fields": {
       "host.name": "ups-office",
@@ -1284,6 +1306,66 @@
       "_msg": "1063 msgs recv'd from unknown process (341 in last 5m); 1055 msgs sent to FlightAware"
      },
      "offset": -3700
+    }
+   ],
+   "expect": []
+  },
+  {
+   "rule": "ADSBFeedSilent",
+   "name": "a host booted 20 minutes ago after a long outage is left to NodeMetricsMissing",
+   "records": [
+    {
+     "fields": {
+      "host.name": "ups-office",
+      "service.namespace": "pi",
+      "service.name": "systemd",
+      "severity_number": 9,
+      "severity_text": "info",
+      "_msg": "dump1090-fa.service: Scheduled restart job, restart counter is at 2."
+     },
+     "offset": -1200,
+     "repeat": 5,
+     "every": 60
+    },
+    {
+     "fields": {
+      "host.name": "ups-office",
+      "service.namespace": "pi",
+      "service.name": "piaware",
+      "severity_number": 9,
+      "severity_text": "info",
+      "_msg": "0 msgs recv'd from dump1090 (0 in last 1m); 0 msgs sent to FlightAware"
+     },
+     "offset": -1100
+    }
+   ],
+   "expect": []
+  },
+  {
+   "rule": "ADSBFeedSilent",
+   "name": "a host that shut down 55 minutes ago is left to NodeMetricsMissing",
+   "records": [
+    {
+     "fields": {
+      "host.name": "ups-office",
+      "service.namespace": "pi",
+      "service.name": "piaware",
+      "severity_number": 9,
+      "severity_text": "info",
+      "_msg": "1063 msgs recv'd from unknown process (341 in last 5m); 1055 msgs sent to FlightAware"
+     },
+     "offset": -3600
+    },
+    {
+     "fields": {
+      "host.name": "ups-office",
+      "service.namespace": "pi",
+      "service.name": "systemd",
+      "severity_number": 9,
+      "severity_text": "info",
+      "_msg": "dump1090-fa.service: Scheduled restart job, restart counter is at 2."
+     },
+     "offset": -3300
     }
    ],
    "expect": []

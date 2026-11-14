@@ -38,20 +38,27 @@ spec:
               disconnects.
 
         # The host expected to feed FlightAware: only one may run piaware with
-        # the feeder ID. piaware logs its message count every five minutes; a
-        # quiet night still sees aircraft within an hour. The host must be
-        # logging something, so a dark host is NodeMetricsMissing's.
+        # the feeder ID. piaware logs its received-message count every five
+        # minutes; a quiet night still sees aircraft within an hour. The host
+        # must have logged in both halves of the hour, so a host that has gone
+        # dark or has just booted is left to NodeMetricsMissing. Upload and
+        # login failures with messages still arriving are not covered.
         - alert: ADSBFeedSilent
           expr: >-
             _time:1h {host.name="ups-office"}
-            | stats by (host.name) count() if ({service.name="piaware"} "msgs recv'd" -"(0 in last") as heartbeats
-            | filter heartbeats:=0
+            | stats by (host.name)
+                count() if ({service.name="piaware"} "msgs recv'd" -"(0 in last") as heartbeats,
+                count() if (_time:30m offset 30m) as earlier,
+                count() if (_time:30m) as later
+            | filter heartbeats:=0 earlier:>0 later:>0
+            | stats by (host.name) sum(heartbeats) as heartbeats
             | rename host.name as instance
           labels:
             severity: info
           annotations:
-            summary: "{{ $labels.instance }} has fed no aircraft messages to FlightAware for an hour"
+            summary: "piaware on {{ $labels.instance }} has received no aircraft messages for an hour"
             description: >-
-              piaware on {{ $labels.instance }} has logged no received messages
-              for an hour, or has not logged at all. Check piaware and
-              dump1090-fa, and whether the dongle is connected.
+              {{ $labels.instance }} has been logging for the last hour, but
+              piaware has logged no received messages, or nothing at all.
+              Check piaware and dump1090-fa, and whether the dongle is
+              connected.
