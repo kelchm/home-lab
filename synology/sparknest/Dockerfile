@@ -1,9 +1,9 @@
-# Athena deployment: package the unchanged upstream Linux amd64 release.
+# Athena deployment: upstream binaries plus an opt-in HF helper patch.
 FROM ubuntu:24.04@sha256:fe81560990fae86dc4743202b2cb4d3df98d0bcf949173cecef15ce1127ef852
 
 ARG DEBIAN_FRONTEND=noninteractive
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends ca-certificates curl fuse3 libibverbs1 python3 python3-venv \
+    && apt-get install -y --no-install-recommends ca-certificates curl fuse3 libibverbs1 patch python3 python3-venv \
     && rm -rf /var/lib/apt/lists/*
 
 RUN curl --fail --location --retry 3 \
@@ -21,6 +21,12 @@ RUN curl --fail --location --retry 3 \
 RUN python3 -m venv /opt/hf \
     && /opt/hf/bin/pip install --no-cache-dir 'huggingface_hub==2.4.0' 'hf-xet==1.8.0'
 
+COPY patches/0001-offline-share.patch /tmp/offline-share.patch
+COPY tests/test_offline_share.py /tmp/test_offline_share.py
+RUN patch --batch --fuzz=0 /usr/local/libexec/sparknest/sparknest-hf-fetch /tmp/offline-share.patch \
+    && /opt/hf/bin/python3 /tmp/test_offline_share.py ChunkerGolden \
+    && rm /tmp/offline-share.patch /tmp/test_offline_share.py
+
 ENV PATH="/opt/hf/bin:${PATH}" \
     SPARKNEST_HF_FETCH=/usr/local/libexec/sparknest/sparknest-hf-fetch \
     HF_HOME=/mnt/sparknest/hf-home \
@@ -29,7 +35,7 @@ ENV PATH="/opt/hf/bin:${PATH}" \
     PYTHONDONTWRITEBYTECODE=1
 
 LABEL org.opencontainers.image.source="https://github.com/kelchm/home-lab" \
-      org.opencontainers.image.version="0.8.3-1" \
-      org.opencontainers.image.description="SparkNest v0.8.3 Athena evaluation container"
+      org.opencontainers.image.version="0.8.3-2" \
+      org.opencontainers.image.description="SparkNest v0.8.3 with opt-in offline HF sharing"
 
 CMD ["sparknestd", "--config", "/config/node.toml"]
