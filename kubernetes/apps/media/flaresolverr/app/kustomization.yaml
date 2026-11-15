@@ -5,3 +5,17 @@ resources:
   - ./ocirepository.yaml
   - ./helmrelease.yaml
   - ./networkpolicy.yaml
+
+configMapGenerator:
+  # grafana.com dashboard 19363 revision 1 ("FlareSolverr", uid c51691e6-d80f-40e1-a2fb-896c8c03690a). Local patches remove __inputs, use the data_source variable, let the Host variable span pod IPs, count requests per range or graph interval with a 30s target Min step, and show 0 for an absent result only while the target is up. The README lists each patch.
+  - name: grafana-dashboard-flaresolverr
+    files:
+      - flaresolverr.json=./dashboards/flaresolverr.json
+    options:
+      annotations:
+        grafana_folder: Services/Media
+        kustomize.toolkit.fluxcd.io/substitute: disabled
+      labels:
+        grafana_dashboard: "1"
+generatorOptions:
+  disableNameSuffixHash: true
