@@ -85,8 +85,9 @@ case ${mode} in
     normal) sh -s "${ROOTS}/${node}" ;;
     # A complete, valid archive, then the connection or remote shell fails.
     fail-after-archive) sh -s "${ROOTS}/${node}"; exit 255 ;;
-    # A complete archive followed by more than one age chunk of other data.
-    trailer) sh -s "${ROOTS}/${node}" && head -c 200000 /dev/urandom ;;
+    # Zero padding is accepted by GNU tar/gzip and bsdtar, and spans multiple
+    # age chunks so authentication must continue beyond the archive payload.
+    trailer) sh -s "${ROOTS}/${node}" && head -c 200000 /dev/zero ;;
     truncate) sh -s "${ROOTS}/${node}" | head -c 600; exit 0 ;;
     garbage) cat >/dev/null; echo 'not an archive' ;;
     hang) cat >/dev/null; : >"${HANG_MARK}"; sleep 30 ;;
@@ -216,10 +217,16 @@ grep -qx var/lib/vz/snippets/netbird-router-2.yaml <<<"$(members "$(archive pve-
 ! grep -q '^var/lib/vz' <<<"$(members "$(archive pve-sbx-3)")" || fail "success: pve-sbx-3 captured var/lib/vz"
 echo "PASS: success, with and without node-local snippets"
 
+# The authentication fixture's plaintext must be valid independently of the
+# ciphertext tamper. In particular, GNU gzip rejects random trailing garbage.
+reset_output
+SSH_MODE=trailer run_capture || fail "untampered padded archive: capture exited nonzero"
+echo "PASS: untampered padded archives"
+
 # Real age and tar: a tampered final chunk still yields a tar stream whose
 # members all list. This is the readable prefix the next case relies on.
 tampered="${TEST_DIR}/tampered.age"
-age -d -i "${KEY}" "$(archive pve-sbx-1)" | cat - <(head -c 200000 /dev/urandom) |
+age -d -i "${KEY}" "$(archive pve-sbx-1)" |
     "${TEST_DIR}/tamper/age" -r "$(age-keygen -y "${KEY}")" >"${tampered}"
 ! age -d -i "${KEY}" "${tampered}" >/dev/null 2>&1 || fail "fixture: tampered ciphertext authenticated"
 prefix="$(age -d -i "${KEY}" "${tampered}" 2>/dev/null | tar -tzf - 2>/dev/null || true)"
@@ -228,6 +235,7 @@ grep -qx etc/corosync/authkey <<<"${prefix}" || fail "fixture: tampered cipherte
 # 2. Decryption fails authentication although the archive inside lists.
 reset_output
 rc="$(SSH_MODE=trailer EXTRA_PATH="${TEST_DIR}/tamper:" expect_failure)"
+grep -q 'failed to decrypt and authenticate' "${TEST_DIR}/stderr" || fail "tamper: authentication failure not reported"
 assert_rejected "authentication failure after a readable archive" "${rc}"
 
 # 3. The producer fails after sending a complete, valid archive. Node 1 was
@@ -280,6 +288,11 @@ compgen -G "${OUT}/.pve-sbx-1-${STAMP}.*" >/dev/null || fail "interrupt: no in-p
 kill -TERM -- "-${capture_pid}"
 rc=0
 wait "${capture_pid}" || rc=$?
+# The wrapper may exit before its child's EXIT trap finishes removing output.
+for _ in $(seq 100); do
+    compgen -G "${OUT}/.pve-sbx-1-${STAMP}.*" >/dev/null || break
+    sleep 0.1
+done
 assert_rejected "interrupted capture" "${rc}"
 
 echo "All PVE capture tests passed."
