@@ -135,7 +135,7 @@ ssh kelchm@10.32.20.5 'sudo /usr/local/bin/docker logs --since 1h s3-storage-tra
 ssh kelchm@10.32.20.5 'sudo du -sh /volume1/object-storage/data/*'
 ```
 
-Nothing here alerts on its own. A stopped or unreachable endpoint shows up in the cluster as `CNPGWALArchivingStalled` once a WAL segment has waited 15 minutes for the archiver; the databases close a segment every 5 minutes, so that is 15 to 20 minutes after the endpoint stops. A certificate that fails to renew has about 30 days before it expires, and then shows up the same way.
+Nothing here alerts on its own. A stopped or unreachable endpoint shows up in the cluster as `CNPGWALArchivingStalled` once a WAL segment has waited 15 minutes for the archiver; the databases close a segment every 5 minutes, so that is 15 to 20 minutes after the endpoint stops. A certificate that fails to renew has about 30 days before it expires. The Pi's `s3-storage` probe raises `HostCertificateExpiring` with 14 days left, and `CertificateProbeFailed` if it cannot check; see [service probes](../../docs/runbooks/host-monitoring.md#service-probes).
 
 ## Serve a copy of the share
 
