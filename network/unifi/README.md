@@ -15,6 +15,14 @@ The "Firewall zones applied state" and "IDS/IPS signature suppression" sections 
 
 The [local NTP runbook](../../docs/runbooks/local-ntp.md) covers the applied Pi NTP firewall exception and DHCP option 42 advertisements on seven networks. All three Talos nodes on VLAN 30 have demonstrated fresh Pi synchronization; DHCP-client adoption after natural renewal, client failover and WAN-outage acceptance remain pending in [#1031](https://github.com/kelchm/home-lab/issues/1031).
 
+## DNS and fixed-IP assignments
+
+The active `home.kelch.io` delegation points to k8s-gateway at `10.32.130.2`. The obsolete `prod.home.kelch.io` delegation to the retired `10.32.30.31` address was removed on 2026-11-15 under [#353](https://github.com/kelchm/home-lab/issues/353). Fresh A and NS queries for that unused child name now return NXDOMAIN with k8s-gateway’s SOA through the Main, Infra Mgmt and K8s Prod gateway resolvers instead of timing out. The other 14 static DNS records were unchanged, and existing Grafana, Jellyfin, controller, Athena and recovery-console names still resolve.
+
+Athena's management interface has a fixed DHCP assignment at `10.32.20.5`, outside the Infra Mgmt pool of `10.32.20.100–10.32.20.254`. The assignment and live client address were verified on 2026-11-15, together with trusted DSM HTTPS at that address. The retired ADS-B Pi's `10.32.20.121` assignment and the owner-approved unused Ragnar assignment at `10.32.10.99` were disabled that day; their client records and history remain. The other 26 fixed-IP assignments, including the Thingino cameras, were preserved.
+
+The DNS-filter compatibility entries live in `dns_filters` on the legacy `ips` setting, read through `/proxy/network/api/s/default/rest/setting`. The newer `/proxy/network/v2/api/site/default/content-filtering` collection alone does not inventory them. On 2026-11-15, all six legacy entries referenced existing networks and had `filter: none`; no orphan entries remained and no filtering setting was changed. Compare their network IDs with the current network inventory before removing a supposedly orphaned entry.
+
 ## Remote Admin applied state
 
 The Tailscale router rollout created an isolated VLAN and replaced the PVE trunk's repeated per-port overrides with one reusable port profile in UniFi Network 10.6.101:

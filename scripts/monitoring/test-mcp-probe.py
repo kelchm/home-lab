@@ -64,7 +64,7 @@ class Gateway:
         if payload["method"] == "notifications/initialized":
             self.response = Response(202)
         else:
-            assert payload["params"] == {"name": "grafana__list_datasources", "arguments": {}}
+            assert payload["params"] == {"name": "grafana-list_datasources", "arguments": {}}
             self.response = Response(self.status, self.result)
 
     def getresponse(self):

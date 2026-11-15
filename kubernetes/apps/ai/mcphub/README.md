@@ -40,9 +40,28 @@ These are service identities. Individual Discord members are authorized and audi
 
 Clients connect once per capability, for example `https://mcphub.home.kelch.io/mcp/homelab-read` and `https://mcphub.home.kelch.io/mcp/automotive-reference`, and may reuse their principal key across every allowed group. MCPHub has no separate endpoint-composition object. Keeping capabilities as separate client connections is intentional: it avoids duplicating group membership into client-specific bundles and prevents one Hermes MCP circuit breaker from disabling unrelated capabilities.
 
-Claude and Codex reject tool names longer than 64 characters, and they expose MCPHub group tools as `mcp__<connection>__<server>__<tool>`. Operator clients therefore name the `automotive-reference` and `electronics-reference` connections `automotive` and `electronics`. ChatGPT chat connectors call from OpenAI's cloud and cannot reach this LAN-only route.
+Claude and Codex reject tool names longer than 64 characters, and they expose MCPHub group tools as `mcp__<connection>__<server>-<tool>`. Operator clients therefore name the `automotive-reference` and `electronics-reference` connections `automotive` and `electronics`. ChatGPT chat connectors call from OpenAI's cloud and cannot reach this LAN-only route.
 
 The global `/mcp` and `/sse` routes are disabled in MCPHub even though their prefixes reach the Gateway. A restricted key cannot call a direct server route; it must use an allowed group name.
+
+## Tool names and Grok compatibility
+
+Grok CLI 1.0.77 still rejects `grafana__query_prometheus` after adding its own connection prefix: `homelab-read__grafana__query_prometheus` has an ambiguous server/tool boundary. The number of backends is irrelevant: a credential-free fixture reproduces the failure with one tool, and MCPHub 1.2.4 qualifies tools even in single-member groups. On November 15, all five real Grok connections completed their handshakes but admitted none of their 139 tools. The earlier single-server success in [#617](https://github.com/kelchm/home-lab/issues/617) is no longer the current behavior.
+
+The prepared compatibility change sets only `systemConfig.nameSeparator` from `__` to `-`, producing gateway names such as `grafana-query_prometheus` and client names such as `mcp__homelab-read__grafana-query_prometheus`. It preserves backend prefixes; removing them could make tools from different backends collide. Changing the separator renames tools for every client, so refresh client discovery and verify existing consumers before accepting the rollout. The local qualification below does not establish deployed acceptance.
+
+The exact six-group catalog contains 150 tools, including the 11 tools in `digikey-lists`. Hyphen projection has no within-group collisions, and the longest Claude/Codex qualified name is 60 characters. Installed Grok accepts the proposed names in local fixtures; its own qualified-name limit is 256 characters, while the shared 64-character limit still governs these clients. Native Claude Code and Codex discovery are checked without sending a model turn. Hermes v0.23.1's actual naming functions retain unique, provider-valid names, including all four tools under its managed `mcphub_hacker_news` connection; this source check does not replace running-Hermes discovery after rollout. Grok's principal remains excluded from `digikey-lists`.
+
+Dispatch was also checked on the pinned MCPHub 1.2.4 image in a disposable local gateway. Six dummy backends included hyphenated IDs and competing shorter prefixes: all eight listed tools reached the expected backend with their original tool names and arguments, including hyphens inside the tool name. The wrapped `call_tool` path also passed. The group resolver matches the full cached tool identity and strips the exact backend prefix; it does not split a successful call at the first hyphen.
+
+Run the credential-free [name qualification harness](../../../../scripts/monitoring/test-mcp-tool-names.py) against the installed clients:
+
+```sh
+python3 scripts/monitoring/test-mcp-tool-names.py \
+  --claude "$(command -v claude)" --codex "$(command -v codex)"
+```
+
+It covers nested names, single and multiple backend prefixes, punctuation, leading underscores, Grok's 256/257-character boundary, and local client discovery. Grok's doctor does not reject duplicate advertised names, so the harness separately checks projection collisions, including distinct backend/tool pairs that would become the same hyphenated name. `--catalog /private/path/catalog.json` checks a current private catalog with `{connection, backend, tool}` records; only counts are printed. `--hermes-schema /path/to/tools/mcp_tool_schema.py` additionally checks the pinned Hermes naming functions. Catalog and fixture files stay outside the repository. After deployment, require all five authorized Grok connections to admit their complete live catalogs and recheck Claude, Codex and running Hermes discovery before closing [#617](https://github.com/kelchm/home-lab/issues/617).
 
 ## Management
 
