@@ -92,25 +92,41 @@ def grok_case(grok: str, folder: Path, label: str, connection: str, names: list[
 
 
 def control_client(command: list[str], folder: Path, initial: dict, on_message, *, client_env: dict[str, str]) -> object:
-    process = subprocess.Popen(command, cwd=folder, env=clean_env() | client_env, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, bufsize=1)
+    process = subprocess.Popen(command, cwd=folder, env=clean_env() | client_env, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE, bufsize=0)
     selector = selectors.DefaultSelector()
     selector.register(process.stdout, selectors.EVENT_READ)
     selector.register(process.stderr, selectors.EVENT_READ)
+    os.set_blocking(process.stdout.fileno(), False)
+    os.set_blocking(process.stderr.fileno(), False)
+    stdout_buffer = b""
 
     def send(message):
-        process.stdin.write(json.dumps(message) + "\n")
+        process.stdin.write((json.dumps(message) + "\n").encode())
         process.stdin.flush()
 
     send(initial)
     deadline = time.monotonic() + 30
     answer = None
     try:
-        while answer is None and time.monotonic() < deadline and process.poll() is None:
+        while answer is None and time.monotonic() < deadline and selector.get_map():
             for key, _ in selector.select(timeout=0.1):
-                line = key.fileobj.readline()
-                if not line or key.fileobj is process.stderr:
+                try:
+                    chunk = os.read(key.fd, 65536)
+                except BlockingIOError:
                     continue
-                answer = on_message(json.loads(line), send)
+                if not chunk:
+                    selector.unregister(key.fileobj)
+                    continue
+                if key.fileobj is process.stderr:
+                    continue
+                stdout_buffer += chunk
+                while b"\n" in stdout_buffer:
+                    line, stdout_buffer = stdout_buffer.split(b"\n", 1)
+                    if not line.strip():
+                        continue
+                    answer = on_message(json.loads(line), send)
+                    if answer is not None:
+                        break
                 if answer is not None:
                     break
         assert answer is not None, "Local client discovery did not finish before the deadline"
@@ -128,6 +144,20 @@ def control_client(command: list[str], folder: Path, initial: dict, on_message, 
         selector.close()
     return answer
 
+
+
+def batched_response_check(folder: Path) -> dict:
+    # One write, then no further output: both frames must be consumed immediately.
+    child = "import os,sys; sys.stdin.buffer.readline(); os.write(1, b'{\"part\":1}\\n{\"part\":2}\\n'); sys.stdin.buffer.read()"
+    parts = []
+
+    def on_message(message, send):
+        parts.append(message["part"])
+        return {"responses": parts} if len(parts) == 2 else None
+
+    result = control_client([sys.executable, "-c", child], folder, {"initialize": True}, on_message, client_env={})
+    assert result["responses"] == [1, 2], "Batched NDJSON responses were stranded"
+    return result
 
 def claude_check(claude: str, folder: Path, groups: dict[str, list[str]]) -> dict:
     client_home = folder / "claude-home"
@@ -241,7 +271,7 @@ def main() -> None:
     cases = [("plain", "fixture", ["query_prometheus"], 0), ("nested-single", "fixture", ["grafana__query_prometheus"], 1), ("nested-multi", "fixture", ["grafana__query_prometheus", "kubernetes__pods_list"], 2), ("hyphen", "fixture", ["grafana-query_prometheus", "kubernetes-pods_list"], 0), ("single-underscore", "fixture", ["grafana_query_prometheus"], 0), ("leading-underscore", "fixture", ["_leading"], 1), ("punctuation", "fixture", ["with.dot", "with:colon", "with/slash", "with space", "naïve"], 5), ("connection-nested", "fixture__nested", ["tool"], 1), ("length-256", "fixture", ["x" * 247], 0), ("length-257", "fixture", ["x" * 248], 1), ("doctor-duplicate-limit", "fixture", ["same-tool", "same-tool"], 0)]
     with tempfile.TemporaryDirectory(prefix="mcp-name-qualification-") as temporary:
         folder = Path(temporary)
-        summary = {"grok_version": subprocess.check_output([args.grok, "--version"], text=True).strip(), "model_turns": 0}
+        summary = {"grok_version": subprocess.check_output([args.grok, "--version"], text=True).strip(), "model_turns": 0, "batched_response_fixture": batched_response_check(folder)}
         summary["name_cases"] = [grok_case(args.grok, folder, *case) for case in cases]
         summary["grok_catalog"] = {name: grok_case(args.grok, folder, f"catalog-{i}", name, names, 0)["listed"] for i, (name, names) in enumerate(groups.items())}
         summary["max_claude_codex_qualified_length"] = max(len(f"mcp__{c}__{n}") for c, names in groups.items() for n in names)

@@ -150,24 +150,38 @@ pvesm list backups-pve-sbx --vmid VMID
 
 Restore to an unused VMID on the intended node, then remove or disconnect every NIC before first boot. Never boot a restored copy beside its source with the same network identity.
 
-For a timed drill, first verify cluster quorum, the intended node's current storage health and free capacity, and that no backup or migration is active. Use a representative current archive and an unused disposable VMID (400–499); add that VMID to `daily-backups`' explicit exclusions before restoring. Check that the VMID has no pre-existing disks or firewall file. Record the original job configuration, archive size, source and target nodes, kernel and PVE versions, and any datacenter/storage restore bandwidth limits. Restore with automatic start disabled. Immediately after completion, disable on-boot startup, replace inherited tags with `disposable`, remove inherited NICs, hook scripts and cloud-init provisioning media in one configuration update, and verify the resulting configuration before starting the copy. Measure archive restoration separately from time to the first successful guest-agent response, then validate recovered application data without printing credentials or private content. Record archive and logical byte throughput separately, retaining the task's sparse-byte accounting and cache limitations. After shutting down and verifying the disposable identity, remove only its guest and disks, check for leftover disks and its firewall file, and restore the exact prior backup exclusion configuration. `qm destroy --purge` also edits backup-job exclusions; compare the final job field by field with the saved configuration, including absent versus empty exclusions.
+For a timed drill, first verify cluster quorum, the intended node's current storage health and free capacity, and that no backup or migration is active. Use a representative current archive and an unused disposable VMID (400–499); add that VMID to `daily-backups`' explicit exclusions before restoring. Check that the VMID has no pre-existing disks or firewall file. Record the original job configuration, archive size, source and target nodes, kernel and PVE versions, and any datacenter/storage restore bandwidth limits. Restore with automatic start disabled. Immediately after completion, disable on-boot startup, replace inherited tags with `disposable`, remove inherited NICs, host-device passthrough, shared-host filesystems, hook scripts and cloud-init provisioning media in one configuration update, and verify the resulting configuration before starting the copy. Measure archive restoration separately from time to the first successful guest-agent response, then validate recovered application data without printing credentials or private content. Record archive and logical byte throughput separately, retaining the task's sparse-byte accounting and cache limitations. After shutting down and verifying the disposable identity, remove only its guest and disks, check for leftover disks and its firewall file, and restore the exact prior backup exclusion configuration. `qm destroy --purge` also edits backup-job exclusions; compare the final job field by field with the saved configuration, including absent versus empty exclusions.
 
 A drill on the current ASPM-disabled baseline measures recovery on that dated configuration; it does not pass the separate controlled storage qualification in [#1507](https://github.com/kelchm/home-lab/issues/1507). Stop on an unhealthy storage preflight or new AER/NVMe errors. A successful restore is not a zero-error qualification window.
 
 ```sh
-qmrestore /mnt/pve/backups-pve-sbx/dump/ARCHIVE.vma.zst RESTORE_VMID --storage local-lvm --unique 1
-for nic in $(qm config RESTORE_VMID | sed -n 's/^\(net[0-9]\+\):.*/\1/p'); do
-    qm set RESTORE_VMID --delete "$nic"
-done
-restored_config=$(qm config RESTORE_VMID) || { echo "Unable to read restored VM configuration" >&2; exit 1; }
-remaining_nics=$(printf '%s\n' "$restored_config" | sed -n 's/^\(net[0-9]\+\):.*/\1/p')
-if [ -n "$remaining_nics" ]; then
-    echo "Refusing to start RESTORE_VMID: network interfaces remain: $remaining_nics" >&2
+set -eu
+restore_vmid=401 # Choose an unused disposable VMID and exclude it from daily-backups first.
+qmrestore /mnt/pve/backups-pve-sbx/dump/ARCHIVE.vma.zst "$restore_vmid" --storage local-lvm --unique 1 --start 0 --ha-managed 0
+restored_config=$(qm config "$restore_vmid") || { echo "Unable to read restored configuration" >&2; exit 1; }
+isolation_items=$(printf '%s\n' "$restored_config" | awk '
+    /^(net[0-9]+|hostpci[0-9]+|usb[0-9]+|virtiofs[0-9]+|parallel[0-9]+|hookscript|args|startup|cicustom|ipconfig[0-9]+):/ ||
+    /^(ide|sata|scsi|virtio)[0-9]+:.*cloudinit/ ||
+    (/^serial[0-9]+:/ && $2 != "socket") { sub(/:.*/, ""); print }
+' | paste -sd, -)
+if [ -n "$isolation_items" ]; then
+    qm set "$restore_vmid" --onboot 0 --protection 0 --tags disposable --delete "$isolation_items"
+else
+    qm set "$restore_vmid" --onboot 0 --protection 0 --tags disposable
+fi
+restored_config=$(qm config "$restore_vmid") || { echo "Unable to read isolated configuration" >&2; exit 1; }
+remaining=$(printf '%s\n' "$restored_config" | awk -v vmid="$restore_vmid" '
+    /^(net[0-9]+|hostpci[0-9]+|usb[0-9]+|virtiofs[0-9]+|parallel[0-9]+|hookscript|args|cicustom|ipconfig[0-9]+):/ ||
+    /^(ide|sata|scsi|virtio)[0-9]+:.*cloudinit/ ||
+    (/^serial[0-9]+:/ && $2 != "socket") { print $1 }
+    /^(ide|sata|scsi|virtio|efidisk|tpmstate|unused)[0-9]+:/ && $2 !~ ("^local-lvm:vm-" vmid "-") { print $1 }
+')
+if [ -n "$remaining" ]; then
+    echo "Refusing to start: isolation or disk-ownership checks failed for $remaining" >&2
     exit 1
 fi
-printf '%s\n' "$restored_config"
-qm start RESTORE_VMID
-qm guest cmd RESTORE_VMID ping
+qm start "$restore_vmid"
+qm guest cmd "$restore_vmid" ping
 ```
 
 After validating the recovered filesystem and application state, shut down the isolated copy. Destroy it only when the VMID, node, and disposable purpose have been rechecked.
