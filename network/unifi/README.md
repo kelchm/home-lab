@@ -97,7 +97,7 @@ Validation from disposable PVE guest `10.32.21.201` produced the following matri
 | `k8s-prod` pod to guest TCP 22 | Blocked |
 | Main admin workstation to guest TCP 22 | Open |
 
-These rules implement the PVE-specific slice of the network-topology matrix. They do not make the complete phase-2 firewall posture applied. The Untrusted zone and Guest containment are documented under [Firewall zones applied state](#firewall-zones-applied-state); the Main admin-device restriction, the Infrastructure zone and the Spark inference restrictions remain to be implemented.
+These rules were the PVE-specific slice of the superseded [network-topology plan's](../../docs/plans/20260821-network-topology.md) matrix; the target model is now the [zone design](../../docs/architecture.md#firewall-zones) tracked in [#348](https://github.com/kelchm/home-lab/issues/348). The Untrusted zone and Guest containment are documented under [Firewall zones applied state](#firewall-zones-applied-state); the Main admin-device restriction and the Infrastructure/Workloads zone changes remain to be implemented. Spark port 8888 admission is already enforced by the [host API-access policy](../../sparks/inference/sparkrun/README.md#api-access).
 
 ## Applying `frr.conf`
 
@@ -287,7 +287,9 @@ Network 10.6.106 redirects the SD-WAN UI to Site Manager. To change the local en
 
 ## IDS/IPS signature suppression
 
-Threat Management runs in **Notify** mode, so a suppression costs alerting only. Suppressions are added from an alert's action menu (System Log → Security → open an event → `Suppress Signature`), not from `Detection Exclusions`, which takes an IP/network/subnet and can't reference a signature.
+Threat Management runs in **Notify** mode, so a suppression costs alerting only.
+
+The gateway's routed inter-VLAN throughput in this mode has not been measured. The 1.09 Gb/s Spark-to-Main Wi-Fi result in the [Spark validation record](../../docs/runbooks/dgx-spark-bringup.md#validation-record) is a client baseline, not the gateway's ceiling. Measure it with `iperf3` between two wired hosts on different VLANs before a design depends on routed bandwidth, or before switching Threat Management to prevention ([#352](https://github.com/kelchm/home-lab/issues/352)). Suppressions are added from an alert's action menu (System Log → Security → open an event → `Suppress Signature`), not from `Detection Exclusions`, which takes an IP/network/subnet and can't reference a signature.
 
 | Signature | SID | Scope | Rationale |
 |---|---|---|---|

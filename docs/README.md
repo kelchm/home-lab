@@ -76,10 +76,6 @@ These documents predate issue-based planning. Do not add new plan files. Retire 
 
 Retained dated plans keep the status header `**Status:** <Proposed|Active|Implemented|Superseded> — <date>; <detail or current-state link>`. The grouping below reflects those headers; it does not replace verification of outstanding work.
 
-### Unfinished
-
-- [20260821-network-topology](plans/20260821-network-topology.md) — active, partially implemented VLAN/zone topology, DGX placement, PVE wiring, and second-cluster reservations.
-
 ### Historical
 
 Implemented or superseded plans preserve context. Use the maintained documentation linked from each plan for current operations.
@@ -96,6 +92,7 @@ Implemented or superseded plans preserve context. Use the maintained documentati
 - [20260802-lemon-manuals-selfhost](plans/20260802-lemon-manuals-selfhost.md) — self-host the LEMON manuals archive on NFS with an MCP server in front.
 - [20260814-pve-cluster](plans/20260814-pve-cluster.md) — superseded design for the independent three-node `pve-sbx` cluster, retired 2026-11-14 with its 2026-08-27 acceptance record; current operations live under `proxmox/`, and the remaining commissioning gates and guest-provisioning decision are in the issues linked from its handoff.
 - [20260818-sn770-zfs-qualification-procedure](plans/20260818-sn770-zfs-qualification-procedure.md) — the bounded, destructive test procedure and safety guards used for the SN770 reproduction run.
+- [20260821-network-topology](plans/20260821-network-topology.md) — superseded VLAN/zone topology, DGX Spark placement, PVE wiring and second-cluster reservations, retired 2026-11-14; current state lives in architecture, the UniFi overview and the Spark and PVE docs, and the remaining VLAN 40, firewall and Spark commissioning work is in the issues linked from its handoff.
 - [20260902-tailscale-remote-admin](plans/20260902-tailscale-remote-admin.md) — superseded two-VM PVE Tailscale subnet-router pair on isolated VLAN 19, retired 2026-10-25; routing and failover evidence retained.
 
 ## Decision records & benchmarks

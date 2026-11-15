@@ -1,10 +1,10 @@
 # DGX Spark Bring-up
 
 Current-state record and recovery procedure for the two-node NVIDIA DGX Spark
-cluster. This runbook implements phase 3 of the
-[network-topology plan](../plans/20260821-network-topology.md#phase-3--dgx-sparks).
+cluster. It began as phase 3 of the superseded
+[network-topology plan](../plans/20260821-network-topology.md#phase-3--dgx-sparks), which keeps the original rationale; the VLAN, fabric and addressing decisions now live in [architecture](../architecture.md).
 
-**Status (2026-08-27):** LAN, storage VLAN, direct fabric, host anti-transit, raw RDMA, NCCL, and the RTL8127 burn-in are configured and tested. The live No Workloads containment slice is applied and validated; the broader UniFi firewall matrix, Synology export changes, Spark-to-NAS throughput, DNS, and final temporary-access cleanup remain open. The incomplete items are listed explicitly under [Remaining work](#remaining-work).
+**Status (2026-08-27, open items updated 2026-11-14):** LAN, storage VLAN, direct fabric, host anti-transit, raw RDMA, NCCL, DNS and the RTL8127 burn-in are configured and tested. The Workloads containment slice is applied and validated. The storage-leg throughput and gateway fabric-route checks ([#1516](https://github.com/kelchm/home-lab/issues/1516)) and the bring-up sudo decision ([#1517](https://github.com/kelchm/home-lab/issues/1517)) remain open; see [Remaining work](#remaining-work).
 
 **Host recovery checks passed (2026-09-30):** after swapping the port 7/8 modules and replugging both cable ends, both links passed 30 minutes idle and a complete C4 250k cold/replay pair at 10GbE with zero new carrier drops. Both inference containers are stopped through SparkRun; management/storage probes and GPU-idle checks pass. The fault's cause is unconfirmed. [#649](https://github.com/kelchm/home-lab/issues/649) closed on 2026-10-30 because the drops stopped recurring: spark-2 had been up since October 25 with only startup carrier events and none in the preceding 72 hours, after a further cable replacement of unknown date. No switch-side recheck or load test was done for that closure.
 
@@ -183,7 +183,7 @@ This is applied controller state, not merely desired configuration.
 | Zone | Internal |
 | Internet access | Enabled |
 
-No Workloads firewall rules were created during the original Spark bring-up. The later PVE commissioning session added the containment slice recorded in [`network/unifi/README.md`](../../network/unifi/README.md): Workloads cannot initiate to Infra Mgmt, Storage, K8s Prod, or `admin-prod`, and K8s Prod cannot initiate to Workloads. Main administration and `services-prod` remain reachable. The broader firewall matrix, including explicit Spark inference allows and IoT/Guest negative tests, is still unapplied and unvalidated.
+No Workloads firewall rules were created during the original Spark bring-up. The later PVE commissioning session added the containment slice recorded in [`network/unifi/README.md`](../../network/unifi/README.md): Workloads cannot initiate to Infra Mgmt, Storage, K8s Prod, or `admin-prod`, and K8s Prod cannot initiate to Workloads. Main administration and `services-prod` remain reachable. Port 8888 admission is enforced on the host by the [API access policy](../../sparks/inference/sparkrun/README.md#api-access), not by the gateway. Workloads is still in the Internal zone; its move and the matching positive and negative checks belong to [#348](https://github.com/kelchm/home-lab/issues/348).
 
 ### `spark-trunk` port profile
 
@@ -430,11 +430,11 @@ forwarding-guard, and reboot-persistence results are from 2026-08-22.
 | Fabric transit | Routed negative test dropped 3/3 packets; bridge-container A/B passed only with the guard absent | Pass; guard closes a proven Docker forwarding path |
 | Guard across Docker restart | Unchanged guard invocation IDs; table present in 67/67 and 64/64 samples; no guard-table nft events | Pass |
 | Reboot persistence | All four profiles, EEE-off, jumbo reachability, and nftables guard returned | Pass |
-| Spark to NAS iperf3 + one-hop trace | Not run; DSM work deferred | Open |
+| Spark to NAS iperf3 + one-hop trace | Not run | Open ([#1516](https://github.com/kelchm/home-lab/issues/1516)) |
 | RTL8127 10-minute full-duplex burn | Standard `rx_errors`, `rx_missed`, and `rx_mac_error` remained zero on both hosts | Pass; vendor counter monitored |
 | RTL8127 captured line-rate sample | 9.40 Gb/s simultaneously in each direction for 60 seconds; zero TCP retransmits | Pass |
-| IoT to Spark negative test | Firewall intentionally deferred | Blocked by firewall phase |
-| Gateway has no fabric route | No route was added for `198.19.240.0/20`; read-back verification pending | Open |
+| IoT to Spark negative test | Firewall intentionally deferred | Not run; Workloads zone checks belong to [#348](https://github.com/kelchm/home-lab/issues/348) |
+| Gateway has no fabric route | No route was added for `198.19.240.0/20`; read-back verification pending | Open ([#1516](https://github.com/kelchm/home-lab/issues/1516)) |
 
 The Main endpoint was a MacBook Pro on Wi-Fi. The result is a useful routed
 end-to-end client baseline and is strong for that path, but it does not isolate
@@ -560,17 +560,14 @@ Save host/switch evidence before resetting a link or rebooting. Stop affected in
 Do not mark this runbook complete until these are resolved:
 
 - [x] Spark-2 management/storage carrier loss: [#649](https://github.com/kelchm/home-lab/issues/649) closed on 2026-10-30 as no longer reproducing, cause unknown, without running the recovery gate. The gate and reopen trigger under [Management SSH drops with NIC carrier loss](#management-ssh-drops-with-nic-carrier-loss) apply if it recurs.
-- [ ] In DSM, identify only the NFS exports the Sparks need and scope them to
-      `10.32.25.31` and `10.32.25.32`. Do not broaden unrelated exports.
+- Deferred: no Spark workload mounts Athena NFS today; each host keeps its own model cache. When one first needs a mount, export only the required share to `10.32.25.31` and `10.32.25.32` and use those storage source addresses. Do not broaden unrelated exports.
 - [ ] Run Spark-to-NAS `iperf3` over VLAN 25 and record at least 9 Gb/s plus a
-      direct/one-hop trace. No DSM or export changes were made on 2026-08-21.
+      direct/one-hop trace ([#1516](https://github.com/kelchm/home-lab/issues/1516)). No DSM or export changes were made on 2026-08-21.
 - [x] Add `spark-1.home.kelch.io`, `spark-2.home.kelch.io`, and the two storage DNS records. The four UniFi-local records were added and resolved through the VLAN 20 gateway on 2026-08-26. Fabric names remain `/etc/hosts` only.
 - [ ] Read back the gateway routing table and prove that no route for
-      `198.19.240.0/20` or either fabric prefix is present.
-- [ ] Apply the network-plan firewall matrix in its own phase, then run the IoT
-      SSH negative test and Main inference-port positive test.
-- [ ] Remove `/etc/sudoers.d/99-dgx-bringup` from both Sparks and verify
-      `sudo -n true` fails before declaring the commissioning session closed.
+      `198.19.240.0/20` or either fabric prefix is present ([#1516](https://github.com/kelchm/home-lab/issues/1516)).
+- [x] ~~Apply the network-plan firewall matrix, then run the IoT SSH negative test and Main inference-port positive test.~~ Superseded: port 8888 admission is the host [API access policy](../../sparks/inference/sparkrun/README.md#api-access), and Workloads zone placement with its checks belongs to [#348](https://github.com/kelchm/home-lab/issues/348).
+- [ ] Decide whether `/etc/sudoers.d/99-dgx-bringup` is removed or replaced by a recorded grant ([#1517](https://github.com/kelchm/home-lab/issues/1517)). Several procedures in this runbook and SparkRun's page-cache clear rely on non-interactive sudo, so do not delete it before that decision.
 - [x] Remove obsolete `known_hosts` entries: the bring-up DHCP addresses
       (`10.32.21.228/.231`, matched by host key) and the superseded statics
       `10.32.21.11/.12` are removed on the operator machine and both Sparks.

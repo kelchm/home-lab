@@ -1,6 +1,33 @@
 # Network topology: workloads VLAN, DGX Spark placement, VLAN 40 retirement
 
-**Status:** Active — 2026-09-02; partially implemented; current host state and remaining phase-3 work: [DGX Spark bring-up runbook](../runbooks/dgx-spark-bringup.md). The later Remote Admin VLAN is described in [`network/unifi/README.md`](../../network/unifi/README.md#remote-admin-applied-state); its original Tailscale router design is in the superseded [remote-admin plan](20260902-tailscale-remote-admin.md).
+**Status:** Superseded — 2026-11-14; VLAN 21, the Spark placement and fabric, the PVE wiring and the second-cluster reservations are implemented and documented in maintained docs, and the remaining work is owned by the issues below. The proposal is retained as history; retiring it does not claim that any unperformed test passed or adopt any policy it proposed.
+
+## Handoff to maintained documentation and issues
+
+[Architecture](../architecture.md) owns the VLAN layout, the Workloads allocation, the firewall-zone target model, the non-routed fabric and the design decisions carried forward from this plan. The [UniFi overview](../../network/unifi/README.md) records applied controller state. The [DGX Spark bring-up runbook](../runbooks/dgx-spark-bringup.md) owns Spark host configuration and validation. [`proxmox/README.md`](../../proxmox/README.md) and the [PVE node bootstrap runbook](../runbooks/pve-node-bootstrap.md) own the PVE wiring and guest placement rules. The [roadmap](../roadmap.md#second-kubernetes-cluster) owns the second-cluster reservation.
+
+| Remaining subject | Governing work or disposition |
+|---|---|
+| Phase 1: retire VLAN 40, the legacy L2 pools and Cilium settings, and the node subinterfaces | [#662](https://github.com/kelchm/home-lab/issues/662), expanded to cover the whole retirement; read-only on 2026-11-14, no L2 announcement policy existed and both legacy pools had zero allocated addresses |
+| Phase 2: the rest of the firewall matrix | [#348](https://github.com/kelchm/home-lab/issues/348). Architecture's trust-level zone model replaces this plan's one-zone-per-VLAN matrix. The IoT/Guest pool denies are applied; Guest still reaches `services-prod` until #348 moves the household devices. |
+| Home Assistant placement, Workloads mDNS and its rule set | [#1365](https://github.com/kelchm/home-lab/issues/1365) (stop-gap `10.32.21.150`, replacing the `.101` VM example below) |
+| Kubernetes egress identity for narrow cross-zone exceptions | [#355](https://github.com/kelchm/home-lab/issues/355). The proposed observability pull and `admin-prod` push exceptions are not carried forward: hosts push through `services-prod` ([host monitoring](../runbooks/host-monitoring.md)). |
+| Phase 3: Spark storage-leg `iperf3` with one-hop trace, and gateway read-back proving no fabric route | [#1516](https://github.com/kelchm/home-lab/issues/1516) |
+| Phase 3: the bring-up passwordless sudo file | [#1517](https://github.com/kelchm/home-lab/issues/1517): current procedures depend on non-interactive sudo, so removing it is a decision, not cleanup |
+| Phase 3: Spark firewall tests | Not carried forward as written. Inference admission is the host policy accepted under [#1093](https://github.com/kelchm/home-lab/pull/1093) ([API access](../../sparks/inference/sparkrun/README.md#api-access)); Workloads zone placement and its fresh verification belong to #348. |
+| Phase 3: DSM NFS exports for the Sparks | Deferred. No Spark workload mounts Athena NFS, so there is nothing to scope. Revisit when one first needs a mount: export to `10.32.25.31-.32` only ([runbook](../runbooks/dgx-spark-bringup.md#remaining-work)). |
+| Phase 0: gateway inter-VLAN throughput, and the Spark-to-Main routed contrast | Deferred, with its trigger in the [UniFi overview](../../network/unifi/README.md#idsips-signature-suppression) |
+| Phase 0: gateway ECMP and BGP session behaviour | [#222](https://github.com/kelchm/home-lab/issues/222); the one-off question about the 2026-08-20 session re-establishment is dropped as obsolete |
+| Phase 4: Corosync under 2.5 GbE load and a pulled 1 GbE link | Deferred to the PVE HA trigger in [`proxmox/README.md`](../../proxmox/README.md#design-decisions-and-deferrals). Without HA resources the watchdog is disarmed, and the 2026-08-27 acceptance proved failover between the two links. |
+| Phase 5: second Kubernetes cluster | Reservation and prerequisites in the [roadmap](../roadmap.md#second-kubernetes-cluster); no date committed |
+
+Completed or closed since the proposal: the Lab Switch LAG runs at 2×10G ([#347](https://github.com/kelchm/home-lab/issues/347)), the Spark DNS records exist, and the VLAN names dropped "Lab". Not carried forward: a static gateway, switch and port inventory in the repository. The gateway is a UDM Pro, Unpoller collects device and port state ([host monitoring](../runbooks/host-monitoring.md#unifi)), #348 keeps detailed topology private, and host-specific ports stay in their runbooks. Also not carried forward: the generic `mgmt-infra` and `storage` switch profiles and a PVE SDN layer. The applied `pve-guest-trunk` and `spark-trunk` profiles are documented, and the `k8s-node` VLAN 40 tag removal is part of #662. Fronting Spark inference through Traefik remains a reversible option, not pending work. Retiring this plan is the last part of [#1361](https://github.com/kelchm/home-lab/issues/1361).
+
+## Historical proposal
+
+The remainder preserves the plan as last updated before retirement, unchanged, including its "live", "remaining" and phase-status wording as of those dates and its original `Active` status. Use the handoff above for present state and work tracking.
+
+**Original status:** Active — 2026-09-02; partially implemented; current host state and remaining phase-3 work: [DGX Spark bring-up runbook](../runbooks/dgx-spark-bringup.md). The later Remote Admin VLAN is described in [`network/unifi/README.md`](../../network/unifi/README.md#remote-admin-applied-state); its original Tailscale router design is in the superseded [remote-admin plan](20260902-tailscale-remote-admin.md).
 
 **Scope:** VLAN/zone model for the whole lab — DGX Spark placement and
 interconnect, PVE guest wiring (integrated into the

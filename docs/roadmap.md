@@ -40,6 +40,13 @@ retaining the same addresses and BGP policy:
 No implementation date or hardware assignment is committed. PVE does not
 consume these reservations merely by hosting unrelated guests.
 
+If it lands as PVE VMs, these prerequisites from the superseded [network-topology plan](plans/20260821-network-topology.md#phase-5--deferred-second-kubernetes-cluster) apply:
+
+- Before creating any VM, add VLAN 31 to every host's `vmbr0` `bridge-vids` and to the UniFi `pve-guest-trunk` profile together; neither carries it today.
+- Run one Talos VM per host, with vNIC 0 tagged 31 for the node address and vNIC 1 tagged 25 for storage. Give each a deterministic MAC.
+- Use pod and service CIDRs distinct from k8s-prod's, for example `10.44.0.0/16` and `10.45.0.0/16`.
+- Turn off per-vNIC PVE MAC/IP filtering, because the Talos VIP moves by GARP. Do not make node VMs PVE HA resources.
+
 ## Out of scope (future considerations)
 
 - **Cilium Gateway API replacing Traefik**: undecided, and not yet evaluated. Cilium 1.20 implements the HTTPRoute `ExternalAuth` filter (GEP-1494), but Gateway API v1.7.0 ships that filter only in its experimental channel, and this cluster installs the standard channel. Cilium's Gateway API controller and Envoy are disabled here. A move would also need a separate auth service, because the filter hands the decision to a backend, whereas `traefik-oidc-auth` does the Kanidm sign-in inside Traefik. Revisit when `ExternalAuth` reaches the standard channel and [#1348](https://github.com/kelchm/home-lab/issues/1348) (Cilium policy enforcement) is closed.

@@ -119,7 +119,7 @@ Removing or moving many dashboards at once can leave stale files in the Grafana 
 | 90 | IoT | 10.32.90.0/24 | Household appliances and media devices |
 | 99 | Guest | 10.32.99.0/24 | Visitors (household devices are moving to IoT) |
 
-VLAN 40 (Lab Services) is being retired — it existed only to host node subinterfaces required by Cilium L2 announcements. Under BGP, LB IPs are routed (not bridged) so no node interface on the pool subnet is needed. The legacy L2 pools and node subinterfaces remain in place pending a final maintenance window.
+VLAN 40 (Lab Services) is being retired — it existed only to host node subinterfaces required by Cilium L2 announcements. Under BGP, LB IPs are routed (not bridged) so no node interface on the pool subnet is needed. The legacy L2 pools and node subinterfaces remain in place until the retirement in [#662](https://github.com/kelchm/home-lab/issues/662).
 
 **Firewall principles:**
 
@@ -313,6 +313,21 @@ API VIP is managed by the Talos `vipController` (GARP-based at the machine-confi
 ```
 
 Talos nodes do NOT have IPs on Infra Mgmt. Talos has no classic management plane — `talosctl` and `kubectl` (both mTLS) are the entire management surface, and run over VLAN 30 alongside workload traffic. Network-level isolation is replaced by cryptographic isolation. Infra Mgmt exists for tenants that *do* need a classic mgmt plane.
+
+**Workloads VLAN (21):**
+
+```text
+10.32.21.1         gateway-workloads        Router interface
+10.32.21.2-.10     (reserved, network/service anchors)
+10.32.21.31-.32    spark-{1,2}              System 3 workload hosts (10GbE, native VLAN)
+10.32.21.33-.39    (reserved, workload-host expansion)
+10.32.21.100-.149  fixed guests             Static platform/application guests; .100 hermes-1
+10.32.21.150-.199  DHCP reservations        Long-lived reservations
+10.32.21.200-.239  DHCP                     Dynamic scope
+10.32.21.240-.254  (reserved)
+```
+
+The other identity decades stay unallocated here. The PVE hosts trunk VLAN 21 to their guests but hold no address on it. Home Assistant's stop-gap reservation at `.150` is tracked in [#1365](https://github.com/kelchm/home-lab/issues/1365).
 
 **Remote Admin VLAN (19):**
 
@@ -611,6 +626,8 @@ gitignored.
 - **Three pool classes (admin / services / shared)**: pool == firewall policy class. Shared exists specifically to let cluster-wide services like DNS take per-IP+port carve-outs from untrusted VLANs without diluting the admin/services posture.
 - **Per-service IPs for native-auth household apps**: BGP makes IPs cheap; offloading from Traefik reduces middleware sprawl and lets each app own its own TLS path via cert-manager.
 - **Admin gateway is the default for operator surfaces regardless of native auth**: native auth solves the login screen but not consistent IP allowlisting, future SSO, or uniform security headers. Centralize that policy in Traefik admin.
+- **One Workloads VLAN rather than per-device VLANs**: the Sparks and general-purpose PVE guests share VLAN 21. A dedicated Spark VLAN would have the same policy profile, and the Sparks' unique east-west need is already a separate physical fabric. VLAN IDs read as families: 1–19 client and edge, 20–29 shared server planes, 30–39 Kubernetes compute (units digit = cluster index), 90–99 untrusted. 21 avoids `50`, which the `150` shared pool would falsely suggest.
+- **Bulk storage stays switched at L2 on VLAN 25**: switch-local L3 routing would bypass the gateway firewall and split routing, so bulk flows stay on the storage VLAN instead. VLAN 25 keeps MTU 1500: mixed 1/2.5/10 GbE endpoints and the Whereabouts pod ranges make silent jumbo blackholes likelier than the gain at 2.5 GbE. MTU 9000 applies only to the closed Spark fabric.
 - **VLAN 30 retained as compute-only**: pod egress identity and management-surface blast radius still justify a dedicated Kubernetes compute VLAN even when it holds only nodes + API VIP.
 - **API VIPs managed by Talos `vipController`, not Cilium service-LB**: Talos handles VIP failover via GARP at the machine-config layer. Cluster API reachability is therefore independent of Cilium's service-LB and BGP convergence — important during BGP outages.
 - **Flat DNS namespace**: Hostname prefixes encode role/environment; DNS hierarchy would duplicate that info and complicate wildcard certs.
