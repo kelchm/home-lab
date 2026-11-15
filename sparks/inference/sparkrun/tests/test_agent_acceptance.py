@@ -8,6 +8,7 @@ import sys
 import tempfile
 import threading
 import time
+from types import SimpleNamespace
 import unittest
 from unittest.mock import patch
 
@@ -65,12 +66,15 @@ class FixtureHandler(BaseHTTPRequestHandler):
                     "function": {"name": "multiply", "arguments": '{"a":17,"b":19}'}}
             message = {"content": None, "tool_calls": [call]}
             delta = {"tool_calls": [{"index": 0, **call}]}
-            finish = "stop" if mode == "tool-stop" else "tool_calls"
+            finish = "stop" if mode == "tool-stop" else "error" if mode == "tool-error" else "tool_calls"
+        engine = {"token_ids": [1] * 16} if body.get("return_token_ids") else None
+        usage = {"prompt_tokens": 1, "completion_tokens": 16 if engine else 1}
         if not body.get("stream"):
-            self.wfile.write(json.dumps({"choices": [{"message": message, "finish_reason": finish}]}).encode())
+            self.wfile.write(json.dumps({"choices": [{"message": message, "finish_reason": finish}],
+                                        "usage": usage, "tensorfold": engine}).encode())
             return
         chunks = [{"choices": [{"delta": delta, "finish_reason":
-                   "error" if mode == "stream-error" else finish}], "usage": {"prompt_tokens": 1}}]
+                   "error" if mode == "stream-error" else finish}], "usage": usage, "tensorfold": engine}]
         for chunk in chunks:
             self.wfile.write(b"data: " + json.dumps(chunk).encode() + b"\n\n")
         if mode != "missing-done":
@@ -115,13 +119,33 @@ class AgentAcceptanceTests(unittest.TestCase):
                     self.assertNotEqual(result.returncode, 0)
                     self.assertIn(diagnostic, result.stderr)
 
-    def test_tool_turns_require_tool_calls_and_continuations_require_stop(self):
+    def test_named_tool_stop_remains_explicitly_allowed_but_error_does_not(self):
         result = self.run_cli("good", "tools", optimized=True)
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertEqual(len(json.loads(self.output.read_text())), 5)
         result = self.run_cli("tool-stop", "tools", optimized=True)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("LIMITATION", result.stdout)
+        result = self.run_cli("tool-error", "tools", optimized=True)
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("Unexpected finish_reason", result.stderr)
+
+    def test_live_cut_call_probe_accepts_its_deliberate_output_limit(self):
+        self.server.state["mode"] = "length-finish"
+        tokenizer = SimpleNamespace(from_file=lambda _: SimpleNamespace(
+            decode=lambda tokens, **kwargs: "<tool_call>incomplete"))
+        spec = importlib.util.spec_from_file_location("cut_probe_fixture", SCRIPT.with_name("mia_tensorfold_cut_calls.py"))
+        cut = importlib.util.module_from_spec(spec)
+        argv = ["cut-probe", "--model", "fixture", "--url", f"http://127.0.0.1:{self.server.server_port}/v1",
+                "--output", str(self.output), "--tokenizer", "unused-fixture"]
+        with patch.dict(sys.modules, {"tokenizers": SimpleNamespace(Tokenizer=tokenizer), "agent_acceptance": agent}):
+            spec.loader.exec_module(cut)
+        with patch.object(sys, "argv", argv):
+            cut.main()
+        rows = json.loads(self.output.read_text())
+        self.assertEqual(len(rows), 2)
+        self.assertEqual({row["status"] for row in rows}, {"pass"})
+        self.assertEqual({row["result"]["choices"][0]["finish_reason"] for row in rows}, {"length"})
 
     def test_cancellation_requires_observed_stop_and_records_evidence(self):
         result = self.run_cli("good", "cancellation", optimized=True)

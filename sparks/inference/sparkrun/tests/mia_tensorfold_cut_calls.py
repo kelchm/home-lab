@@ -35,7 +35,7 @@ def main():
         name = "cut-tool-call-" + ("stream" if streamed else "nonstream")
         result, elapsed = None, 0
         try:
-            result, elapsed = probe.request(messages, streamed, tools=TOOLS, tool_choice="auto",
+            result, elapsed = probe.request(messages, streamed, expected_finish=("length",), tools=TOOLS, tool_choice="auto",
                                              parallel_tool_calls=True, max_tokens=16, seed=20260930,
                                              return_token_ids=True)
             tokens = result.get("tensorfold", {}).get("token_ids")
