@@ -1,6 +1,6 @@
 # Estate observability — converge the stack, cover the hardware, and make incidents navigable
 
-**Status:** Superseded — 2026-11-15; current operations and remaining decisions are owned by the maintained documentation and issues below. The proposal is retained as history; retirement does not claim every proposed feature or acceptance test was delivered.
+**Status:** Superseded — 2026-11-14; current operations and remaining decisions are owned by the maintained documentation and issues below. The proposal is retained as history; retirement does not claim every proposed feature or acceptance test was delivered.
 
 ## Handoff to maintained documentation and issues
 
