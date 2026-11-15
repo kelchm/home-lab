@@ -90,7 +90,7 @@ pve_remote_capture=$(cat <<'PVE_CAPTURE'
 
     # The top-level pmxcfs dot files (.clusterlog, .rrd, .members and so on)
     # are generated runtime status, not configuration; config.db holds the
-    # authoritative state. Any tar failure or warning, such as a file changing
+    # authoritative state. A nonzero tar status, including a file changing
     # while it is read, fails the capture.
     tar -C "${pve_root:-/}" --exclude='etc/pve/.*' -czf - "$@" -C "$pve_capture_dir" .
 PVE_CAPTURE
