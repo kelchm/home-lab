@@ -132,6 +132,15 @@ spec:
             # unpackerr metrics
             - port: "5656"
               protocol: TCP
+    # FlareSolverr metrics.
+    - toEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: media
+            app.kubernetes.io/name: flaresolverr
+      toPorts:
+        - ports:
+            - port: "8192"
+              protocol: TCP
     # Longhorn manager metrics.
     - toEndpoints:
         - matchLabels:
