@@ -1,0 +1,97 @@
+---
+# qBittorrent metrics exporter. Reads qBittorrent through its Service with the
+# Web UI API key from arr-api-keys; qBittorrent's pod, config and settings are
+# untouched. Its Cilium identity goes through an HTTP rule in qBittorrent's
+# policy that admits only the five read calls this release makes. No
+# HTTPRoute; only vmagent can reach the metrics port (networkpolicy.yaml).
+apiVersion: helm.toolkit.fluxcd.io/v2
+kind: HelmRelease
+metadata:
+  name: qbittorrent-exporter
+spec:
+  chartRef:
+    kind: OCIRepository
+    name: qbittorrent-exporter
+  interval: 1h
+  values:
+    controllers:
+      qbittorrent-exporter:
+        serviceAccount: { identifier: qbittorrent-exporter }
+        containers:
+          app:
+            image:
+              # renovate: datasource=docker depName=ghcr.io/esanchezm/prometheus-qbittorrent-exporter
+              repository: ghcr.io/esanchezm/prometheus-qbittorrent-exporter
+              tag: v1.8.0@sha256:f27cc3b38a7383353ccdd8517f6b57187cc90ad9e6504049630c25e111f590e9
+            env:
+              QBITTORRENT_HOST: qbittorrent.media.svc.cluster.local
+              QBITTORRENT_PORT: "8080"
+              # Sent as a bearer header, never in a URL or log line.
+              QBITTORRENT_API_KEY:
+                valueFrom:
+                  secretKeyRef:
+                    name: arr-api-keys
+                    key: QBITTORRENT_API_KEY
+              EXPORTER_PORT: &port 8000
+              # Per-torrent series would carry torrent names as labels.
+              EXPORT_METRICS_BY_TORRENT: "False"
+            probes:
+              # Every HTTP path runs a full collection against qBittorrent,
+              # so the probes only check that the listener is open. The first
+              # collection runs before the listener starts and can take about
+              # two minutes when qBittorrent stops answering.
+              startup:
+                enabled: true
+                custom: true
+                spec:
+                  tcpSocket:
+                    port: *port
+                  periodSeconds: 10
+                  failureThreshold: 18
+              liveness: &probe
+                enabled: true
+                custom: true
+                spec:
+                  tcpSocket:
+                    port: *port
+                  periodSeconds: 30
+                  timeoutSeconds: 5
+                  failureThreshold: 3
+              readiness: *probe
+            securityContext:
+              allowPrivilegeEscalation: false
+              readOnlyRootFilesystem: true
+              capabilities: { drop: ["ALL"] }
+            resources:
+              requests:
+                cpu: 10m
+                memory: 48Mi
+              limits:
+                memory: 128Mi
+    defaultPodOptions:
+      automountServiceAccountToken: false
+      securityContext:
+        # The image runs as root by default; nothing in it needs root.
+        runAsNonRoot: true
+        runAsUser: 65534
+        runAsGroup: 65534
+        seccompProfile:
+          type: RuntimeDefault
+    # Never reads the Kubernetes API; exists only to give the exporter a
+    # distinct Cilium identity for qBittorrent's policy.
+    serviceAccount:
+      qbittorrent-exporter: { automountServiceAccountToken: false }
+    service:
+      app:
+        controller: qbittorrent-exporter
+        ports:
+          metrics:
+            port: *port
+    serviceMonitor:
+      app:
+        endpoints:
+          - port: metrics
+            path: /metrics
+            # Each scrape reads qBittorrent's sync data and torrent list.
+            interval: 1m
+            scrapeTimeout: 30s

@@ -1,0 +1,21 @@
+---
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  - ./ocirepository.yaml
+  - ./helmrelease.yaml
+  - ./networkpolicy.yaml
+
+configMapGenerator:
+  # esanchezm/prometheus-qbittorrent-exporter grafana/dashboard.json at tag 1.8.0. Local patches remove __inputs, point every datasource at the dashboard's own data_source variable with no fixed current value, take the max of qbittorrent_up per server so a failed scrape's version="" series cannot show beside the healthy one, and compute transfer rates from positive counter samples only with a 1m Min step. The README explains the failed-scrape zeros that the rate patch filters.
+  - name: grafana-dashboard-qbittorrent
+    files:
+      - qbittorrent.json=./dashboards/qbittorrent.json
+    options:
+      annotations:
+        grafana_folder: Services/Media
+        kustomize.toolkit.fluxcd.io/substitute: disabled
+      labels:
+        grafana_dashboard: "1"
+generatorOptions:
+  disableNameSuffixHash: true

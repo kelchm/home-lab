@@ -155,6 +155,8 @@ A Sonarr, Radarr, Lidarr, Prowlarr or Bazarr API key has copies in Git, in other
 | Bazarr, *Settings → Sonarr* / *Radarr* | Sonarr, Radarr | Edit, **Test**, save | At once. |
 | Seerr, *Settings → Services* | Sonarr, Radarr | Edit, or `PUT /api/v1/settings/radarr/<id>` with an `X-API-Key` header | At once. |
 
+qBittorrent's Web UI API key has two copies: `HOMEPAGE_VAR_QBITTORRENT_KEY` in `homepage-secret` and `QBITTORRENT_API_KEY` in `arr-api-keys`. After rotating it in qBittorrent, update both Secrets, then `kubectl -n media rollout restart deploy/qbittorrent-exporter`. Reloader restarts Homepage.
+
 Rotating Prowlarr's own key: update `homepage-secret` and `arr-api-keys`, then run *Settings → Apps → Sync App Indexers* in Prowlarr, which rewrites the key in the indexers it manages in each app.
 
 Seerr's *own* API key can be pinned declaratively via the `API_KEY` env var — it is re-asserted on every settings load — if scripted configuration is ever wanted. It is not set today.
