@@ -4,6 +4,7 @@ import argparse
 import ast
 from concurrent.futures import ThreadPoolExecutor
 import json
+import math
 from pathlib import Path
 import re
 import subprocess
@@ -16,6 +17,11 @@ TOOL = {"type": "function", "function": {"name": "multiply", "description": "Mul
                        "required": ["a", "b"], "additionalProperties": False}}}
 
 
+def require(condition, detail):
+    if not condition:
+        raise RuntimeError(f"Qualification failed: {detail}")
+
+
 class Qualification:
     def __init__(self, args):
         self.args = args
@@ -23,7 +29,7 @@ class Qualification:
         self.rows = json.loads(path.read_text()) if args.section != "all" and path.exists() else []
         self.lock = threading.Lock()
 
-    def request(self, messages, stream=False, **extra):
+    def request(self, messages, stream=False, expected_finish=("stop",), **extra):
         body = {"model": self.args.model, "messages": messages, "temperature": 0, "max_tokens": 1024,
                 "chat_template_kwargs": {"enable_thinking": False}, "stream": stream, **extra}
         if stream:
@@ -50,7 +56,10 @@ class Qualification:
                     usage = data.get("usage") or usage
                     engine_stats = data.get("tensorfold") or engine_stats
                     for choice in data.get("choices", []):
-                        finish = choice.get("finish_reason") or finish
+                        reason = choice.get("finish_reason")
+                        if reason is not None:
+                            require(reason in expected_finish, f"Unexpected stream finish_reason: {reason!r}")
+                            finish = reason
                         delta = choice.get("delta") or {}
                         message["content"] += delta.get("content") or ""
                         message["reasoning_content"] += delta.get("reasoning_content") or delta.get("reasoning") or ""
@@ -70,8 +79,10 @@ class Qualification:
                     result["tensorfold"] = engine_stats
         if result.get("error"):
             raise RuntimeError(result["error"])
-        if not result.get("choices") or not result["choices"][0].get("finish_reason"):
+        if len(result.get("choices", [])) != 1:
             raise RuntimeError(f"Incomplete API response: {result!r}")
+        reason = result["choices"][0].get("finish_reason")
+        require(reason in expected_finish, f"Unexpected finish_reason: {reason!r}; allowed={expected_finish!r}")
         return result, time.monotonic() - started
 
     def record(self, name, result, elapsed, error=None):
@@ -85,27 +96,25 @@ class Qualification:
     def tools(self):
         messages = [{"role": "user", "content": "Use multiply to calculate 17 times 19. Do not answer directly."}]
         for streamed in (False, True):
-            result, elapsed = self.request(messages, streamed, tools=[TOOL], tool_choice={
+            result, elapsed = self.request(messages, streamed, expected_finish=("tool_calls",), tools=[TOOL], tool_choice={
                 "type": "function", "function": {"name": "multiply"}})
             calls = result["choices"][0]["message"].get("tool_calls") or []
-            assert len(calls) == 1, result
-            if result["choices"][0]["finish_reason"] != "tool_calls":
-                print("LIMITATION: named tool choice finished with " + result["choices"][0]["finish_reason"], flush=True)
-            assert calls[0]["function"]["name"] == "multiply" and calls[0]["id"], result
+            require(len(calls) == 1, result)
+            require(calls[0]["function"]["name"] == "multiply" and calls[0]["id"], result)
             arguments = json.loads(calls[0]["function"]["arguments"])
-            assert arguments == {"a": 17, "b": 19} and all(type(value) is int for value in arguments.values()), result
+            require(arguments == {"a": 17, "b": 19} and all(type(value) is int for value in arguments.values()), result)
             self.record(f"forced-tool-{'stream' if streamed else 'nonstream'}", result, elapsed)
             # Exercise the null-content assistant form emitted by coding clients.
             history = messages + [{"role": "assistant", "content": None, "tool_calls": calls},
                                   {"role": "tool", "tool_call_id": calls[0]["id"], "content": "323"},
                                   {"role": "user", "content": "Reply with only the result integer."}]
             final, elapsed = self.request(history, streamed, tools=[TOOL], tool_choice="none", max_tokens=64)
-            assert final["choices"][0]["message"]["content"].strip() == "323", final
+            require(final["choices"][0]["message"]["content"].strip() == "323", final)
             self.record(f"null-content-tool-continuation-{'stream' if streamed else 'nonstream'}", final, elapsed)
         result, elapsed = self.request([{"role": "user", "content": "What is 17 times 19? Reply with only the integer."}],
                                        tools=[TOOL], tool_choice="none", max_tokens=64)
-        assert not result["choices"][0]["message"].get("tool_calls"), result
-        assert "323" in result["choices"][0]["message"]["content"], result
+        require(not result["choices"][0]["message"].get("tool_calls"), result)
+        require("323" in result["choices"][0]["message"]["content"], result)
         self.record("tool-choice-none", result, elapsed)
 
     def isolation(self):
@@ -115,13 +124,13 @@ class Qualification:
                         "Work out both factors carefully before calling the tool; do not multiply them yourself. "
                         "After the tool returns, answer with the private marker, a colon, and the result. "
                         "Never mention any other session marker."}]
-            result, elapsed = self.request(history, True, tools=[TOOL], tool_choice="auto",
+            result, elapsed = self.request(history, True, expected_finish=("tool_calls",), tools=[TOOL], tool_choice="auto",
                                             reasoning_effort="high", chat_template_kwargs={
                                                 "enable_thinking": True, "reasoning_effort": "high"})
             message = result["choices"][0]["message"]
             calls = message.get("tool_calls") or []
-            assert len(calls) == 1 and json.loads(calls[0]["function"]["arguments"]) == {"a": 17, "b": 19}, result
-            assert message.get("reasoning_content") or message.get("reasoning"), result
+            require(len(calls) == 1 and json.loads(calls[0]["function"]["arguments"]) == {"a": 17, "b": 19}, result)
+            require(message.get("reasoning_content") or message.get("reasoning"), result)
             self.record("high-thinking-tool-" + secret, result, elapsed)
             # Deliberately omit reasoning while preserving the server call IDs.
             # Renumbered-ID cache isolation is checked against installed code by
@@ -135,7 +144,7 @@ class Qualification:
         # Resume in reverse order to catch a last-writer-wins tool-history cache.
         for secret, history in reversed(histories):
             result, elapsed = self.request(history, True, tools=[TOOL], tool_choice="none", max_tokens=64)
-            assert result["choices"][0]["message"]["content"].strip() == secret + ":323", result
+            require(result["choices"][0]["message"]["content"].strip() == secret + ":323", result)
             self.record("interleaved-history-" + secret, result, elapsed)
 
     def structured(self):
@@ -145,7 +154,7 @@ class Qualification:
             result, elapsed = self.request([{"role": "user", "content": "What is 17 times 19? Return answer and ok=true."}],
                 stream, max_tokens=64, response_format={"type": "json_schema", "json_schema": {
                     "name": "arithmetic", "strict": True, "schema": schema}})
-            assert json.loads(result["choices"][0]["message"]["content"]) == {"answer": 323, "ok": True}, result
+            require(json.loads(result["choices"][0]["message"]["content"]) == {"answer": 323, "ok": True}, result)
             self.record("structured-" + str(stream), result, elapsed)
 
     def cache(self):
@@ -156,9 +165,9 @@ class Qualification:
             result, elapsed = self.request(messages, stream, max_tokens=64)
             usage = result.get("usage", {})
             cached = (usage.get("prompt_tokens_details") or {}).get("cached_tokens")
-            assert result["choices"][0]["message"]["content"].strip() == "323", result
+            require(result["choices"][0]["message"]["content"].strip() == "323", result)
             if self.args.require_cache:
-                assert isinstance(cached, int) and 0 < cached <= usage["prompt_tokens"], result
+                require(isinstance(cached, int) and 0 < cached <= usage["prompt_tokens"], result)
             self.record("cache-accounting-" + str(stream), result, elapsed)
 
     def coding(self):
@@ -201,7 +210,30 @@ class Qualification:
         if failures:
             raise RuntimeError("Coding qualification failed: " + "; ".join(failures))
 
+    def request_counts(self):
+        """Read the native server directly; multiple/missing series are ambiguous."""
+        url = self.args.url.rstrip("/").removesuffix("/v1") + "/metrics"
+        with urllib.request.urlopen(url, timeout=5) as response:
+            text = response.read().decode()
+        counts = []
+        for name in ("tensorfold:requests_running", "tensorfold:requests_waiting"):
+            samples = []
+            for line in text.splitlines():
+                match = re.fullmatch(re.escape(name) + r'(?:\{[^}]*\})?\s+(\S+)(?:\s+\d+)?', line)
+                if match:
+                    value = float(match[1])
+                    require(math.isfinite(value) and value >= 0 and value.is_integer(),
+                            f"Invalid request gauge {name}: {value}")
+                    samples.append(int(value))
+            require(len(samples) == 1, f"Missing or ambiguous cancellation metric {name}: {samples}")
+            counts.append(samples[0])
+        return counts
+
     def cancellation(self):
+        # Aggregate gauges identify this request only on a dedicated idle server.
+        # Observe it running before disconnect; a fast second response proves no such thing.
+        before = self.request_counts()
+        require(before == [0, 0], f"Cancellation requires an idle dedicated server: {before}")
         body = {"model": self.args.model, "messages": [{"role": "user", "content":
             "Write 3000 words explaining database indexes with many examples."}], "max_tokens": 2048,
             "stream": True, "chat_template_kwargs": {"enable_thinking": False}}
@@ -209,18 +241,42 @@ class Qualification:
                                          data=json.dumps(body).encode(), headers={"Content-Type": "application/json"})
         with urllib.request.urlopen(request, timeout=120) as response:
             received = 0
+            request_id = None
             for line in response:
-                if line.startswith(b"data:") and line[5:].strip() != b"[DONE]":
-                    data = json.loads(line[5:])
-                    if any(choice.get("delta", {}).get("content") for choice in data.get("choices", [])):
-                        received += 1
-                    if received >= 5:
-                        break
-            assert received >= 5
-        time.sleep(1)
+                if not line.startswith(b"data:"):
+                    continue
+                payload = line[5:].strip()
+                require(payload != b"[DONE]", "Cancellation request completed before disconnect")
+                data = json.loads(payload)
+                require(not data.get("error"), data)
+                if data.get("id"):
+                    require(request_id in (None, data["id"]), "Cancellation stream changed request ID")
+                    request_id = data["id"]
+                require(not any(choice.get("finish_reason") is not None for choice in data.get("choices", [])),
+                        "Cancellation request finished before disconnect")
+                if any(choice.get("delta", {}).get("content") for choice in data.get("choices", [])):
+                    received += 1
+                if received >= 5:
+                    break
+            require(received >= 5, "Cancellation stream ended before five content chunks")
+            during = self.request_counts()
+            require(during == [1, 0], f"Cannot identify sole running cancellation request: {during}")
+        deadline = time.monotonic() + self.args.cancel_timeout
+        observations = []
+        while True:
+            after = self.request_counts()
+            observations.append(after)
+            require(after[0] <= 1 and after[1] == 0, f"Concurrent traffic makes cancellation ambiguous: {after}")
+            require(time.monotonic() < deadline,
+                    f"Cancelled request still running or stop unproven: {observations}")
+            if len(observations) >= 2 and observations[-2:] == [[0, 0], [0, 0]]:
+                break
+            time.sleep(0.1)
         result, elapsed = self.request([{"role": "user", "content": "What is 17 times 19? Reply only with the integer."}],
                                         max_tokens=32)
-        assert result["choices"][0]["message"]["content"].strip() == "323" and elapsed < 5, result
+        require(result["choices"][0]["message"]["content"].strip() == "323" and elapsed < 5, result)
+        result["cancellation_evidence"] = {"request_id": request_id, "before": before, "during": during,
+                                           "after_disconnect": observations}
         self.record("cancel-and-continue", result, elapsed)
 
     def run(self):
@@ -263,10 +319,13 @@ for args, expected in zip(body['inputs'], body['expected']):
     try:
         actual = function(*args)
     except ValueError:
-        assert expected == {'raises': 'ValueError'}
+        if expected != {'raises': 'ValueError'}:
+            raise RuntimeError('Unexpected ValueError')
     else:
-        assert actual == expected, (args, actual, expected)
-    assert args == original, ('input mutated', args, original)
+        if actual != expected:
+            raise RuntimeError(repr((args, actual, expected)))
+    if args != original:
+        raise RuntimeError(repr(('input mutated', args, original)))
 print('PASS')
 """
     result = subprocess.run(["python3", "-I", "-c", child], input=json.dumps({"code": code, "name": name,
@@ -281,8 +340,13 @@ def main():
     parser.add_argument("--model", required=True)
     parser.add_argument("--output", required=True)
     parser.add_argument("--require-cache", action="store_true")
+    parser.add_argument("--cancel-timeout", type=float, default=5,
+                        help="Seconds to prove the disconnected request stopped (default: 5)")
     parser.add_argument("--section", choices=("all", "tools", "isolation", "structured", "cache", "coding", "cancellation"), default="all")
-    Qualification(parser.parse_args()).run()
+    args = parser.parse_args()
+    if not math.isfinite(args.cancel_timeout) or args.cancel_timeout <= 0:
+        parser.error("--cancel-timeout must be finite and positive")
+    Qualification(args).run()
 
 
 if __name__ == "__main__":

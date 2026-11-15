@@ -198,7 +198,7 @@ The server's six patches go on after the kit's nine, in file order:
 | `0014-prompt-cache-evicted-kept-state.patch` | xinlu8439, [the issue's own patch](https://github.com/MiaAI-Lab/Qwen3.8-Flash-Dual-DGX-Sparks-TensorFold/issues/9) | Fixes [#9](https://github.com/MiaAI-Lab/Qwen3.8-Flash-Dual-DGX-Sparks-TensorFold/issues/9), a segfault in `endPass`. A state the store evicts in the pass that kept it is left out of rank 1's note and freed on both ranks |
 | `0015-two-ranks-sample-within-248.patch` | This lab | Fixes [#8](https://github.com/MiaAI-Lab/Qwen3.8-Flash-Dual-DGX-Sparks-TensorFold/issues/8), sampling that exits both ranks. With more than one rank, a sampled request with `top_k` off (−1 or 0) is drawn with `top_k` 248, and its `top_p` and `min_p` still cut within those candidates. A `top_k` above 248 gets HTTP 400 naming the fix: it needs more than the sampler's 256 candidates (`top_k` plus 8), and otherwise fails after admission with `TopKPastScratch` |
 
-The kit pins an engine commit with neither discovery change, so `0010` and `0011` are a local backport until the kit moves its pin. Each is that commit's change to the source files its lock entry lists, without upstream's test files, fixtures and README text. To move one to another commit, change its `base` and `commit` in the lock, then run `prepare.py --refresh ~/Development/kelchm/TensorFold` to rewrite the patch and `build/build.sh --record` to rebuild and record the binary.
+The kit pins an engine commit with neither discovery change, so `0010` and `0011` are a local backport until the kit moves its pin. Each is that commit's change to the source files its lock entry lists, without upstream's test files, fixtures and README text. To move one to another commit, create a new versioned mod and profile as described in [Update a pinned mod](#update-a-pinned-mod); retain this frozen bundle as a rollback. The historical refresh and record modes are for preparing that new bundle, never for accepting drift in this qualified one.
 
 The four fixes are Apache-2.0 like the kit, and each is kept byte for byte as its source published it, except `0015`, which is this lab's. The lock's `site_patches` records each one's source, author, licence and sha256, and `prepare.py` refuses a copy that differs. The kit closed PR #4 and reverted PR #2 for reasons that weren't technical; [#940](https://github.com/kelchm/home-lab/issues/940) has the history. The qualification ran on binary `9f28a902…`, whose `0015` refused whole-vocabulary sampling outright. The clamp replaced that refusal and was [checked on the Sparks](https://github.com/kelchm/home-lab/issues/940#issuecomment-6344709923) the same day.
 
@@ -304,7 +304,7 @@ How the profile differs from the kit's own launch:
 
 #### Two Sparks
 
-- **The rebuilt binary:** `out/tensorfold-native` in the mod, ignored by Git. `build/build.sh` builds it, and it goes to the head with the mod.
+- **The rebuilt binary:** `out/tensorfold-native` in the mod, ignored by Git. [`build-qwen-binary.sh`](build-qwen-binary.sh) builds it, and it goes to the head with the mod.
 - **The image:** on both Sparks on October 22, as `5eb5d4d3…`. `docker images` doesn't list it, but `docker image inspect` with the lock's `image_id` finds it. If it's missing, pull it on the head by the lock's `image`; SparkRun copies it to the worker at launch.
 - **Weights:** `nvidia/Qwen3.8-Flash-Next-NVFP4@fc694b54` in SparkRun's cache on both hosts, 25 files and 132,734,506,847 bytes each on October 22. Check free space under the cache on both hosts before a first launch.
 
@@ -317,7 +317,7 @@ How the profile differs from the kit's own launch:
 
 #### Two Sparks
 
-The image is not rebuilt. [`build/build.sh`](mods/mia-tensorfold-qwen38fn-v1.1-discovery/build/build.sh) compiles `tensorfold-native` alone on any linux/arm64 Docker daemon, with no GPU, no `nvcc` and no NVIDIA base image. Its inputs are pinned:
+The image is not rebuilt. [`build-qwen-binary.sh`](build-qwen-binary.sh) compiles `tensorfold-native` alone on any linux/arm64 Docker daemon, with no GPU, no `nvcc` and no NVIDIA base image. Its inputs are pinned:
 
 - Ubuntu 24.04 by digest, with its `gcc`, `libc6-dev` and `libibverbs-dev` packages;
 - Zig 0.17.0 by the kit's checksum;
@@ -331,6 +331,12 @@ Before the six patches go on, the build compiles the kit's tree as it is. It sto
 - having `infiniband/verbs.h` present. Without that header, the engine compiles a stub in place of its RoCE all-gather.
 
 The result goes to the ignored `out/tensorfold-native`, and its sha256 is in the lock.
+
+```sh
+DOCKER_CONTEXT=colima-tf-build sparks/inference/sparkrun/build-qwen-binary.sh
+```
+
+The wrapper copies the frozen bundle into a temporary sibling directory and runs its historical builder there. Only after the export succeeds and the binary matches the lock does it atomically replace `out/tensorfold-native`. A failed download, build, export or checksum leaves the prior `out/` untouched; other existing output files remain in place. The frozen `build/build.sh` deletes its output first and is preserved only for provenance; do not invoke it directly against the qualified bundle.
 
 This route was chosen over the kit's own image build because the recipe keeps the published image digest, and with it the image's kernel set and the CUDA cache already on both hosts. Adding a patch to the kit's build instead changes its image hash. That means:
 
@@ -354,7 +360,7 @@ Checked on a workstation:
 
 #### One Spark
 
-[`build/build.sh`](mods/mia-tensorfold-qwen38fn-tp1-656879fd/build/build.sh) builds the image on any linux/arm64 Docker daemon, never on a Spark. Its inputs are pinned:
+[`build-qwen-image.sh`](build-qwen-image.sh) builds the image on any linux/arm64 Docker daemon, never on a Spark. Its inputs are pinned:
 
 - NVIDIA PyTorch 26.07 by digest, the DeepSeek image's base;
 - Zig 0.17.0 by checksum;
@@ -364,13 +370,13 @@ Checked on a workstation:
 The build follows the kit's `scripts/prepare.sh`: the Zig build with its `nvcc` fatbins, the TP=1 Triton kernel set compiled ahead of time, then `transformers` and `av` without dependencies. It differs from the kit's in two ways. It names the Spark's CPU, `cortex_a725` with the features Zig reads on a Spark, where the kit's build on a Spark detects it. And it pins the Python packages; the base already has `huggingface_hub` 1.24.0. The binary targets the Spark's CPU, so the build host cannot run it: on Colima it exits with an illegal instruction.
 
 ```sh
-DOCKER_CONTEXT=colima-tf-build sparks/inference/sparkrun/mods/mia-tensorfold-qwen38fn-tp1-656879fd/build/build.sh
+DOCKER_CONTEXT=colima-tf-build sparks/inference/sparkrun/build-qwen-image.sh
 DOCKER_CONTEXT=colima-tf-build docker save qwen38fn-tf-tp1:656879f-603dab7933ca -o qwen38fn-tf-tp1.tar
 # Stage it on the head's disk without filling its page cache; docker load waits for a stop.
 dd if=qwen38fn-tf-tp1.tar bs=16m | ssh kelchm@10.32.21.31 'dd of=sparkrun/stage/qwen38fn-tf-tp1.tar bs=16M iflag=fullblock oflag=direct'
 ```
 
-`build.sh` reads the image ID from `docker save`'s manifest and fails unless it equals the lock's. A rebuild can produce another ID, which `--record` writes into the lock; record it in the recipe too. On October 22 the build took about four minutes on the `tf-build` profile with the base image already there: about 150 s for the Zig build and 30 s for the kernel set. The saved image is 11.4 GB and loads in 40 s on the head.
+The wrapper builds under a unique temporary tag, inspects the immutable daemon ID, and reads that exact image's config digest from a successful Docker export. It promotes that immutable ID to the qualified tag only if the config digest equals the lock's `image_id`. Mismatch or failed build, inspection or export leaves the qualified tag unchanged. It removes only the candidate tag and build context on exit, and reports a failed tag cleanup. The historical mod builder tags directly before checking and remains frozen for provenance; use the wrapper for rebuilds. Neither wrapper accepts `--record`; different artifacts require a new versioned mod and qualification. On October 22 the build took about four minutes on the `tf-build` profile with the base image already there: about 150 s for the Zig build and 30 s for the kernel set. The saved image is 11.4 GB and loads in 40 s on the head.
 
 ### Launch, stop and roll back
 
@@ -378,7 +384,7 @@ dd if=qwen38fn-tf-tp1.tar bs=16m | ssh kelchm@10.32.21.31 'dd of=sparkrun/stage/
 
 Merging this directory changes nothing on the Sparks. Each step below is manual. The stop in step 6 begins the outage.
 
-1. On the workstation, confirm the binary: `python3 sparks/inference/sparkrun/mods/mia-tensorfold-qwen38fn-v1.1-discovery/prepare.py --check --require-binary`. If `out/` is missing, `build/build.sh` rebuilds it in about four minutes, and fails unless the result matches the lock.
+1. On the workstation, confirm the binary: `python3 sparks/inference/sparkrun/mods/mia-tensorfold-qwen38fn-v1.1-discovery/prepare.py --check --require-binary`. If `out/` is missing, `sparks/inference/sparkrun/build-qwen-binary.sh` rebuilds it in about four minutes, and fails unless the result matches the lock.
 2. On the head, confirm the image with `docker image inspect` on the lock's `image_id`. If it's missing, `docker pull` the lock's `image`.
 3. Pass the [checks before a launch](#before-a-launch).
 4. Copy the mod, with its `out/`, the shared gate and the recipe to the head. This does not touch the running containers, which hold their own copy of the mods they started with. `--delete` drops a file an earlier copy carried, which `prepare.py` would otherwise refuse:
@@ -884,7 +890,7 @@ python3 ~/sparkrun/recipes/glm53/tests/agent_acceptance.py --model "$model" --re
 - **Throughput:** the [throughput profile](benchmarks/throughput.yaml) runs SparkRun's native llama-benchy for 2k and 32k prompts at C1 and C4, with warmup, two measured repetitions, temperature zero and a fixed seed. Its 256 tokens are an output budget, and thinking follows each template's default, so treat it as a supporting diagnostic. Pass the served model's tokenizer as above: an unreadable tokenizer can silently fall back to GPT-2 and invalidate comparisons. SparkRun 0.3.10 shell-quotes llama-benchy's arguments before running it, so the profile's `extra_body` is one comma-separated `key=value` string; a YAML list or a JSON-valued entry such as `chat_template_kwargs` does not reach the request as intended. Read the constructed arguments and the parsed request fields before adding settings.
 - **Tools:** run `tool-eval-bench` v1.8.0 directly for its 15 core scenarios, using the pinned invocation qualified under both controllers. The 0.3.10 integration passes the model's repository ID instead of the served name, ignores a model override and shell-quotes JSON arguments. The 0.4.2 source fixes those behaviors, but its tool integration has not qualified here; retain the direct invocation for comparable acceptance. Keep the fixture date `2026-03-20`: the [v1.8.0 validators](https://github.com/SeraphimSerapis/tool-eval-bench/blob/7a1af7dffaade6b7b2d8f36ab8a454a7eccddcd7/src/tool_eval_bench/evals/scenarios.py) for TC-05 and TC-08 hard-code March 23 and 21 whatever `--reference-date` says. Read `scores.scenario_results` and the conversation report, not only the exit status. No results are submitted to Spark Arena.
 - **Acceptance:** [`acceptance.py`](tests/acceptance.py) requires the colors of five distinct images in random order, and a correct short reply that begins within five seconds while another decode is still running. `--url` takes the server root or the API base ending in `/v1`.
-- **Agent:** [`agent_acceptance.py`](tests/agent_acceptance.py) exercises streamed and non-streamed tools, null assistant content, thinking, interleaved histories with identical tool arguments, structured responses, cache accounting, bounded execution of generated Python, and cancellation. Read per-case results, including model failures and format limits, rather than counting a finished process as a pass. Generated code runs as restricted pure Python under CPU and memory limits.
+- **Agent:** [`agent_acceptance.py`](tests/agent_acceptance.py) exercises streamed and non-streamed tools, null assistant content, thinking, interleaved histories with identical tool arguments, structured responses, cache accounting, bounded execution of generated Python, and cancellation. Read per-case results, including model failures and format limits, rather than counting a finished process as a pass. Generated code runs as restricted pure Python under CPU and memory limits. All qualification gates remain active under `python -O`. Completed streams require `[DONE]`, usage and `stop` for text/structured replies or `tool_calls` for tool-producing turns; error and length finishes fail. Cancellation requires exclusive access to an idle server and direct `/metrics` gauges `tensorfold:requests_running` and `tensorfold:requests_waiting`: it observes the sole request running before closing its stream, then requires both gauges to reach zero for two samples within `--cancel-timeout` (five seconds by default), before checking a short continuation. Missing, duplicate or ambiguous metrics fail; a fast continuation alone cannot qualify cancellation. The receipt retains the gauge observations and stream request ID when supplied.
 - **Long sessions:** the [long-session client](benchmarks/long_sessions.py) runs on the head with `uv run --with llama-benchy==0.4.0 python`, `--model "$model"`, `--worker kelchm@10.32.21.32`, the pinned target's `tokenizer.json`, an absolute recipe path and output outside the checkout. `--suite full` covers C1, C2 and C4 controls, unrelated and shared prefixes, warm replay, edits and forks, 250k prompts with small and 32k output budgets, the 262k admission boundary and a short newcomer during long prefill; `growth`, `repeat`, `250k`, `boundary` and `ceiling` run parts of it, and `--campaign` names the run, new for each paired boot. It records per-stream time to first token, chunk gaps, usage and cache details, and both hosts' memory minima, and stops the recipe through SparkRun after three low-memory samples or lost telemetry. `--require-stable-links` aborts on a lost 10GbE carrier or any new drop. Payloads are synthetic repository text, so this is not a general long-context coding benchmark. Cancellation after response headers interrupts a silent SSE body and preserves the partial receipt ([#1092](https://github.com/kelchm/home-lab/pull/1092)). Connection/header waits still depend on urllib's socket `--timeout`, which is not a total request deadline.
 
 ## Update a pinned mod
