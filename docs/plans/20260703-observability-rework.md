@@ -1,6 +1,27 @@
 # Estate observability — converge the stack, cover the hardware, and make incidents navigable
 
-**Status:** Active — 2026-09-06; convergence is complete. The VictoriaMetrics/VictoriaLogs survivor path is live and verified, and OpenObserve, Loki, and kube-prometheus-stack are removed, closing #470. This revision carries that deployed baseline into an estate-wide metrics, logs, flow, and security-observability design. Background: [observability bake-off](../observability-bakeoff.md).
+**Status:** Superseded — 2026-11-15; current operations and remaining decisions are owned by the maintained documentation and issues below. The proposal is retained as history; retirement does not claim every proposed feature or acceptance test was delivered.
+
+## Handoff to maintained documentation and issues
+
+Use [host monitoring](../runbooks/host-monitoring.md) for source collection and external probes, [logging](../runbooks/logging.md) for schemas, flow records and delivery limits, and [alerting](../runbooks/alerting.md) for evaluation, notification delivery and central metrics transport. [Architecture](../architecture.md#dashboards) owns dashboard conventions, [Spark monitoring](../../sparks/monitoring/README.md) owns inference metrics, and the [UniFi overview](../../network/unifi/README.md) records applied network policy. The [bake-off](../observability-bakeoff.md) and [log schema and collector evaluation](../evaluations/log-schema-and-collector.md) retain the supporting decisions and measurements.
+
+Several proposals were replaced by explicit choices. [#629](https://github.com/kelchm/home-lab/issues/629) accepted outside-cluster blackbox probes on the compute-rack Pi, central alerting and the independent Watchdog instead of Gatus with a second alert path. [#728](https://github.com/kelchm/home-lab/issues/728) retained drop-only Hubble metrics, with broader collection deferred until a diagnostic question requires it. [#729](https://github.com/kelchm/home-lab/issues/729) accepted the Proxmox API view without inside-guest telemetry for the guests then in scope. Host-local exporters and push queues replaced the central-pull/SSH-tunnel proposal for PVE and the Sparks; follow the host monitoring runbook.
+
+| Remaining subject | Governing work |
+|---|---|
+| External host log coverage | [#914](https://github.com/kelchm/home-lab/issues/914) |
+| Application metrics and stock dashboards | [#746](https://github.com/kelchm/home-lab/issues/746) |
+| Grafana Home design and recorded-cadence gap handling | [#1268](https://github.com/kelchm/home-lab/issues/1268), [#1298](https://github.com/kelchm/home-lab/issues/1298) |
+| Durable inference history, sparkDash export and a future launcher transition | [#722](https://github.com/kelchm/home-lab/issues/722), [#812](https://github.com/kelchm/home-lab/issues/812), [#1382](https://github.com/kelchm/home-lab/issues/1382) |
+| Network hardening, workload egress identity and Cilium enforcement | [#348](https://github.com/kelchm/home-lab/issues/348), [#355](https://github.com/kelchm/home-lab/issues/355), [#1348](https://github.com/kelchm/home-lab/issues/1348) |
+| Central vmagent queue loss and capacity bounds | [#1503](https://github.com/kelchm/home-lab/issues/1503), held until the next persistence/capacity change, a queue-drop or missing-history incident, or an explicit owner buffering requirement |
+
+The original numeric capacity budgets, anomaly tooling, AI-assisted RCA and other enrichment ideas remain historical proposals. They are not outstanding implementation commitments; a future use case needs its own bounded decision. The issue-owned work above retains its completion conditions and revisit triggers. Retiring this plan is one part of [#1361](https://github.com/kelchm/home-lab/issues/1361); the PVE and network plans remain separate retirement work.
+
+## Historical proposal
+
+The remainder preserves the earlier design and its dated observations, including sections labelled “current” and unperformed rollout gates. Use the handoff above for present state and work tracking.
 
 ## Context and origin
 
