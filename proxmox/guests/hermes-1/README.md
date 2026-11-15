@@ -2,7 +2,7 @@
 
 `hermes-1` is the first persistent application guest on `pve-sbx`. It runs the official Hermes Agent container with its web dashboard available to LAN clients over HTTPS. Caddy terminates TLS on the VM; neither the dashboard nor the OpenAI-compatible API depends on Kubernetes ingress.
 
-This directory is the source for the application deployment and its operating record. The PVE VM was provisioned manually for this first workload; it is not yet represented by an OpenTofu resource.
+This directory is the source for the application deployment and its operating record. The PVE VM was provisioned manually for this first workload; whether PVE guests should be declared in IaC is undecided ([#1511](https://github.com/kelchm/home-lab/issues/1511)).
 
 | Setting | Value |
 |---|---|

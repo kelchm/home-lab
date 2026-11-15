@@ -14,7 +14,7 @@ Current-state, authoritative docs.
 - [**repository-validation.md**](repository-validation.md) — CI event semantics,
   concurrency, aggregate-check invariants, and the boundary between validation
   and Flux deployment.
-- [**proxmox/README.md**](../proxmox/README.md) — live `pve-sbx` endpoints, routine checks, shared storage, backups, restore drills, and manually applied host baseline.
+- [**proxmox/README.md**](../proxmox/README.md) — live `pve-sbx` endpoints, routine checks, shared storage, backups, restore drills, node maintenance, design decisions and deferrals, and manually applied host baseline.
 - [**synology/README.md**](../synology/README.md) — Compose workloads on the Synology NAS: the doco-cd deployment model, project contract, rollback, and break-glass apply.
 
 ## Further reading
@@ -57,7 +57,7 @@ or fixing.
 | [dependency-updates](runbooks/dependency-updates.md) | Holding a dependency back with a version constraint, review approval or exact-content lock, recording why, reading a failed Renovate lookup, and responding to a Renovate problems alert. |
 | [doco-cd-self-update](runbooks/doco-cd-self-update.md) | Migrating doco-cd to native self-update, verifying handover, and recovering a failed update. |
 | [dgx-spark-bringup](runbooks/dgx-spark-bringup.md) | Configuring, validating, troubleshooting, and recovering the two-node DGX Spark LAN/storage/RDMA setup. |
-| [pve-node-bootstrap](runbooks/pve-node-bootstrap.md) | Using GLKVM and Athena netboot.xyz to inventory, PXE-boot, install, and recover a PVE node. |
+| [pve-node-bootstrap](runbooks/pve-node-bootstrap.md) | Using GLKVM and Athena netboot.xyz to inventory, PXE-boot, install, accept, join, and recover a PVE node. |
 | [talos-pod-security-rollout](runbooks/talos-pod-security-rollout.md) | Applying and validating Talos Pod Security Admission namespace exceptions after Flux reconciles the labels. |
 | [talos-1.14-upgrade](runbooks/talos-1.14-upgrade.md) | Upgrading k8s-prod to Talos 1.14 one node at a time and verifying Cilium's SELinux AVCs. |
 | [terminated-pod-gc](runbooks/terminated-pod-gc.md) | Sizing terminated-pod history against namespace quotas and verifying the held Talos controller-manager rollout. |
@@ -78,7 +78,6 @@ Retained dated plans keep the status header `**Status:** <Proposed|Active|Implem
 
 ### Unfinished
 
-- [20260814-pve-cluster](plans/20260814-pve-cluster.md) — implemented core design for the independent three-node PVE cluster, with remaining hardware acceptance and identity/certificate gates tracked in the live operator documentation.
 - [20260821-network-topology](plans/20260821-network-topology.md) — active, partially implemented VLAN/zone topology, DGX placement, PVE wiring, and second-cluster reservations.
 
 ### Historical
@@ -95,6 +94,7 @@ Implemented or superseded plans preserve context. Use the maintained documentati
 - [20260703-observability-rework](plans/20260703-observability-rework.md) — superseded estate-wide proposal; current operations live in the monitoring, logging and alerting runbooks, with remaining work and accepted alternatives linked from the plan's handoff.
 - [20260705-broadsheet-rename-migration](plans/20260705-broadsheet-rename-migration.md) — paperboy → broadsheet rename with PVC-preserving migration.
 - [20260802-lemon-manuals-selfhost](plans/20260802-lemon-manuals-selfhost.md) — self-host the LEMON manuals archive on NFS with an MCP server in front.
+- [20260814-pve-cluster](plans/20260814-pve-cluster.md) — superseded design for the independent three-node `pve-sbx` cluster, retired 2026-11-14 with its 2026-08-27 acceptance record; current operations live under `proxmox/`, and the remaining commissioning gates and guest-provisioning decision are in the issues linked from its handoff.
 - [20260818-sn770-zfs-qualification-procedure](plans/20260818-sn770-zfs-qualification-procedure.md) — the bounded, destructive test procedure and safety guards used for the SN770 reproduction run.
 - [20260902-tailscale-remote-admin](plans/20260902-tailscale-remote-admin.md) — superseded two-VM PVE Tailscale subnet-router pair on isolated VLAN 19, retired 2026-10-25; routing and failover evidence retained.
 

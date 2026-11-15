@@ -12,7 +12,7 @@ This directory holds the Git-managed baseline and operator documentation for the
 
 The cluster name is `pve-sbx`. Corosync link 0 uses the management addresses with priority 20; link 1 uses the physically separate 2.5 GbE storage addresses with priority 10. Secure migration is pinned to `10.32.25.0/24`.
 
-Use an individual node URL such as `https://pve-sbx-1.home.kelch.io:8006/`; there is no cluster VIP. The local `kelchm@pve` administrator exists, but TOTP enrollment is still pending. Root and bootstrap credentials stay outside Git.
+Use an individual node URL such as `https://pve-sbx-1.home.kelch.io:8006/`; there is no cluster VIP. The local `kelchm@pve` administrator exists, but TOTP enrollment is still pending ([#1509](https://github.com/kelchm/home-lab/issues/1509)). Root and bootstrap credentials stay outside Git.
 
 ## Operator access
 
@@ -51,7 +51,7 @@ The initial certificates were issued and hostname-validated on 2026-08-27. A man
 
 Both stores use hard NFSv4.1 mounts and are allowed only from the three PVE storage addresses. `library-pve` is platform-specific but reusable across PVE clusters; `backups-pve-sbx` is intentionally cluster-specific. Shared external storage uses the DSM shared-folder leaf as its PVE storage ID so the same resource has one canonical name across both systems.
 
-The cluster job `daily-backups` backs up all non-disposable guests to `backups-pve-sbx` at 05:00 America/New_York in snapshot mode with Zstandard compression. The live job uses `all=1`; add every disposable VMID to its explicit `exclude` field. Since 2026-10-28 the `exclude` field is unset, so the job covers every guest, including `103` (`netbird-router-1`) and template `9000`. Its retention policy is last 3, daily 7, weekly 4, and monthly 6. The built-in matcher currently targets `mail-to-root`, but direct delivery to Gmail failed with `550 5.7.1`; do not depend on email alerts until an authenticated SMTP relay is configured and tested.
+The cluster job `daily-backups` backs up all non-disposable guests to `backups-pve-sbx` at 05:00 America/New_York in snapshot mode with Zstandard compression. The live job uses `all=1`; add every disposable VMID to its explicit `exclude` field. Since 2026-10-28 the `exclude` field is unset, so the job covers every guest, including `103` (`netbird-router-1`) and template `9000`. Its retention policy is last 3, daily 7, weekly 4, and monthly 6. The built-in matcher currently targets `mail-to-root`, but direct delivery to Gmail failed with `550 5.7.1`; do not depend on email alerts until an authenticated SMTP relay is configured and tested ([#1510](https://github.com/kelchm/home-lab/issues/1510)).
 
 ### Backup alerting
 
@@ -69,7 +69,7 @@ Every node's RTL8125-backed `vmbr0` is VLAN-aware with an explicit `bridge-vids 
 | `104` | `netbird-router-2` | `10.32.19.104` | Second NetBird routing peer, on `pve-sbx-2` | [`guests/netbird-router-2`](guests/netbird-router-2/) |
 | `200` | `hermes-1` | `10.32.21.100` | Hermes Agent, dashboard, and client API | [`guests/hermes-1`](guests/hermes-1/) |
 
-All three guests are enabled at host boot and intentionally not PVE HA resources. `hermes-1` is covered by `daily-backups` and keeps its application state on its local VM disk under `/srv/hermes`. `netbird-router-1` holds no application state beyond its NetBird peer identity. It is covered by `daily-backups` and has `protection: 1`, as does VM 104. The first scheduled post-enrollment backup was verified on 2026-10-29: VM 103 completed at 09:00:17 UTC with a 623,690,275-byte archive and enclosing task `OK` at 09:01:44 UTC (#625). It predates the node-local snippet installation; no archive was unpacked, restored or booted, so identity recovery remains undrilled. Its guest definition covers restore, rebuild and re-enrollment, including snippet provisioning and the limits of the old pre-enrollment archive.
+Each guest was provisioned by hand, as its source directory records; whether guests should instead be declared in IaC, and where its state would live, is undecided ([#1511](https://github.com/kelchm/home-lab/issues/1511)). All three guests are enabled at host boot and intentionally not PVE HA resources. `hermes-1` is covered by `daily-backups` and keeps its application state on its local VM disk under `/srv/hermes`. `netbird-router-1` holds no application state beyond its NetBird peer identity. It is covered by `daily-backups` and has `protection: 1`, as does VM 104. The first scheduled post-enrollment backup was verified on 2026-10-29: VM 103 completed at 09:00:17 UTC with a 623,690,275-byte archive and enclosing task `OK` at 09:01:44 UTC (#625). It predates the node-local snippet installation; no archive was unpacked, restored or booted, so identity recovery remains undrilled. Its guest definition covers restore, rebuild and re-enrollment, including snippet provisioning and the limits of the old pre-enrollment archive.
 
 VM 103's boot disk, EFI disk and cloud-init drive are local. The [node-local startup repair](guests/netbird-router/local-startup.md#accepted-installation-2026-10-29) was installed and verified at 11:56 UTC on 2026-10-29: the saved vendor reference became `local:snippets/netbird-pilot-router.yaml`, with unchanged vendor bytes, identity and running process. On 2026-11-08 VM 103 was renamed `netbird-router-1` and pointed at the byte-identical `local:snippets/netbird-router-1.yaml`; the old-named local file stays for archives from 2026-10-30 to 2026-11-08. Only `snippets` was added to the cluster-wide `local` content flags; files remain node-local and must be provisioned on each chosen restore/migration node. Retain the NAS copy for older archives. Host-boot recovery on 2026-10-25 required a manual start. The separately authorized 2026-11-11 host reboot verified unattended startup: VM 103 started about 23 seconds after the 01:58:07 UTC boot, retained its identity/version and reconnected to Management and Signal; VM 200 also returned automatically ([acceptance](guests/netbird-router/local-startup.md#accepted-host-boot-2026-11-11), #1096).
 
@@ -133,7 +133,7 @@ Any NVMe reset, timeout, namespace loss, media error, or PCIe/AER event fails th
 
 As of 2026-08-27 14:48 EDT, commissioning had observed three correctable AER events on node 1, two on node 2, and two on node 3 at the SN770 endpoint. The first two node-1 events and both node-2 events paired a root-port Data Link Layer timeout with an endpoint Physical Layer `RxErr`; the later node-1 event and both node-3 events contained the endpoint `RxErr` without a root-port timeout. Node 3's two events appeared after it had completed a bounded 100-cycle idle-to-read screen without reproducing one, so that screen is not sufficient evidence of stability. All three drives still reported zero SMART critical warnings, media errors, and NVMe error-log entries, with no reset, controller loss, namespace loss, or guest I/O error.
 
-At 17:26 EDT, firmware-level **PCI Express Power Management** was disabled on all three nodes, one node and reboot at a time. Post-boot `lspci` showed the `00:1d.0` root port as `ASPM not supported` and `ASPM Disabled`, and the `02:00.0` SN770 endpoint as `ASPM Disabled`; Linux NVMe APST remained at its default `100000` µs latency threshold. Every node rejoined both cluster quorum and active NFS storage with zero failed units, zero SMART critical warnings, zero media or NVMe error-log entries, and no PCIe, NVMe, reset, timeout, or I/O error in the new boot. This is the applied mitigation baseline, not clearance of the zero-AER gate; the three-node idle and I/O acceptance window must still be repeated.
+At 17:26 EDT, firmware-level **PCI Express Power Management** was disabled on all three nodes, one node and reboot at a time. Post-boot `lspci` showed the `00:1d.0` root port as `ASPM not supported` and `ASPM Disabled`, and the `02:00.0` SN770 endpoint as `ASPM Disabled`; Linux NVMe APST remained at its default `100000` µs latency threshold. Every node rejoined both cluster quorum and active NFS storage with zero failed units, zero SMART critical warnings, zero media or NVMe error-log entries, and no PCIe, NVMe, reset, timeout, or I/O error in the new boot. This is the applied mitigation baseline, not clearance of the zero-AER gate; the three-node idle and I/O acceptance window must still be repeated ([#1507](https://github.com/kelchm/home-lab/issues/1507)).
 
 ## Monitoring
 
@@ -168,7 +168,7 @@ qm guest cmd RESTORE_VMID ping
 
 After validating the recovered filesystem and application state, shut down the isolated copy. Destroy it only when the VMID, node, and disposable purpose have been rechecked.
 
-The initial acceptance drill used disposable VM 300. A 60-second 70/30 random read/write `fio` run on node 1 completed without error, an online local-disk migration to node 2 used VLAN 25 with 252 ms guest downtime, and a guest-agent-consistent 334 MB VZDump archive completed in 14 seconds. The archive restored on node 3 as VM 301, booted with its NIC removed, and passed filesystem and QEMU guest-agent checks. Both disposable VMs were then destroyed; `backups-pve-sbx:backup/vzdump-qemu-300-2026_08_27-11_35_57.vma.zst` remains as the recovery artifact. Restore elapsed time was not captured, so the RTO/restore-throughput acceptance measurement remains open.
+The initial acceptance drill used disposable VM 300. A 60-second 70/30 random read/write `fio` run on node 1 completed without error, an online local-disk migration to node 2 used VLAN 25 with 252 ms guest downtime, and a guest-agent-consistent 334 MB VZDump archive completed in 14 seconds. The archive restored on node 3 as VM 301, booted with its NIC removed, and passed filesystem and QEMU guest-agent checks. Both disposable VMs were then destroyed; `backups-pve-sbx:backup/vzdump-qemu-300-2026_08_27-11_35_57.vma.zst` remains as the recovery artifact. Restore elapsed time was not captured, so the RTO/restore-throughput acceptance measurement remains open ([#1513](https://github.com/kelchm/home-lab/issues/1513)).
 
 ## Host baseline artifacts
 
@@ -194,15 +194,48 @@ PVE_AGE_IDENTITY=age.key ./proxmox/capture-host-config.sh
 
 The script connects as `kelchm` by default and requires the verified noninteractive sudo policy. Set `PVE_SSH_USER` only for an explicitly tested recovery identity; direct human root SSH is not the normal path.
 
-The script decrypts and validates required members in each archive before accepting it, then prints its SHA-256 digest. A verified three-node capture, including SQLite-consistent pmxcfs database snapshots, the host operator identity, the installed subscription-nag helper and package hook, and the ACME account, plugin, certificate and key material, was completed on 2026-08-27 at `20260827T200605Z`. This is off-node recovery state on the admin workstation, not an off-site backup; copy the encrypted artifacts to a second protected location if workstation loss is in scope.
+The script decrypts and validates required members in each archive before accepting it, then prints its SHA-256 digest. A verified three-node capture, including SQLite-consistent pmxcfs database snapshots, the host operator identity, the installed subscription-nag helper and package hook, and the ACME account, plugin, certificate and key material, was completed on 2026-08-27 at `20260827T200605Z`. No later capture is recorded, so it predates later configuration such as the guests, service account, backup webhook and `snippets` content flag; refreshing it and recording the cadence actually followed is [#1512](https://github.com/kelchm/home-lab/issues/1512). This is off-node recovery state on the admin workstation, not an off-site backup; copy the encrypted artifacts to a second protected location if workstation loss is in scope.
+
+## Node maintenance
+
+PVE hosts are mutable Debian systems patched deliberately, one node at a time; no window is scheduled and nothing reboots automatically. Stay on `pve-no-subscription` and the default kernel; do not enable `pvetest` or test kernels. A major PVE release waits for its first point release and is its own reviewed change. For each node in turn, never two at once:
+
+1. Run the [routine checks](#routine-checks), including both Corosync links, the kernel log, thin-pool data and metadata use, and the previous night's backups.
+2. Confirm the other two nodes have memory and CPU headroom, then migrate or shut down the node's guests. Keep one of VMs 103 and 104 running: they are the only routed remote-access path.
+3. Run `apt update`, review the change list, then `apt full-upgrade`. Reboot for kernel, microcode, systemd, QEMU or PVE stack changes, or when unsure.
+4. Before touching the next node, require the expected kernel and PVE versions, quorum, both links, `pvesm status`, storage mounts, networking and healthy guests.
+
+Stop on the first unexplained regression rather than upgrading around a failed node. Do not enable PVE's dynamic load balancer; evacuation stays explicit.
+
+## Design decisions and deferrals
+
+These choices carry forward from the original [cluster plan](../docs/plans/20260814-pve-cluster.md), which keeps the full rationale.
+
+- **Storage.** Each node uses the installer-default ext4 root and node-local LVM-thin `local-lvm` for guest disks. ZFS is not used on these SN770s because of public controller-drop reports under ZFS workloads ([SN770 evaluation](../docs/sn770-zfs-qualification.md)); Ceph does not fit single-NVMe, 32 GB, 2.5 GbE nodes. `local-lvm` is not shared: after an abrupt node loss, a guest returns by repairing the node or restoring from `backups-pve-sbx`, not by HA restart. Snapshots are not backups.
+- **Capacity.** Keep at least 6 GiB per host for PVE, migration and transient load. For every running guest to survive a planned one-node evacuation, keep total running guest memory at or below about 52 GiB, placed so the destination has room. `PVEStorageSpaceLow` warns when a PVE storage is over 90% full for 30 minutes; thin-pool metadata has no alert, so read it with `lvs` in the routine checks.
+- **Guests.** Use VMIDs 100–199 for platform and recovery-critical guests, 200–299 for persistent services, 300–399 for lab and test, 400–499 for disposable guests and 9000–9099 for cloud-init templates, which are never booted. Attach guest NICs to `vmbr0` with an explicit tag, VLAN 21 by default; never untagged. New VMs default to VirtIO SCSI single with discard and SSD emulation, the QEMU guest agent, a serial console, and CPU type `x86-64-v2-AES` unless pinned to one node. Prefer VMs; use unprivileged LXC only for small services that tolerate host-kernel coupling.
+- **Access and firewall.** UniFi enforces inter-VLAN policy. Do not enable a cluster-wide PVE firewall until local console recovery is proven on all three nodes. Any future Kanidm OIDC login must not become the only way into PVE; `root@pam` remains local-console break glass.
+
+| Deferred | Revisit when |
+|---|---|
+| Shared NFS guest tier and PVE HA | A guest needs HA restart more than independence from NAS and VLAN 25 failure; benchmark it, then prove power-loss failover before calling anything HA |
+| Proxmox Backup Server | Full `vzdump` backups or restores no longer meet space or recovery-time needs; it would run on independent hardware at the reserved `pbs` addresses |
+| Proxmox Datacenter Manager | A second PVE or PBS system exists, or a central status view saves real time |
+| Ansible for hosts | Rebuilds take too many error-prone steps, host drift appears, a fourth node arrives, or the same change keeps crossing every node |
+| Local ZFS and PVE replication | The SN770s are replaced by drives that pass sustained ZFS scrub and send burn-in on these hosts |
+| Thin-pool metadata alert | Thin-pool data use passes 70% or snapshots enter routine use |
+| LXC restore drill | The first LXC guest is created |
+| UPS-aware shutdown and notification | The PVE nodes gain a UPS |
+| More guest VLANs, 10 GbE, Ceph | Trust classes outgrow VLAN 21 and guest firewalls; measured migration or backup windows justify faster links; different hardware provides dedicated OSDs, more RAM and 10+ GbE |
 
 ## Outstanding commissioning gates
 
-- Validate the firmware-level PCIe ASPM disable applied to all three nodes by repeating the idle and I/O acceptance window on every host while leaving NVMe APST unchanged. Node 3's earlier clean 100-cycle screen preceded two later errors and is not sufficient evidence for the gate.
-- Repeat a timed isolated restore after the storage investigation and record restore RTO and throughput; the initial restore proved functionality but did not capture elapsed time.
-- Complete physical cold-power removal and recovery on all three nodes; GLKVM cannot assert ATX power.
-- Remove the obsolete SanDisk qualification USB from node 1 after its NVMe cold-power boot is proven.
-- Enroll TOTP for `kelchm@pve`.
-- Configure and test an authenticated SMTP notification target; direct-to-MX Postfix delivery from the home public IP is rejected by Gmail.
+None of these has a recorded result since the 2026-08-27 commissioning record above; no record is not a pass. Retiring the historical plan does not clear these gates or qualify PVE for irreplaceable data.
 
-Installation, BIOS, KVM, PXE, and recovery-console procedures live in [the PVE node bootstrap runbook](../docs/runbooks/pve-node-bootstrap.md). The architecture and acceptance rationale remain in [the cluster plan](../docs/plans/20260814-pve-cluster.md).
+- Repeat the idle and I/O acceptance window on every host under the firmware-level PCIe ASPM disable, leaving NVMe APST unchanged: [#1507](https://github.com/kelchm/home-lab/issues/1507). Node 3's earlier clean 100-cycle screen preceded two later errors and is not sufficient evidence for the gate.
+- Repeat a timed isolated restore after the storage requalification and record restore RTO and throughput: [#1513](https://github.com/kelchm/home-lab/issues/1513), held on #1507.
+- Complete physical cold-power removal and recovery on all three nodes, then remove the obsolete SanDisk qualification USB from node 1 once its NVMe cold-power boot is proven: [#1508](https://github.com/kelchm/home-lab/issues/1508). GLKVM cannot assert ATX power.
+- Enroll TOTP for `kelchm@pve`: [#1509](https://github.com/kelchm/home-lab/issues/1509).
+- Configure and test an authenticated SMTP notification target; direct-to-MX Postfix delivery from the home public IP is rejected by Gmail: [#1510](https://github.com/kelchm/home-lab/issues/1510).
+
+Installation, BIOS, KVM, PXE, node acceptance, cluster join, and recovery-console procedures live in [the PVE node bootstrap runbook](../docs/runbooks/pve-node-bootstrap.md). The superseded [cluster plan](../docs/plans/20260814-pve-cluster.md) retains the original design rationale and the 2026-08-27 acceptance record.

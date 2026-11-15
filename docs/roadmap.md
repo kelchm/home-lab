@@ -8,13 +8,13 @@ design there is deliberately shaped to make the items below land cleanly.
 
 The three HP EliteDesk 800 G3 machines now run the independent `pve-sbx` Proxmox VE cluster. PVE uses VLAN 20 for management and primary Corosync, matching `.21-.23` identities on VLAN 25 for storage, migration, and secondary Corosync, and the shared VLAN 21 Workloads network for general-purpose guests. VLAN 31 remains reserved for a second Kubernetes cluster.
 
-The design, acceptance record, and remaining rollout gates are in the [PVE cluster plan](plans/20260814-pve-cluster.md). Current endpoints, checks, backup and restore operations, and manually applied host artifacts live in [`proxmox/README.md`](../proxmox/README.md).
+Current endpoints, checks, backup and restore operations, node maintenance, design decisions and deferrals, and manually applied host artifacts live in [`proxmox/README.md`](../proxmox/README.md), which links the issues owning the remaining commissioning gates. The superseded [PVE cluster plan](plans/20260814-pve-cluster.md) keeps the original rationale and 2026-08-27 acceptance record.
 
 Important boundaries:
 
 - PVE remains operable with Kubernetes completely unavailable.
-- Initial host bootstrap and rolling updates are documented manual operations; OpenTofu manages guests. Ansible is deferred until repeated host drift or rebuild work justifies it.
-- PVE operator documentation and manually applied host artifacts live under `proxmox/`; guest OpenTofu will join that owner directory when the first durable guest is declared.
+- Host bootstrap, rolling updates and guest provisioning are documented manual operations. Whether to declare guests in IaC is undecided ([#1511](https://github.com/kelchm/home-lab/issues/1511)); Ansible is deferred until repeated host drift or rebuild work justifies it.
+- PVE operator documentation, guest sources and manually applied host artifacts live under `proxmox/`.
 - Local LVM-thin is the default runtime tier. Synology NFS holds templates and
   backups; shared guest storage is optional for workloads that justify PVE HA
   and the resulting NAS runtime dependency.

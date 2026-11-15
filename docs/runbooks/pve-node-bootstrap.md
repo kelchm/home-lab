@@ -1,6 +1,6 @@
 # PVE node bootstrap through GLKVM and netboot.xyz
 
-Use this runbook to operate the existing out-of-band console and PXE infrastructure while inventorying or installing the HP EliteDesk PVE nodes. It supplies the control path for phase 1 of the [PVE cluster plan](../plans/20260814-pve-cluster.md); that plan remains authoritative for hardware gates, install choices, addressing, networking, and cluster formation.
+Use this runbook to operate the existing out-of-band console and PXE infrastructure while inventorying or installing the HP EliteDesk PVE nodes. It covers the control path, BIOS baseline, installation, node acceptance and cluster join. Node identities and cluster settings are in [`proxmox/README.md`](../../proxmox/README.md) and addressing in [architecture](../architecture.md); the superseded [PVE cluster plan](../plans/20260814-pve-cluster.md) keeps the original rationale for these choices.
 
 ## Control path
 
@@ -133,9 +133,37 @@ This is intentionally a pre-install acceptance gate for PXE, KVM, and the pinned
 
 1. In netboot.xyz, select the locally staged and verified **Proxmox VE 9.2-1** entry. Stop if only `9.1-1` is offered.
 2. Watch the kernel, initrd, and `proxmox.iso` load from Athena's `10.32.20.5:8080` endpoint. A WAN download or an unexpected asset path fails the local-install acceptance gate.
-3. Follow the PVE plan's installation baseline exactly: UEFI, the verified target NVMe, ext4 with installer-default LVM-thin, the final node FQDN and management address, VLAN 20 gateway and DNS, and `America/New_York`.
+3. Install with UEFI onto the verified target NVMe, ext4 with the installer-default LVM-thin layout, the final node FQDN and management address, the VLAN 20 gateway and DNS, and `America/New_York`. Leave Ceph unconfigured; retain the installer's dependencies.
 4. Re-resolve the destination disk from model, serial, capacity, and logical sector size immediately before accepting destructive partitioning. Do not infer it from `/dev/nvme0n1` alone.
 5. After installation, put the NVMe PVE boot entry ahead of network boot. PXE remains available through the manual Startup Menu rather than running on every reboot.
+
+## Configure host networking
+
+Finish both networks on the standalone node before acceptance and before it joins; hostnames and management addresses are hard to change afterwards. The onboard NIC carries the static management address and the only default route with no bridge. The RTL8125 carries the VLAN-aware `vmbr0`, which has no address, and `vmbr0.25` for storage, migration and Corosync link 1 with no gateway. Node 1's intended shape, with `.22` and `.23` on the other nodes:
+
+```text
+auto nic1
+iface nic1 inet static
+    address 10.32.20.21/24
+    gateway 10.32.20.1
+
+auto nic0
+iface nic0 inet manual
+
+auto vmbr0
+iface vmbr0 inet manual
+    bridge-ports nic0
+    bridge-stp off
+    bridge-fd 0
+    bridge-vlan-aware yes
+    bridge-vids 10 19 21 25 90
+
+auto vmbr0.25
+iface vmbr0.25 inet static
+    address 10.32.25.21/24
+```
+
+Keep `bridge-vids` identical on every node and in step with the UniFi `pve-guest-trunk` profile. Put all three management names in every node's `/etc/hosts`, use `home.kelch.io` as the search domain and the UniFi gateway as resolver, and confirm the static UniFi DNS records exist before joining.
 
 ## Post-install acceptance
 
@@ -143,7 +171,11 @@ Before moving to the next node:
 
 1. Reboot without intervening at the console and confirm the host boots from its NVMe installation.
 2. Verify the expected hostname, management address, PVE UI on TCP 8006, and SSH host key. Replace temporary DHCP or qualification-era known-host entries deliberately.
-3. Complete the PVE plan's NIC inventory, RTL8125 link test, storage burn-in, backup/restore, reboot, and cold-power gates.
+3. With [host networking](#configure-host-networking) in place, accept the node's hardware before it joins the cluster or hosts a guest. Reject the node, or stop and diagnose, on any NVMe reset, timeout, PCIe/AER event, media error or capacity change:
+
+   - Record `lspci -nnk`, interface names and `ethtool` driver and firmware data in the private inventory. The onboard NIC is `nic1`; the RTL8125 is `nic0` and must hold a 2.5 Gb/s link and sustain `iperf3` without resets or PCIe/AER errors.
+   - Run sustained NVMe I/O and memory and CPU burn-in, then the [routine host checks](../../proxmox/README.md#routine-checks).
+   - Reboot, then remove AC power completely, and confirm both NIC identities and all LVM volumes return unchanged.
 4. Capture the final console and record the verified downstream KVM port:
 
    ```sh
@@ -151,6 +183,18 @@ Before moving to the next node:
    ```
 
 5. Confirm the node can be recovered through both the stock GLKVM UI and the held-Esc PXE sequence before depending on remote-only maintenance.
+
+## Join the cluster
+
+After acceptance, run this on the joining node against an existing member, with the node's management address as link 0 and its storage address as link 1:
+
+```sh
+pvecm add EXISTING_MEMBER.home.kelch.io --link0 10.32.20.2N --link1 10.32.25.2N
+```
+
+Confirm quorum and both links with the [routine checks](../../proxmox/README.md#routine-checks). Then, with a disposable guest, back up to `backups-pve-sbx`, run the [isolated restore drill](../../proxmox/README.md#backup-and-isolated-restore-drill), and migrate it to or from the node over VLAN 25, rechecking the kernel and NVMe logs after each step.
+
+A rebuilt node returning under an existing name must first be removed from the cluster by a quorate member; follow the Proxmox VE administration guide for removing and re-adding a node rather than improvising.
 
 ## Troubleshooting
 

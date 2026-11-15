@@ -1,6 +1,29 @@
 # Three-node PVE cluster
 
-**Status:** Active — 2026-08-27; core cluster implemented, remaining commissioning gates tracked in [`proxmox/README.md`](../../proxmox/README.md).
+**Status:** Superseded — 2026-11-14; the core cluster is implemented and operated from [`proxmox/README.md`](../../proxmox/README.md), and the remaining commissioning gates and guest-provisioning decision are owned by the issues below. The proposal is retained as history; retiring it does not claim that any unperformed acceptance test passed.
+
+## Handoff to maintained documentation and issues
+
+Use [`proxmox/README.md`](../../proxmox/README.md) for endpoints, operator access, certificates, shared storage, backups, the isolated restore drill, guests, node maintenance and the design decisions and deferrals carried forward from this plan. The [PVE node bootstrap runbook](../runbooks/pve-node-bootstrap.md) owns BIOS, PXE, installation, node acceptance and cluster join. [Architecture](../architecture.md) owns addressing, [host monitoring](../runbooks/host-monitoring.md) and [backup completion metrics](../../proxmox/monitoring/backup-metrics/README.md) own telemetry and backup alerting, the [UniFi overview](../../network/unifi/README.md) records the applied guest network policy, and the [SN770 evaluation](../sn770-zfs-qualification.md) keeps the storage evidence.
+
+| Remaining subject | Governing work |
+|---|---|
+| Zero-AER storage requalification with firmware ASPM disabled and APST unchanged | [#1507](https://github.com/kelchm/home-lab/issues/1507) |
+| Timed isolated restore: elapsed time and throughput | [#1513](https://github.com/kelchm/home-lab/issues/1513), held until #1507 concludes |
+| Physical cold-power recovery on all three nodes, then removal of node 1's qualification USB | [#1508](https://github.com/kelchm/home-lab/issues/1508) |
+| TOTP for `kelchm@pve` | [#1509](https://github.com/kelchm/home-lab/issues/1509) |
+| Kubernetes-independent notifications through authenticated SMTP | [#1510](https://github.com/kelchm/home-lab/issues/1510) |
+| Guest IaC (phase 4) and its state backend: adopt, or keep manual provisioning | [#1511](https://github.com/kelchm/home-lab/issues/1511) |
+| Configuration recovery capture newer than 2026-08-27 | [#1512](https://github.com/kelchm/home-lab/issues/1512) |
+| Off-site protection of `backups-pve-sbx`, or a recorded exclusion | [#1354](https://github.com/kelchm/home-lab/issues/1354) |
+
+None of these has a recorded result since the 2026-08-27 checkpoint below; no record is not a pass. Proposals not carried forward as commitments: the weekly capture cadence (replaced by #1512's recorded cadence), a fixed monthly patch window (maintenance is deliberate and node-by-node), and a separate thin-pool metadata alert (the routine checks cover it; [`proxmox/README.md`](../../proxmox/README.md#design-decisions-and-deferrals) records the revisit trigger). Optional phase 5 HA, PBS, PDM, Ansible, ZFS, Ceph, LXC restore and UPS behavior keep the deferral triggers recorded there. Retiring this plan is one part of [#1361](https://github.com/kelchm/home-lab/issues/1361); the network topology plan remains separate retirement work.
+
+## Historical proposal
+
+The remainder preserves the 2026-08-14 design and its 2026-08-27 implementation checkpoint unchanged, including wording such as "live", "remaining" and phase status as of that date, and the original `Active` status. Use the handoff above for present state and work tracking.
+
+**Original status:** Active — 2026-08-27; core cluster implemented, remaining commissioning gates tracked in [`proxmox/README.md`](../../proxmox/README.md).
 
 **Plan date:** 2026-08-14
 
