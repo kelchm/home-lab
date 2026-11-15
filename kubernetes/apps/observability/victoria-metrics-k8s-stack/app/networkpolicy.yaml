@@ -159,6 +159,15 @@ spec:
         - ports:
             - port: "8000"
               protocol: TCP
+    # Jellyfin exporter metrics.
+    - toEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: media
+            app.kubernetes.io/name: jellyfin-exporter
+      toPorts:
+        - ports:
+            - port: "9594"
+              protocol: TCP
     # Longhorn manager metrics.
     - toEndpoints:
         - matchLabels:

@@ -1,0 +1,64 @@
+---
+# The exporter holds a Jellyfin API key, which Jellyfin treats as an
+# unrestricted administrator, and /metrics is unauthenticated, so only vmagent
+# may scrape it. Egress is default-denied except DNS and Jellyfin, and the
+# Jellyfin rule sends every request through Cilium's L7 proxy, which admits
+# only the seven GET calls v1.6.0 makes with the collectors enabled in
+# helmrelease.yaml and answers anything else with 403. Jellyfin has no ingress
+# policy; this rule leaves its other clients untouched. vmagent's egress to
+# 9594 is in the victoria-metrics-k8s-stack policy.
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: jellyfin-exporter
+spec:
+  endpointSelector:
+    matchLabels:
+      app.kubernetes.io/name: jellyfin-exporter
+  ingress:
+    - fromEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: observability
+            app.kubernetes.io/name: vmagent
+            io.cilium.k8s.policy.serviceaccount: vmagent-victoria-metrics-k8s-stack
+      toPorts:
+        - ports:
+            - port: "9594"
+              protocol: TCP
+  egress:
+    - toEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: kube-system
+            k8s-app: kube-dns
+      toPorts:
+        - ports:
+            - port: "53"
+              protocol: UDP
+            - port: "53"
+              protocol: TCP
+    # Paths are RE2 regexes matched against the whole request target,
+    # query string included, so each /Sessions call is listed exactly.
+    - toEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: media
+            app.kubernetes.io/name: jellyfin
+      toPorts:
+        - ports:
+            - port: "8096"
+              protocol: TCP
+          rules:
+            http:
+              - method: GET
+                path: /System/Ping
+              - method: GET
+                path: /System/Info
+              - method: GET
+                path: /System/Info/Storage
+              - method: GET
+                path: /Items/Counts
+              - method: GET
+                path: /ScheduledTasks
+              - method: GET
+                path: /Sessions\?activeWithinSeconds=60
+              - method: GET
+                path: /Sessions\?IsPlaying=true&activeWithinSeconds=60
