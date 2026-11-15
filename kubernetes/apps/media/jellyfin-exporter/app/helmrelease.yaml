@@ -1,0 +1,105 @@
+---
+# Jellyfin metrics exporter. Reads Jellyfin through its Service with a copy of
+# Homepage's Jellyfin API key (secret.sops.yaml). Jellyfin API keys are full
+# administrators, so this pod's egress policy admits only the seven GET calls
+# the enabled collectors make. Jellyfin's pod, settings and native /metrics
+# (EnableMetrics, off) are untouched. No HTTPRoute; only vmagent can reach the
+# metrics port (networkpolicy.yaml).
+apiVersion: helm.toolkit.fluxcd.io/v2
+kind: HelmRelease
+metadata:
+  name: jellyfin-exporter
+spec:
+  chartRef:
+    kind: OCIRepository
+    name: jellyfin-exporter
+  interval: 1h
+  values:
+    controllers:
+      jellyfin-exporter:
+        serviceAccount: { identifier: jellyfin-exporter }
+        containers:
+          app:
+            image:
+              # renovate: datasource=docker depName=docker.io/rebelcore/jellyfin-exporter
+              repository: docker.io/rebelcore/jellyfin-exporter
+              tag: v1.6.0@sha256:d1985ef9ad50b8924e74ee1dd12accd64936a65150375a8e190c2293b6e2678c
+            args:
+              - --jellyfin.address=http://jellyfin.media.svc.cluster.local:8096
+              # The users and activity collectors only produce per-user series;
+              # the per-session labels of the rest are dropped at scrape time.
+              # Adding a collector adds API calls that networkpolicy.yaml denies.
+              - --collector.disable-defaults
+              - --collector.system
+              - --collector.media
+              - --collector.playing
+              - --collector.transcoding
+              - --collector.tasks
+              - --collector.storage
+            env:
+              # Sent only in the Authorization header, never in a URL or log line.
+              JELLYFIN_TOKEN:
+                valueFrom:
+                  secretKeyRef:
+                    name: jellyfin-exporter
+                    key: JELLYFIN_TOKEN
+            probes:
+              # The landing page does not query Jellyfin; /metrics would.
+              liveness: &probe
+                enabled: true
+                custom: true
+                spec:
+                  httpGet:
+                    path: /
+                    port: &port 9594
+                  periodSeconds: 30
+                  timeoutSeconds: 5
+                  failureThreshold: 3
+              readiness: *probe
+            securityContext:
+              allowPrivilegeEscalation: false
+              readOnlyRootFilesystem: true
+              capabilities: { drop: ["ALL"] }
+            resources:
+              requests:
+                cpu: 10m
+                memory: 32Mi
+              limits:
+                memory: 128Mi
+    defaultPodOptions:
+      automountServiceAccountToken: false
+      # Resolve the configured multi-label service name as absolute first;
+      # the DNS policy permits only that name, not search-suffix variants.
+      dnsConfig:
+        options:
+          - name: ndots
+            value: "1"
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65534
+        runAsGroup: 65534
+        seccompProfile:
+          type: RuntimeDefault
+    # Never reads the Kubernetes API; exists only to give the exporter a
+    # distinct Cilium identity for its egress allowlist.
+    serviceAccount:
+      jellyfin-exporter: { automountServiceAccountToken: false }
+    service:
+      app:
+        controller: jellyfin-exporter
+        ports:
+          metrics:
+            port: *port
+    serviceMonitor:
+      app:
+        endpoints:
+          - port: metrics
+            path: /metrics
+            interval: 1m
+            scrapeTimeout: 30s
+            # The playing and transcoding collectors label each session with
+            # who is watching what, from where. Keep session_id, media type,
+            # play method and codecs; drop the people, devices and titles.
+            metricRelabelings:
+              - action: labeldrop
+                regex: user_id|username|device|client|client_version|ip_address|title|series_title|series_season|series_episode

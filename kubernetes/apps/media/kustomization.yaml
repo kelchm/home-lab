@@ -24,4 +24,5 @@ resources:
   - ./qbittorrent-exporter/ks.yaml
   - ./recyclarr/ks.yaml
   - ./jellyfin/ks.yaml
+  - ./jellyfin-exporter/ks.yaml
   - ./seerr/ks.yaml

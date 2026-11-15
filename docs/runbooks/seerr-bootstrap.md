@@ -157,6 +157,8 @@ A Sonarr, Radarr, Lidarr, Prowlarr or Bazarr API key has copies in Git, in other
 
 qBittorrent's Web UI API key has two copies: `HOMEPAGE_VAR_QBITTORRENT_KEY` in `homepage-secret` and `QBITTORRENT_API_KEY` in `arr-api-keys`. After rotating it in qBittorrent, update both Secrets, then `kubectl -n media rollout restart deploy/qbittorrent-exporter`. Reloader restarts Homepage.
 
+Homepage's Jellyfin API key (named `homepage` in Jellyfin) has two copies: `HOMEPAGE_VAR_JELLYFIN_KEY` in `homepage-secret` and `JELLYFIN_TOKEN` in `media/jellyfin-exporter/app/secret.sops.yaml`. After replacing it in Jellyfin, update both Secrets, then `kubectl -n media rollout restart deploy/jellyfin-exporter`. Reloader restarts Homepage. Seerr's own Jellyfin key is separate.
+
 Rotating Prowlarr's own key: update `homepage-secret` and `arr-api-keys`, then run *Settings → Apps → Sync App Indexers* in Prowlarr, which rewrites the key in the indexers it manages in each app.
 
 Seerr's *own* API key can be pinned declaratively via the `API_KEY` env var — it is re-asserted on every settings load — if scripted configuration is ever wanted. It is not set today.
