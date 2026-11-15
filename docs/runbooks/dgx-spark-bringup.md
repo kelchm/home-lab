@@ -4,7 +4,7 @@ Current-state record and recovery procedure for the two-node NVIDIA DGX Spark
 cluster. It began as phase 3 of the superseded
 [network-topology plan](../plans/20260821-network-topology.md#phase-3--dgx-sparks), which keeps the original rationale; the VLAN, fabric and addressing decisions now live in [architecture](../architecture.md).
 
-**Status (2026-08-27, open items updated 2026-11-14):** LAN, storage VLAN, direct fabric, host anti-transit, raw RDMA, NCCL, DNS and the RTL8127 burn-in are configured and tested. The Workloads containment slice is applied and validated. The storage-leg throughput and gateway fabric-route checks ([#1516](https://github.com/kelchm/home-lab/issues/1516)) and the bring-up sudo decision ([#1517](https://github.com/kelchm/home-lab/issues/1517)) remain open; see [Remaining work](#remaining-work).
+**Status (2026-08-27, open items updated 2026-11-14):** LAN, storage VLAN, direct fabric, host anti-transit, raw RDMA, NCCL, DNS and the RTL8127 burn-in are configured and tested. The Workloads containment slice is applied and validated. The storage-leg throughput and gateway fabric-route checks ([#1516](https://github.com/kelchm/home-lab/issues/1516)) remain open; see [Remaining work](#remaining-work).
 
 **Host recovery checks passed (2026-09-30):** after swapping the port 7/8 modules and replugging both cable ends, both links passed 30 minutes idle and a complete C4 250k cold/replay pair at 10GbE with zero new carrier drops. Both inference containers are stopped through SparkRun; management/storage probes and GPU-idle checks pass. The fault's cause is unconfirmed. [#649](https://github.com/kelchm/home-lab/issues/649) closed on 2026-10-30 because the drops stopped recurring: spark-2 had been up since October 25 with only startup carrier events and none in the preceding 72 hours, after a further cable replacement of unknown date. No switch-side recheck or load test was done for that closure.
 
@@ -215,6 +215,14 @@ for replacement procurement.
 - Generate a local Ed25519 SSH key on each Spark and authorize both public keys
   on both hosts for passwordless cluster launch. Private keys remain on their
   originating Spark.
+
+### Operator sudo
+
+Retain `kelchm`'s passwordless operator grant on both Sparks ([#1517](https://github.com/kelchm/home-lab/issues/1517)). Read back on 2026-11-14, `/etc/sudoers.d/99-dgx-bringup` is `root:root 0440` and contains `kelchm ALL=(ALL:ALL) NOPASSWD: ALL`; Ubuntu's password-required `%sudo` rule also remains. The filename dates from bring-up and is retained. Both hosts passed the non-editing sudoers syntax check, and neither has a SparkRun-created sudoers entry.
+
+This account is trusted with host root, including approved batch automation. It belongs to the `docker` group of the rootful daemon, whose socket is `root:docker 0660`; [Docker documents that group as granting root-level privileges](https://docs.docker.com/engine/install/linux-postinstall/#manage-docker-as-a-non-root-user). Narrowing sudo alone would not establish a root security boundary while that unrestricted Docker access remains. The console/recovery stdin scripts here, [host-monitoring token enrollment](host-monitoring.md#enroll-a-spark), and SparkRun's launch-time cache clear and cache-ownership repair currently use non-interactive sudo. Password-based operation would require migrating the affected batch procedures and SDK permissions first.
+
+Keep the existing grant rather than add redundant SparkRun rules. Revisit when another person or less-trusted automation gains this login/key, Docker access or its daemon security model changes, a SparkRun upgrade changes the required privileges, or the Sparks move to Talos ([#1400](https://github.com/kelchm/home-lab/issues/1400)). A future boundary change must account for Docker authority as well as sudo; container user-namespace remapping alone [leaves the Docker daemon running as root](https://docs.docker.com/engine/security/userns-remap/).
 
 ### User sessions
 
@@ -567,7 +575,7 @@ Do not mark this runbook complete until these are resolved:
 - [ ] Read back the gateway routing table and prove that no route for
       `198.19.240.0/20` or either fabric prefix is present ([#1516](https://github.com/kelchm/home-lab/issues/1516)).
 - [x] ~~Apply the network-plan firewall matrix, then run the IoT SSH negative test and Main inference-port positive test.~~ Superseded: port 8888 admission is the host [API access policy](../../sparks/inference/sparkrun/README.md#api-access), and Workloads zone placement with its checks belongs to [#348](https://github.com/kelchm/home-lab/issues/348).
-- [ ] Decide whether `/etc/sudoers.d/99-dgx-bringup` is removed or replaced by a recorded grant ([#1517](https://github.com/kelchm/home-lab/issues/1517)). Several procedures in this runbook and SparkRun's page-cache clear rely on non-interactive sudo, so do not delete it before that decision.
+- [x] Retain `/etc/sudoers.d/99-dgx-bringup` as the explicit [operator sudo](#operator-sudo) decision ([#1517](https://github.com/kelchm/home-lab/issues/1517)); its grant, dependencies and revisit triggers are recorded above.
 - [x] Remove obsolete `known_hosts` entries: the bring-up DHCP addresses
       (`10.32.21.228/.231`, matched by host key) and the superseded statics
       `10.32.21.11/.12` are removed on the operator machine and both Sparks.
