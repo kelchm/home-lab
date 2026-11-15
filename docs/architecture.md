@@ -1,8 +1,7 @@
 # Infrastructure Architecture
 
 > Current-state reference for how the cluster is wired and why. Forward-looking
-> design (the planned PVE cluster, a reserved second Kubernetes cluster, and
-> deferred work) lives in
+> design (a reserved second Kubernetes cluster and deferred work) lives in
 > [roadmap.md](roadmap.md).
 
 ## Overview
@@ -43,7 +42,7 @@ coupling every control plane.
 with one closed, non-routed ConnectX-7 link. Applied state and recovery are in
 the [bring-up runbook](runbooks/dgx-spark-bringup.md).
 
-**PVE environment:** an independent three-node virtualization cluster using Infra Mgmt for host control, Storage for migration/NFS, and Workloads for general-purpose guests. Its 2.5 GbE guest trunk also carries the isolated Remote Admin VLAN for the NetBird routing peer. See the [PVE cluster plan](plans/20260814-pve-cluster.md) and [operator reference](../proxmox/README.md).
+**PVE environment:** an independent three-node virtualization cluster using Infra Mgmt for host control, Storage for migration/NFS, and Workloads for general-purpose guests. Its 2.5 GbE guest trunk also carries the isolated Remote Admin VLAN for the NetBird routing peer. See the [operator reference](../proxmox/README.md) and the superseded [PVE cluster plan](plans/20260814-pve-cluster.md) for the original rationale.
 
 **K8s 2 (reserved):** VLAN 31, storage identities, LB pools, and BGP ASN remain
 reserved for a future second Kubernetes cluster. It may run as one Talos VM per
@@ -604,9 +603,7 @@ gitignored.
   independently recoverable VM/LXC environment. Neither control plane hosts or
   applies the other.
 - **3-node combined CP+worker**: Best hardware utilization at homelab scale; etcd HA with 3 nodes; `allowSchedulingOnControlPlanes: true` is idiomatic.
-- **PVE on the EliteDesk 800 G3 nodes (planned)**: Host updates stay deliberate
-  and node-by-node; OpenTofu manages guests without making Kubernetes an
-  execution dependency. See the [draft plan](plans/20260814-pve-cluster.md).
+- **PVE on the EliteDesk 800 G3 nodes**: Host updates stay deliberate and node-by-node, and PVE stays operable with Kubernetes unavailable. Guests are provisioned manually; adopting guest IaC is undecided ([#1511](https://github.com/kelchm/home-lab/issues/1511)). See the [operator reference](../proxmox/README.md#design-decisions-and-deferrals).
 - **Second Kubernetes cluster remains a reservation, not a hardware assignment**:
   VLAN 31 and its BGP/storage identities can support Talos VMs on PVE or future
   bare metal without renumbering the cluster.

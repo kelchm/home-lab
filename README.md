@@ -23,7 +23,7 @@ Public is also a runtime dependency: Flux and Athena's doco-cd both pull `main` 
 | NAS / bulk storage | Synology DS1821+ | Ryzen V1500B · 6× 14 TB Exos X16 · 32 GB RAM · 2× SFP+ |
 
 Three combined control-plane + worker nodes (HA etcd, `allowSchedulingOnControlPlanes`).
-An independent three-node Proxmox virtualization cluster named `pve-sbx` runs on the HP EliteDesk 800 G3 hosts. See the [PVE operator documentation](proxmox/README.md) and [detailed design and acceptance plan](docs/plans/20260814-pve-cluster.md).
+An independent three-node Proxmox virtualization cluster named `pve-sbx` runs on the HP EliteDesk 800 G3 hosts. See the [PVE operator documentation](proxmox/README.md); the superseded [cluster plan](docs/plans/20260814-pve-cluster.md) keeps the original design rationale.
 
 ## 🧱 The stack
 
@@ -85,8 +85,8 @@ Start with the [**docs index**](docs/README.md). Highlights:
 - [Infrastructure architecture](docs/architecture.md) — network/VLAN design, the
   IP-addressing scheme, BGP, and storage. The reference for *why* things are
   laid out the way they are.
-- [PVE operations](proxmox/README.md) — the live independent virtualization cluster, routine checks, shared storage, backups, restore drills, and remaining commissioning gates.
-- [PVE cluster plan](docs/plans/20260814-pve-cluster.md) — the design rationale, IPs, storage, backups, updates, and rollout gates.
+- [PVE operations](proxmox/README.md) — the live independent virtualization cluster, routine checks, shared storage, backups, restore drills, node maintenance, design decisions, and remaining commissioning gates.
+- [PVE cluster plan](docs/plans/20260814-pve-cluster.md) — superseded original design rationale for addressing, storage, backups and updates; remaining work is in the issues linked from its handoff.
 - [Roadmap](docs/roadmap.md) — forward-looking work and deferred decisions.
 - [Runbooks](docs/runbooks/) — operational procedures (Longhorn restore, Kanidm
   recovery, storage-network cutover, …).
