@@ -1,0 +1,7 @@
+# FlareSolverr
+
+Prowlarr uses the internal API on port 8191. The separate Prometheus listener on port 8192 is enabled with `PROMETHEUS_ENABLED=true` and `PROMETHEUS_PORT=8192`. The chart creates a ServiceMonitor, which VictoriaMetrics Operator converts to a VMServiceScrape. Cilium admits only vmagent in `observability` to the metrics port.
+
+The pinned [v3.5.2 metrics implementation](https://github.com/FlareSolverr/FlareSolverr/blob/v3.5.2/src/metrics.py) exports `flaresolverr_request_total` with `domain` and `result` labels, and `flaresolverr_request_duration` histograms with a `domain` label. [The request plugin](https://github.com/FlareSolverr/FlareSolverr/blob/v3.5.2/src/bottle_plugins/prometheus_plugin.py) skips health and management responses; the request series appear after solver activity.
+
+Rollout acceptance remains pending: verify the generated VMServiceScrape and target health, confirm the API still accepts Prowlarr alone, and test that vmagent can scrape 8192 while other pods cannot. Then use the next natural Prowlarr solver request to verify the request series and labels. [Dashboard 19363](https://grafana.com/grafana/dashboards/19363-flaresolverr/) uses the supported request metrics and an `instance` selector, but is not installed until its variables and panels can be checked against real collected data. [Issue 746](https://github.com/kelchm/home-lab/issues/746) tracks that acceptance; no synthetic browser load is required.

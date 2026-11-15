@@ -2,8 +2,9 @@
 # Flaresolverr drives a headless browser to any URL a caller names, so an
 # open listener is a fetch-anything proxy from inside the cluster. Only
 # Prowlarr uses it, as an indexer proxy. Ingress is default-denied for the
-# selected endpoint and admits Prowlarr alone, label paired with its
-# ServiceAccount identity as in the other media policies. Egress is
+# selected endpoint and admits Prowlarr to the API, label paired with its
+# ServiceAccount identity as in the other media policies. Only vmagent in
+# observability can reach the separate metrics listener. Egress is
 # unrestricted: Flaresolverr solves challenges on the indexers' sites.
 apiVersion: cilium.io/v2
 kind: CiliumNetworkPolicy
@@ -22,4 +23,12 @@ spec:
       toPorts:
         - ports:
             - port: "8191"
+              protocol: TCP
+    - fromEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: observability
+            app.kubernetes.io/name: vmagent
+      toPorts:
+        - ports:
+            - port: "8192"
               protocol: TCP
