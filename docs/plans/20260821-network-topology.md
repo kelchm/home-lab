@@ -8,7 +8,7 @@
 
 | Remaining subject | Governing work or disposition |
 |---|---|
-| Phase 1: retire VLAN 40, the legacy L2 pools and Cilium settings, and the node subinterfaces | [#662](https://github.com/kelchm/home-lab/issues/662), expanded to cover the whole retirement; read-only on 2026-11-14, no L2 announcement policy existed and both legacy pools held no addresses |
+| Phase 1: retire VLAN 40, the legacy L2 pools and Cilium settings, and the node subinterfaces | [#662](https://github.com/kelchm/home-lab/issues/662), expanded to cover the whole retirement; read-only on 2026-11-14, no L2 announcement policy existed and both legacy pools had zero allocated addresses |
 | Phase 2: the rest of the firewall matrix | [#348](https://github.com/kelchm/home-lab/issues/348). Architecture's trust-level zone model replaces this plan's one-zone-per-VLAN matrix. The IoT/Guest pool denies are applied; Guest still reaches `services-prod` until #348 moves the household devices. |
 | Home Assistant placement, Workloads mDNS and its rule set | [#1365](https://github.com/kelchm/home-lab/issues/1365) (stop-gap `10.32.21.150`, replacing the `.101` VM example below) |
 | Kubernetes egress identity for narrow cross-zone exceptions | [#355](https://github.com/kelchm/home-lab/issues/355). The proposed observability pull and `admin-prod` push exceptions are not carried forward: hosts push through `services-prod` ([host monitoring](../runbooks/host-monitoring.md)). |

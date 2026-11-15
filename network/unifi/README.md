@@ -97,7 +97,7 @@ Validation from disposable PVE guest `10.32.21.201` produced the following matri
 | `k8s-prod` pod to guest TCP 22 | Blocked |
 | Main admin workstation to guest TCP 22 | Open |
 
-These rules were the PVE-specific slice of the superseded [network-topology plan's](../../docs/plans/20260821-network-topology.md) matrix; the target model is now the [zone design](../../docs/architecture.md#firewall-zones) tracked in [#348](https://github.com/kelchm/home-lab/issues/348). The Untrusted zone and Guest containment are documented under [Firewall zones applied state](#firewall-zones-applied-state); the Main admin-device restriction, the Infrastructure zone and the Spark inference restrictions remain to be implemented.
+These rules were the PVE-specific slice of the superseded [network-topology plan's](../../docs/plans/20260821-network-topology.md) matrix; the target model is now the [zone design](../../docs/architecture.md#firewall-zones) tracked in [#348](https://github.com/kelchm/home-lab/issues/348). The Untrusted zone and Guest containment are documented under [Firewall zones applied state](#firewall-zones-applied-state); the Main admin-device restriction and the Infrastructure/Workloads zone changes remain to be implemented. Spark port 8888 admission is already enforced by the [host API-access policy](../../sparks/inference/sparkrun/README.md#api-access).
 
 ## Applying `frr.conf`
 

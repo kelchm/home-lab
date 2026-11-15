@@ -218,7 +218,7 @@ These choices carry forward from the original [cluster plan](../docs/plans/20260
 
 | Deferred | Revisit when |
 |---|---|
-| Shared NFS guest tier and PVE HA | A guest needs HA restart more than independence from NAS and VLAN 25 failure; benchmark it, then prove power-loss failover before calling anything HA. Before enabling HA resources, which arm the watchdog, also confirm Corosync link 0 stays clean while the 2.5 GbE carries iperf3 plus a `vzdump` run, and that a node keeps quorum over link 1 with its 1 GbE pulled. Run those checks sooner if routine checks show link 0 faults during backups |
+| Shared NFS guest tier and PVE HA | A guest needs HA restart more than independence from NAS and VLAN 25 failure; benchmark it, then prove power-loss failover before calling anything HA. Before enabling HA resources, which arm the watchdog, also confirm Corosync link 0 stays clean while the 2.5 GbE carries iperf3 plus a `vzdump` run, and that a node keeps quorum over link 1 with its 1 GbE pulled. Run those checks sooner if routine checks show link 0 faults during backups. These stress and cable-pull results remain unverified; quorum loss can still disrupt management without HA |
 | PVE SDN zones and VNets | Keeping the per-node `bridge-vids` set and the UniFi profile in step becomes a repeated management problem |
 | Proxmox Backup Server | Full `vzdump` backups or restores no longer meet space or recovery-time needs; it would run on independent hardware at the reserved `pbs` addresses |
 | Proxmox Datacenter Manager | A second PVE or PBS system exists, or a central status view saves real time |
