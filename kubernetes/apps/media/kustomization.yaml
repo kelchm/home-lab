@@ -21,6 +21,7 @@ resources:
   - ./bazarr/ks.yaml
   - ./unpackerr/ks.yaml
   - ./exportarr/ks.yaml
+  - ./qbittorrent-exporter/ks.yaml
   - ./recyclarr/ks.yaml
   - ./jellyfin/ks.yaml
   - ./seerr/ks.yaml

@@ -1,12 +1,13 @@
 # Shared *arr API keys consumed by helper apps in the media namespace
-# (Unpackerr via envFrom + secretKeyRef, Recyclarr via envFrom + !env_var,
-# Exportarr via secretKeyRef). Bazarr and Seerr do not consume env vars —
-# their *arr connections are configured in their own UIs; the keys live here
-# only as a single source-of-truth for rotation.
+# (Unpackerr via secretKeyRef, Recyclarr via secretKeyRef + !env_var,
+# Exportarr and qbittorrent-exporter via secretKeyRef). Bazarr and Seerr do
+# not consume env vars — their *arr connections are configured in their own
+# UIs; the keys live here only as a single source-of-truth for rotation.
 #
 # Each value is the app's own API key (<app> UI → Settings → General → API
-# Key). Prowlarr and Bazarr were copied from the Homepage widget Secret, which
-# holds the same values. A rotation updates both Secrets.
+# Key). Prowlarr, Bazarr and qBittorrent (QBITTORRENT_API_KEY, the Web UI API
+# key) were copied from the Homepage widget Secret, which holds the same
+# values. A rotation updates both Secrets.
 #
 # Change a value without exposing it in process arguments:
 #   sops set --value-stdin kubernetes/apps/media/arr-api-keys.sops.yaml \
@@ -24,6 +25,7 @@ stringData:
   READARR_API_KEY: ENC[AES256_GCM,data:vxTYSe2/ZsBpxqG1wdvY5czl2AG3wB6kiai31KpKXKw=,iv:Far+W0Y0fuhU1o67hEODm8sZ6eAqdtSSEhuUaHg7eqE=,tag:RmQAOWZG0yT0BF73SzXW7A==,type:str]
   PROWLARR_API_KEY: ENC[AES256_GCM,data:f0dtjVPQ13IQUIAvRqbxrucGn5w/ckuHc85g9QQdtrA=,iv:Z23T/kBw6RdEZv2JtoCIOL0xRBiyKPEEkqet3bRUzkk=,tag:v/OFdPafR8AcWMDWBwP01Q==,type:str]
   BAZARR_API_KEY: ENC[AES256_GCM,data:zwiFcEbbPk38npfpdhEb5q+kuikY18tWZzz5n+Pk2TI=,iv:F8cre5236BIh4HtD0mDJyhge1FrJOH5NkSCxBbHzGDY=,tag:y67hKfGbSnpUui2QOB9lMw==,type:str]
+  QBITTORRENT_API_KEY: ENC[AES256_GCM,data:4JefnLn+g5zrnRTfriDWtF2emIJMqX6J944IWX0LGBA=,iv:34IVwPYHMhkRfY4lLdQGiWXz1iAchSAXLXaXI8rU81Y=,tag:1HuG2v8w5UJrKEsy0bDKYQ==,type:str]
 sops:
   age:
     - enc: |
@@ -36,7 +38,7 @@ sops:
         -----END AGE ENCRYPTED FILE-----
       recipient: age14wcg0t6njf76c4ctrndypvvmxk9p7jkumnumlvxdmsn543tc3yusgk5jwy
   encrypted_regex: ^(data|stringData)$
-  lastmodified: "2026-11-15T04:19:21Z"
-  mac: ENC[AES256_GCM,data:RIEoQ2sB8mnKg3vWbjKTJYl2aqSNcVVd3YUo+8Yq5NFXIFO4FEAyYslebiOyBcXHF9Ca7uuV8pep132GPFMfqbF3wsOR6eAKz/CkvTAT7Azy981NqRE0nYRLUW9gFGRY1S6N9SA+DGWOb4r04tfknYywnffKNe3E1TqDbtDNoJ0=,iv:zpSIReK/T/2lPEYGcUA4pbNjXSdqMLfOpeuJ/bfdndk=,tag:wiO/8GGz/037SypYUkYhMQ==,type:str]
+  lastmodified: "2026-11-15T05:07:56Z"
+  mac: ENC[AES256_GCM,data:TotnaJJ4sO3yclMgDYZp/ZJspiJTZv0/WYvQa5YLN5TpdvipGTIu6wj83uV0QbX13FRV44HR8fGE0FHH9+t6+k+hspENZBYpaaatZvKVOfyi14aKyIKkwCmjS68l4Q2XcRsrDMsmp0dPZc2LK3ggRwI+ube1EMTtlP9ZtQGAjmY=,iv:vN0HkoNlMkS4LXCt74UZs2qnng4MAE1mPr211svdcPg=,tag:d5DKGwBkJD/OxGwjjsVJaA==,type:str]
   mac_only_encrypted: true
   version: 3.12.2

@@ -150,6 +150,15 @@ spec:
         - ports:
             - port: "9707"
               protocol: TCP
+    # qBittorrent exporter metrics.
+    - toEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: media
+            app.kubernetes.io/name: qbittorrent-exporter
+      toPorts:
+        - ports:
+            - port: "8000"
+              protocol: TCP
     # Longhorn manager metrics.
     - toEndpoints:
         - matchLabels:

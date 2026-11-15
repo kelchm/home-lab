@@ -58,3 +58,29 @@ spec:
             http:
               - method: GET
                 path: /api/v2/torrents/info
+
+    # qbittorrent-exporter, with the same L7 reasoning as Homepage: these are
+    # the only calls v1.8.0 makes on a successful scrape (it reads sync data
+    # and the torrent list with POST), and it authenticates with the API key.
+    # Its login retry after a 403 and its scheme probe of / are denied.
+    - fromEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: media
+            app.kubernetes.io/name: qbittorrent-exporter
+            io.cilium.k8s.policy.serviceaccount: qbittorrent-exporter
+      toPorts:
+        - ports:
+            - port: "8080"
+              protocol: TCP
+          rules:
+            http:
+              - method: GET
+                path: /api/v2/app/version
+              - method: GET
+                path: /api/v2/app/webapiVersion
+              - method: GET
+                path: /api/v2/torrents/categories
+              - method: POST
+                path: /api/v2/sync/maindata
+              - method: POST
+                path: /api/v2/torrents/info

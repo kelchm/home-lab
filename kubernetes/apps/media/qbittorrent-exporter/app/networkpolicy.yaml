@@ -1,0 +1,45 @@
+---
+# The exporter holds qBittorrent's full-control Web UI API key, and /metrics
+# is unauthenticated, so only vmagent may scrape it. Egress is default-denied
+# except DNS and qBittorrent's container port; qBittorrent's own policy admits
+# this identity through an HTTP rule limited to the exporter's read calls.
+# vmagent's egress to 8000 is in the victoria-metrics-k8s-stack policy.
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: qbittorrent-exporter
+spec:
+  endpointSelector:
+    matchLabels:
+      app.kubernetes.io/name: qbittorrent-exporter
+  ingress:
+    - fromEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: observability
+            app.kubernetes.io/name: vmagent
+            io.cilium.k8s.policy.serviceaccount: vmagent-victoria-metrics-k8s-stack
+      toPorts:
+        - ports:
+            - port: "8000"
+              protocol: TCP
+  egress:
+    - toEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: kube-system
+            k8s-app: kube-dns
+      toPorts:
+        - ports:
+            - port: "53"
+              protocol: UDP
+            - port: "53"
+              protocol: TCP
+    # Cilium evaluates L4 policy against the backend endpoint, so this is the
+    # container port.
+    - toEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: media
+            app.kubernetes.io/name: qbittorrent
+      toPorts:
+        - ports:
+            - port: "8080"
+              protocol: TCP

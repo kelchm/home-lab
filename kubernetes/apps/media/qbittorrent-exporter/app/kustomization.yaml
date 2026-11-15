@@ -1,0 +1,21 @@
+---
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  - ./ocirepository.yaml
+  - ./helmrelease.yaml
+  - ./networkpolicy.yaml
+
+configMapGenerator:
+  # esanchezm/prometheus-qbittorrent-exporter grafana/dashboard.json at tag 1.8.0. Local patches remove __inputs, use the data_source variable, aggregate status per server, use instant status/ratio/category queries, and compute transfer rates from positive counter samples with a 1m target Min step. The README explains failure behavior and query limits.
+  - name: grafana-dashboard-qbittorrent
+    files:
+      - qbittorrent.json=./dashboards/qbittorrent.json
+    options:
+      annotations:
+        grafana_folder: Services/Media
+        kustomize.toolkit.fluxcd.io/substitute: disabled
+      labels:
+        grafana_dashboard: "1"
+generatorOptions:
+  disableNameSuffixHash: true
