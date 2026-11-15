@@ -4,9 +4,10 @@
 # connection gets full control without a login, including its settings, which
 # hold the Sonarr and Radarr API keys. This policy is that boundary: ingress is
 # default-denied for the selected endpoint and admits only the admin Traefik
-# instance and Homepage's widget, which authenticates with Bazarr's API key.
+# instance, Homepage's widget and Bazarr's metrics exporter, both of which
+# authenticate with Bazarr's API key.
 #
-# Bazarr only calls out to Sonarr and Radarr; nothing calls it back. Egress is
+# Bazarr only calls out to Sonarr and Radarr; they never call it. Egress is
 # unrestricted. Each workload label is paired with its dedicated
 # ServiceAccount identity so a compromised pod cannot gain access merely by
 # forging an app label.
@@ -30,11 +31,17 @@ spec:
             - port: "6767"
               protocol: TCP
 
-    # API integration.
+    # API integrations.
     - fromEndpoints:
         # Homepage widget.
         - matchLabels:
             k8s:io.kubernetes.pod.namespace: homepage
             app.kubernetes.io/name: homepage
             io.cilium.k8s.policy.serviceaccount: homepage
+        # Library metrics (read-only API calls).
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: media
+            app.kubernetes.io/name: exportarr
+            app.kubernetes.io/controller: bazarr
+            io.cilium.k8s.policy.serviceaccount: exportarr-bazarr
       toPorts: *port

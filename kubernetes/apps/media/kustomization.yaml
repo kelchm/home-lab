@@ -20,6 +20,7 @@ resources:
   - ./arr-api-keys.sops.yaml
   - ./bazarr/ks.yaml
   - ./unpackerr/ks.yaml
+  - ./exportarr/ks.yaml
   - ./recyclarr/ks.yaml
   - ./jellyfin/ks.yaml
   - ./seerr/ks.yaml

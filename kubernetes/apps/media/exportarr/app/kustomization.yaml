@@ -1,0 +1,21 @@
+---
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  - ./ocirepository.yaml
+  - ./helmrelease.yaml
+  - ./networkpolicy.yaml
+
+configMapGenerator:
+  # onedr0p/exportarr examples/grafana/dashboard2.json at tag v2.3.0, matching the deployed metrics and retaining Bazarr support. Local patches remove __inputs, clear the fixed datasource, select `app` containers for uptime, omit unused/unsupported metrics, label Bazarr's movie-only scope, correct Prowlarr failure/health counts, and set its query-chart Min step to the 2m scrape interval. The README describes the retained scope.
+  - name: grafana-dashboard-exportarr
+    files:
+      - exportarr.json=./dashboards/exportarr.json
+    options:
+      annotations:
+        grafana_folder: Services/Media
+        kustomize.toolkit.fluxcd.io/substitute: disabled
+      labels:
+        grafana_dashboard: "1"
+generatorOptions:
+  disableNameSuffixHash: true

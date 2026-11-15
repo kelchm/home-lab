@@ -141,6 +141,15 @@ spec:
         - ports:
             - port: "8192"
               protocol: TCP
+    # Exportarr metrics (Sonarr, Radarr, Lidarr, Prowlarr, Bazarr).
+    - toEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: media
+            app.kubernetes.io/name: exportarr
+      toPorts:
+        - ports:
+            - port: "9707"
+              protocol: TCP
     # Longhorn manager metrics.
     - toEndpoints:
         - matchLabels:
