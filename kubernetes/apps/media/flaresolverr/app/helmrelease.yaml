@@ -1,7 +1,7 @@
 ---
 # Flaresolverr — Cloudflare/DDoS-Guard challenge bypass proxy. Cluster-internal
 # only; Prowlarr targets http://flaresolverr.media.svc.cluster.local:8191, and
-# networkpolicy.yaml admits only Prowlarr.
+# networkpolicy.yaml admits Prowlarr to the API and vmagent to metrics.
 apiVersion: helm.toolkit.fluxcd.io/v2
 kind: HelmRelease
 metadata:
@@ -24,6 +24,8 @@ spec:
             env:
               TZ: America/New_York
               LOG_LEVEL: info
+              PROMETHEUS_ENABLED: "true"
+              PROMETHEUS_PORT: "8192"
             probes:
               liveness: &probes
                 enabled: true
@@ -59,3 +61,11 @@ spec:
         ports:
           http:
             port: *port
+          metrics:
+            port: 8192
+    serviceMonitor:
+      app:
+        endpoints:
+          - port: metrics
+            path: /metrics
+            interval: 30s
