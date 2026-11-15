@@ -182,7 +182,7 @@
           },
           "editorMode": "code",
           "exemplar": false,
-          "expr": "sum(increase(flaresolverr_request_total{instance=~\"$host\", result=\"solved\"}[$__interval])) or on() (0 * (max(up{job=\"flaresolverr\", instance=~\"$host\"}) == 1))",
+          "expr": "sum(increase_pure(flaresolverr_request_total{instance=~\"$host\", result=\"solved\"}[$__interval])) or on() (0 * (max(up{job=\"flaresolverr\", instance=~\"$host\"}) == 1))",
           "instant": false,
           "interval": "30s",
           "legendFormat": "Solved",
@@ -195,7 +195,7 @@
             "uid": "${data_source}"
           },
           "editorMode": "code",
-          "expr": "sum(increase(flaresolverr_request_total{instance=~\"$host\", result=\"not_detected\"}[$__interval])) or on() (0 * (max(up{job=\"flaresolverr\", instance=~\"$host\"}) == 1))",
+          "expr": "sum(increase_pure(flaresolverr_request_total{instance=~\"$host\", result=\"not_detected\"}[$__interval])) or on() (0 * (max(up{job=\"flaresolverr\", instance=~\"$host\"}) == 1))",
           "hide": false,
           "instant": false,
           "interval": "30s",
@@ -209,7 +209,7 @@
             "uid": "${data_source}"
           },
           "editorMode": "code",
-          "expr": "sum(increase(flaresolverr_request_total{instance=~\"$host\", result=\"error\"}[$__interval])) or on() (0 * (max(up{job=\"flaresolverr\", instance=~\"$host\"}) == 1))",
+          "expr": "sum(increase_pure(flaresolverr_request_total{instance=~\"$host\", result=\"error\"}[$__interval])) or on() (0 * (max(up{job=\"flaresolverr\", instance=~\"$host\"}) == 1))",
           "hide": false,
           "instant": false,
           "legendFormat": "Not Solved",
@@ -221,7 +221,7 @@
       "title": "Challenges",
       "transformations": [],
       "type": "timeseries",
-      "description": "Requests per graph interval by result. A missing result reads 0 while the scrape target is up; the chart has gaps while it is down. Session commands and other responses count as `unknown` and appear only under Requests."
+      "description": "Recorded request results per graph interval. A never-seen result is zero-filled only while the selected target is healthy. Existing counter history may remain during outages; these counts do not indicate availability."
     },
     {
       "datasource": {
@@ -277,7 +277,7 @@
             "uid": "${data_source}"
           },
           "editorMode": "code",
-          "expr": "sum(increase(flaresolverr_request_total{instance=~\"$host\", result=\"solved\"}[$__range])) or on() (0 * (max(up{job=\"flaresolverr\", instance=~\"$host\"}) == 1))",
+          "expr": "sum(increase_pure(flaresolverr_request_total{instance=~\"$host\", result=\"solved\"}[$__range])) or on() (0 * (max(up{job=\"flaresolverr\", instance=~\"$host\"}) == 1))",
           "instant": true,
           "range": false,
           "refId": "A"
@@ -285,7 +285,7 @@
       ],
       "title": "Challenges Solved",
       "type": "stat",
-      "description": "Requests with this result in the selected time range. Reads 0 only while the scrape target is up; No data means the target is down or not scraped."
+      "description": "Recorded requests with this result over the selected range. The absent-result zero fallback requires a healthy scrape, but existing history can remain after the target disappears. Use scrape health separately to assess availability."
     },
     {
       "datasource": {
@@ -341,7 +341,7 @@
             "uid": "${data_source}"
           },
           "editorMode": "code",
-          "expr": "sum(increase(flaresolverr_request_total{instance=~\"$host\", result=\"not_detected\"}[$__range])) or on() (0 * (max(up{job=\"flaresolverr\", instance=~\"$host\"}) == 1))",
+          "expr": "sum(increase_pure(flaresolverr_request_total{instance=~\"$host\", result=\"not_detected\"}[$__range])) or on() (0 * (max(up{job=\"flaresolverr\", instance=~\"$host\"}) == 1))",
           "instant": true,
           "range": false,
           "refId": "A"
@@ -349,7 +349,7 @@
       ],
       "title": "Challenges Not Detected",
       "type": "stat",
-      "description": "Requests with this result in the selected time range. Reads 0 only while the scrape target is up; No data means the target is down or not scraped."
+      "description": "Recorded requests with this result over the selected range. The absent-result zero fallback requires a healthy scrape, but existing history can remain after the target disappears. Use scrape health separately to assess availability."
     },
     {
       "datasource": {
@@ -405,7 +405,7 @@
             "uid": "${data_source}"
           },
           "editorMode": "code",
-          "expr": "sum(increase(flaresolverr_request_total{instance=~\"$host\", result=\"error\"}[$__range])) or on() (0 * (max(up{job=\"flaresolverr\", instance=~\"$host\"}) == 1))",
+          "expr": "sum(increase_pure(flaresolverr_request_total{instance=~\"$host\", result=\"error\"}[$__range])) or on() (0 * (max(up{job=\"flaresolverr\", instance=~\"$host\"}) == 1))",
           "instant": true,
           "range": false,
           "refId": "A"
@@ -413,7 +413,7 @@
       ],
       "title": "Challenges Not Solved",
       "type": "stat",
-      "description": "Requests with this result in the selected time range. Reads 0 only while the scrape target is up; No data means the target is down or not scraped."
+      "description": "Recorded requests with this result over the selected range. The absent-result zero fallback requires a healthy scrape, but existing history can remain after the target disappears. Use scrape health separately to assess availability."
     },
     {
       "datasource": {
@@ -497,7 +497,7 @@
             "uid": "${data_source}"
           },
           "editorMode": "code",
-          "expr": "sum by (domain) (increase(flaresolverr_request_total{instance=~\"$host\"}[$__interval]))",
+          "expr": "sum by (domain) (increase_pure(flaresolverr_request_total{instance=~\"$host\"}[$__interval]))",
           "instant": false,
           "legendFormat": "{{ domain }}",
           "range": true,
@@ -507,7 +507,7 @@
       ],
       "title": "Requests",
       "type": "timeseries",
-      "description": "Requests per graph interval by domain, including `unknown` results. The legend total is the selected range's count."
+      "description": "Recorded requests per graph interval, grouped by domain and including every result. The legend sum is the observed range count; missing scrapes can leave incomplete coverage."
     },
     {
       "datasource": {
@@ -594,7 +594,7 @@
             "uid": "${data_source}"
           },
           "editorMode": "code",
-          "expr": "sum by (domain) (increase(flaresolverr_request_duration_sum{instance=~\"$host\"}[$__interval])) / sum by (domain) (increase(flaresolverr_request_duration_count{instance=~\"$host\"}[$__interval]))",
+          "expr": "sum by (domain) (increase_pure(flaresolverr_request_duration_sum{instance=~\"$host\"}[$__interval])) / sum by (domain) (increase_pure(flaresolverr_request_duration_count{instance=~\"$host\"}[$__interval]))",
           "instant": false,
           "legendFormat": "{{ domain }}",
           "range": true,
@@ -604,7 +604,7 @@
       ],
       "title": "Average Request Duration",
       "type": "timeseries",
-      "description": "Mean duration of the requests that finished in each graph interval. Intervals without requests are gaps."
+      "description": "Average recorded request duration per graph interval. Intervals without observed requests are gaps. The first duration is retained even when it exceeds ten seconds."
     },
     {
       "datasource": {
@@ -668,7 +668,7 @@
           },
           "editorMode": "code",
           "exemplar": false,
-          "expr": "(sum by (domain) (increase(flaresolverr_request_total{instance=~\"$host\", result=\"solved\"}[$__range])) > 0) or (0 * (sum by (domain) (increase(flaresolverr_request_total{instance=~\"$host\"}[$__range])) > 0))",
+          "expr": "(sum by (domain) (increase_pure(flaresolverr_request_total{instance=~\"$host\", result=\"solved\"}[$__range])) > 0) or (0 * (sum by (domain) (increase_pure(flaresolverr_request_total{instance=~\"$host\"}[$__range])) > 0))",
           "format": "table",
           "instant": true,
           "legendFormat": "__auto",
@@ -682,7 +682,7 @@
           },
           "editorMode": "code",
           "exemplar": false,
-          "expr": "(sum by (domain) (increase(flaresolverr_request_total{instance=~\"$host\", result=\"not_detected\"}[$__range])) > 0) or (0 * (sum by (domain) (increase(flaresolverr_request_total{instance=~\"$host\"}[$__range])) > 0))",
+          "expr": "(sum by (domain) (increase_pure(flaresolverr_request_total{instance=~\"$host\", result=\"not_detected\"}[$__range])) > 0) or (0 * (sum by (domain) (increase_pure(flaresolverr_request_total{instance=~\"$host\"}[$__range])) > 0))",
           "format": "table",
           "hide": false,
           "instant": true,
@@ -697,7 +697,7 @@
           },
           "editorMode": "code",
           "exemplar": false,
-          "expr": "(sum by (domain) (increase(flaresolverr_request_total{instance=~\"$host\", result=\"error\"}[$__range])) > 0) or (0 * (sum by (domain) (increase(flaresolverr_request_total{instance=~\"$host\"}[$__range])) > 0))",
+          "expr": "(sum by (domain) (increase_pure(flaresolverr_request_total{instance=~\"$host\", result=\"error\"}[$__range])) > 0) or (0 * (sum by (domain) (increase_pure(flaresolverr_request_total{instance=~\"$host\"}[$__range])) > 0))",
           "format": "table",
           "hide": false,
           "instant": true,
@@ -745,7 +745,7 @@
         }
       ],
       "type": "table",
-      "description": "Requests per domain and result in the selected time range, listing only domains with requests in that range. The sum excludes `unknown` results."
+      "description": "Recorded challenge results over the selected range for domains with requests. The sum includes solved, not_detected and error; unknown responses are excluded. Historical totals can remain after the target disappears."
     }
   ],
   "refresh": "30s",
