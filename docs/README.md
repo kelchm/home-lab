@@ -86,11 +86,10 @@ Retained dated plans keep the status header `**Status:** <Proposed|Active|Implem
 
 Implemented or superseded plans preserve context. Use the maintained documentation linked from each plan for current operations.
 
-- [20260620-nas-out-of-cluster-workloads](plans/20260620-nas-out-of-cluster-workloads.md) — superseded Synology S3 and deployment proposal; current operations live under `synology/`, with remaining deployment acceptance in [#379](https://github.com/kelchm/home-lab/issues/379).
-
 - [20260508-arr-suite-setup](plans/20260508-arr-suite-setup.md) — the original media-stack deployment plan.
 - [20260509-kaniop-migration](plans/20260509-kaniop-migration.md) — Kanidm → kaniop operator pivot.
 - [20260513-arr-hardlink-rework](plans/20260513-arr-hardlink-rework.md) — single share-root mount + NFSv4 ACL isolation.
+- [20260620-nas-out-of-cluster-workloads](plans/20260620-nas-out-of-cluster-workloads.md) — superseded Synology S3 and deployment proposal; current operations live under `synology/`, with remaining deployment acceptance in [#379](https://github.com/kelchm/home-lab/issues/379).
 - [20260620-metamcp-mcp-rollout](plans/20260620-metamcp-mcp-rollout.md) — MetaMCP gateway + curated backend MCP server rollout.
 - [20260622-sequenced-dependency-upgrades](plans/20260622-sequenced-dependency-upgrades.md) — ordered major-version upgrade pass for k8s-prod (Longhorn → Talos → k8s → Gateway API/Traefik → kaniop).
 - [20260622-tailscale-operator](plans/20260622-tailscale-operator.md) — superseded Kubernetes-operator subnet-router design retained as historical context.
