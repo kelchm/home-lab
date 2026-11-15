@@ -5,3 +5,17 @@ resources:
   - ./ocirepository.yaml
   - ./helmrelease.yaml
   - ./networkpolicy.yaml
+
+configMapGenerator:
+  # grafana.com dashboard 19363 revision 1 ("FlareSolverr", uid c51691e6-d80f-40e1-a2fb-896c8c03690a). Local patches remove __inputs, use the data_source variable, span pod IPs, retain first counter values with MetricsQL increase_pure and a 30s target Min step, and zero-fill never-seen results only while the target is up. Historical counts are not health indicators. The README lists each patch.
+  - name: grafana-dashboard-flaresolverr
+    files:
+      - flaresolverr.json=./dashboards/flaresolverr.json
+    options:
+      annotations:
+        grafana_folder: Services/Media
+        kustomize.toolkit.fluxcd.io/substitute: disabled
+      labels:
+        grafana_dashboard: "1"
+generatorOptions:
+  disableNameSuffixHash: true
