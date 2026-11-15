@@ -510,7 +510,30 @@ The repository is the recovery source even if a firmware update wipes both
 
 ### Bootstrap after a wipe
 
-Restore the appliance's network configuration and SSH access through the vendor UI first. Confirm `ssh root@10.32.20.10` works; this firmware uses Dropbear, so the `scp -O` commands in **Apply** are intentional. Then run the complete **Apply** procedure from a repository checkout. It recreates the user directories, installs all three HID tools and their shared `hid_input.py` module, restores the committed appliance override and the installed firmware's stock nginx configuration, and restarts the affected services. Finish with the non-interactive checks and safe live-input test above, then install the [monitoring](#monitoring) export patch. Then set the [name and address](#name-and-address) in the GL UI, and reinstall [TLS](#tls): run its installer, install the token and run `renew.sh`. Without the old `lego-state/` this creates a new Let's Encrypt account and orders a new certificate, which is fine. Finally restore [NetBird](#netbird): run `devices/glkvm/netbird/install.sh`, re-enroll with a new one-off setup key as described there, confirm `netbird status` shows Management connected and `Networks: 10.32.20.10/32`, and remove the old peer from NetBird Cloud.
+Restore the appliance's network configuration and SSH access through the vendor UI first. Confirm `ssh root@10.32.20.10` works; this firmware uses Dropbear, so the `scp -O` commands in **Apply** are intentional. Restore the disabled virtual-media setting before **Apply**: in the vendor console, select **Virtual Media → Format Disk → Disable**. The [vendor guide](https://docs.gl-inet.com/kvm/en/user_guide/gl-rm1/console_guide/#format-disk) says this action immediately reboots the appliance, so perform it during recovery when no host needs the console. Reconnect over SSH before continuing.
+
+Then run the complete **Apply** procedure from a repository checkout. It recreates the user directories, installs all three HID tools and their shared `hid_input.py` module, restores the committed appliance override and the installed firmware's stock nginx configuration, and restarts the affected services. Finish with the non-interactive checks and safe live-input test above, then install the [monitoring](#monitoring) export patch. Then set the [name and address](#name-and-address) in the GL UI, and reinstall [TLS](#tls): run its installer, install the token and run `renew.sh`. Without the old `lego-state/` this creates a new Let's Encrypt account and orders a new certificate, which is fine. Finally restore [NetBird](#netbird): run `devices/glkvm/netbird/install.sh`, re-enroll with a new one-off setup key as described there, confirm `netbird status` shows Management connected and `Networks: 10.32.20.10/32`, and remove the old peer from NetBird Cloud.
+
+The disabled startup state on the installed `V1.10.1 release2` firmware is persisted in `/etc/kvmd/user/boot.yaml` as `otg.devices.msd.start_cdrom: false` and `otg.devices.msd.start_flash: false`. **Apply** restores the camera-disable override but does not recreate these two mass-storage settings after a wipe. Preserve the other boot settings; after the UI step and **Apply**, require both flags to be YAML booleans `false` and exactly the three HID functions linked:
+
+```sh
+ssh -o BatchMode=yes -o ConnectTimeout=10 root@10.32.20.10 'timeout 15s python3 -' <<'PY'
+from pathlib import Path
+import yaml
+
+boot = yaml.safe_load(Path("/etc/kvmd/user/boot.yaml").read_text())
+msd = boot["otg"]["devices"]["msd"]
+if any(msd.get(key) is not False for key in ("start_cdrom", "start_flash")):
+    raise SystemExit("Virtual media startup is not disabled in boot.yaml")
+config = Path("/sys/kernel/config/usb_gadget/rockchip/configs/b.1")
+linked = sorted(path.name for path in config.iterdir() if path.is_symlink())
+if linked != ["hid.usb0", "hid.usb1", "hid.usb2"]:
+    raise SystemExit(f"Unexpected USB functions: {linked}")
+print("Virtual media startup disabled; exactly three HID functions linked")
+PY
+```
+
+Read-only verification on 2026-11-15 found both flags false and exactly those three live links. No wipe, disable action, gadget rebuild or appliance reboot was performed for that check; a future wipe recovery still needs the full procedure and safe live-input test.
 
 Do not run `kvmd` itself over SSH, including `kvmd -M` to validate configuration. Unlike upstream PiKVM, firmware `V1.9.1 release1` started another daemon instead of performing a validation-only run.
 
