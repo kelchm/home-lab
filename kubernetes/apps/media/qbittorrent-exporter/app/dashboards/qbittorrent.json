@@ -148,10 +148,11 @@
           "editorMode": "code",
           "expr": "max by (server) (qbittorrent_up{server=\"$server\"})",
           "format": "time_series",
-          "instant": false,
+          "instant": true,
           "interval": "",
           "legendFormat": "",
-          "refId": "A"
+          "refId": "A",
+          "range": false
         }
       ],
       "title": "Qbittorrent Status",
@@ -524,13 +525,14 @@
           },
           "editorMode": "code",
           "expr": "(sum by (app) (qbittorrent_alltime_ul_total{server=\"$server\"})) / (sum by (app) (qbittorrent_alltime_dl_total{server=\"$server\"}))",
-          "instant": false,
+          "instant": true,
           "interval": "",
           "legendFormat": "{{label_name}}",
-          "refId": "A"
+          "refId": "A",
+          "range": false
         }
       ],
-      "title": "Accumulated ratio in session",
+      "title": "All-time ratio",
       "type": "stat"
     },
     {
@@ -593,7 +595,7 @@
           "editorMode": "code",
           "expr": "rate((qbittorrent_dl_info_data_total{server=\"$server\"} > 0)[$__rate_interval:]) or qbittorrent_dl_info_data_total{server=\"$server\"} * 0",
           "instant": false,
-          "interval": "",
+          "interval": "1m",
           "legendFormat": "",
           "refId": "A"
         }
@@ -663,7 +665,7 @@
           "expr": "rate((qbittorrent_up_info_data_total{server=\"$server\"} > 0)[$__rate_interval:]) or qbittorrent_up_info_data_total{server=\"$server\"} * 0",
           "hide": false,
           "instant": false,
-          "interval": "",
+          "interval": "1m",
           "legendFormat": "",
           "refId": "A"
         }
@@ -760,7 +762,7 @@
           },
           "editorMode": "code",
           "expr": "rate((qbittorrent_dl_info_data_total{server=\"$server\"} > 0)[$__rate_interval:]) or qbittorrent_dl_info_data_total{server=\"$server\"} * 0",
-          "interval": "",
+          "interval": "1m",
           "legendFormat": "Download $server",
           "range": true,
           "refId": "A"
@@ -772,7 +774,7 @@
           },
           "editorMode": "code",
           "expr": "rate((qbittorrent_up_info_data_total{server=\"$server\"} > 0)[$__rate_interval:]) or qbittorrent_up_info_data_total{server=\"$server\"} * 0",
-          "interval": "",
+          "interval": "1m",
           "legendFormat": "Upload $server",
           "range": true,
           "refId": "B"
@@ -874,7 +876,8 @@
           "interval": "",
           "legendFormat": "{{status}}",
           "range": true,
-          "refId": "A"
+          "refId": "A",
+          "instant": false
         }
       ],
       "title": "Torrents by status",
@@ -939,8 +942,9 @@
           "expr": "sum(qbittorrent_torrents_count{category=~\"${categories}\",status!=\"complete\",server=\"$server\"}) by (category)",
           "interval": "",
           "legendFormat": "{{category}}",
-          "range": true,
-          "refId": "A"
+          "range": false,
+          "refId": "A",
+          "instant": true
         }
       ],
       "title": "Torrents by categories",

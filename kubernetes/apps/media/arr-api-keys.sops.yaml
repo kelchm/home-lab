@@ -1,5 +1,5 @@
 # Shared *arr API keys consumed by helper apps in the media namespace
-# (Unpackerr via envFrom + secretKeyRef, Recyclarr via envFrom + !env_var,
+# (Unpackerr via secretKeyRef, Recyclarr via secretKeyRef + !env_var,
 # Exportarr and qbittorrent-exporter via secretKeyRef). Bazarr and Seerr do
 # not consume env vars — their *arr connections are configured in their own
 # UIs; the keys live here only as a single source-of-truth for rotation.
