@@ -145,17 +145,17 @@ Store the break-glass password wherever the other operator credentials live; it 
 
 ## Credential rotation
 
-A Sonarr, Radarr or Lidarr API key has copies in Git, in other apps' databases and in running processes. After rotating it in the app (*Settings → General → API Key*), update every copy that names that app:
+A Sonarr, Radarr, Lidarr, Prowlarr or Bazarr API key has copies in Git, in other apps' databases and in running processes. After rotating it in the app (*Settings → General → API Key*), update every copy that names that app:
 
 | Copy | Holds | Update | Picks it up |
 | --- | --- | --- | --- |
-| `kubernetes/apps/media/arr-api-keys.sops.yaml` | Sonarr, Radarr, Lidarr | `sops` edit, commit | Unpackerr reads its keys only at startup: `kubectl -n media rollout restart deploy/unpackerr` after Flux applies the Secret. Recyclarr (Sonarr, Radarr) reads them at its next daily Job. |
+| `kubernetes/apps/media/arr-api-keys.sops.yaml` | Sonarr, Radarr, Lidarr, Prowlarr, Bazarr | `sops set --value-stdin` (the file header shows the form), commit | Unpackerr and the exporters read their keys only at startup: after Flux applies the Secret, `kubectl -n media rollout restart deploy/unpackerr` (Sonarr, Radarr, Lidarr) and `deploy/exportarr-<app>` for the rotated app. Recyclarr (Sonarr, Radarr) reads them at its next daily Job. |
 | `kubernetes/apps/homepage/homepage/app/secret.sops.yaml` (`homepage-secret`) | Sonarr, Radarr, Lidarr, Prowlarr, Bazarr | `sops` edit, commit | Reloader restarts Homepage when the Secret changes. |
 | Prowlarr, *Settings → Apps* | Sonarr, Radarr, Lidarr | Edit the app, **Test**, save | At once. Indexer sync to that app fails until updated. |
 | Bazarr, *Settings → Sonarr* / *Radarr* | Sonarr, Radarr | Edit, **Test**, save | At once. |
 | Seerr, *Settings → Services* | Sonarr, Radarr | Edit, or `PUT /api/v1/settings/radarr/<id>` with an `X-API-Key` header | At once. |
 
-Rotating Prowlarr's own key: update `homepage-secret`, then run *Settings → Apps → Sync App Indexers* in Prowlarr, which rewrites the key in the indexers it manages in each app.
+Rotating Prowlarr's own key: update `homepage-secret` and `arr-api-keys`, then run *Settings → Apps → Sync App Indexers* in Prowlarr, which rewrites the key in the indexers it manages in each app.
 
 Seerr's *own* API key can be pinned declaratively via the `API_KEY` env var — it is re-asserted on every settings load — if scripted configuration is ever wanted. It is not set today.
 

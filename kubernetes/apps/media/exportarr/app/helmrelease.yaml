@@ -1,0 +1,194 @@
+---
+# Exportarr — one exporter Deployment per Starr app, each holding only that
+# app's API key from arr-api-keys and reading it through the app's Service.
+# The apps' own pod templates and state are untouched. No HTTPRoute; only
+# vmagent can reach the metrics port (networkpolicy.yaml). SABnzbd is not
+# exported: README.md explains why v2.3.0 cannot hold its key safely.
+apiVersion: helm.toolkit.fluxcd.io/v2
+kind: HelmRelease
+metadata:
+  name: exportarr
+spec:
+  chartRef:
+    kind: OCIRepository
+    name: exportarr
+  interval: 1h
+  values:
+    controllers:
+      sonarr:
+        serviceAccount: { identifier: sonarr }
+        containers:
+          app:
+            image: &image
+              # renovate: datasource=docker depName=ghcr.io/onedr0p/exportarr
+              repository: ghcr.io/onedr0p/exportarr
+              tag: v2.3.0@sha256:af535d94061cf97a52e1661945ffba78c03f9443eae7c0da1a80a5a4be56b520
+            args: ["sonarr"]
+            env:
+              PORT: &port 9707
+              # Info logs every API request URL on each scrape. Starr keys
+              # travel in the X-Api-Key header, never in a URL.
+              LOG_LEVEL: &logLevel warn
+              LOG_FORMAT: &logFormat json
+              URL: http://sonarr.media.svc.cluster.local:8989
+              API_KEY:
+                valueFrom:
+                  secretKeyRef:
+                    name: arr-api-keys
+                    key: SONARR_API_KEY
+            probes: &probes
+              # /healthz answers locally without calling the app.
+              liveness: &probe
+                enabled: true
+                custom: true
+                spec:
+                  httpGet:
+                    path: /healthz
+                    port: *port
+                  periodSeconds: 30
+                  timeoutSeconds: 5
+                  failureThreshold: 3
+              readiness: *probe
+            securityContext: &securityContext
+              allowPrivilegeEscalation: false
+              readOnlyRootFilesystem: true
+              capabilities: { drop: ["ALL"] }
+            resources: &resources
+              requests:
+                cpu: 10m
+                memory: 32Mi
+              # v2.3.0 leaks response buffers on failed API calls
+              # (onedr0p/exportarr#432); the limit bounds memory use, but
+              # repeated restarts can interrupt scraping.
+              limits:
+                memory: 128Mi
+      radarr:
+        serviceAccount: { identifier: radarr }
+        containers:
+          app:
+            image: *image
+            args: ["radarr"]
+            env:
+              PORT: *port
+              LOG_LEVEL: *logLevel
+              LOG_FORMAT: *logFormat
+              URL: http://radarr.media.svc.cluster.local:7878
+              API_KEY:
+                valueFrom:
+                  secretKeyRef:
+                    name: arr-api-keys
+                    key: RADARR_API_KEY
+            probes: *probes
+            securityContext: *securityContext
+            resources: *resources
+      lidarr:
+        serviceAccount: { identifier: lidarr }
+        containers:
+          app:
+            image: *image
+            args: ["lidarr"]
+            env:
+              PORT: *port
+              LOG_LEVEL: *logLevel
+              LOG_FORMAT: *logFormat
+              URL: http://lidarr.media.svc.cluster.local:8686
+              API_KEY:
+                valueFrom:
+                  secretKeyRef:
+                    name: arr-api-keys
+                    key: LIDARR_API_KEY
+            probes: *probes
+            securityContext: *securityContext
+            resources: *resources
+      prowlarr:
+        serviceAccount: { identifier: prowlarr }
+        containers:
+          app:
+            image: *image
+            args: ["prowlarr"]
+            env:
+              PORT: *port
+              LOG_LEVEL: *logLevel
+              LOG_FORMAT: *logFormat
+              URL: http://prowlarr.media.svc.cluster.local:9696
+              API_KEY:
+                valueFrom:
+                  secretKeyRef:
+                    name: arr-api-keys
+                    key: PROWLARR_API_KEY
+            probes: *probes
+            securityContext: *securityContext
+            resources: *resources
+      bazarr:
+        serviceAccount: { identifier: bazarr }
+        containers:
+          app:
+            image: *image
+            args: ["bazarr"]
+            env:
+              PORT: *port
+              LOG_LEVEL: *logLevel
+              LOG_FORMAT: *logFormat
+              URL: http://bazarr.media.svc.cluster.local:6767
+              API_KEY:
+                valueFrom:
+                  secretKeyRef:
+                    name: arr-api-keys
+                    key: BAZARR_API_KEY
+            probes: *probes
+            securityContext: *securityContext
+            resources: *resources
+    defaultPodOptions:
+      automountServiceAccountToken: false
+      securityContext:
+        # The image's distroless nonroot user.
+        runAsNonRoot: true
+        runAsUser: 65532
+        runAsGroup: 65532
+        seccompProfile:
+          type: RuntimeDefault
+    # The ServiceAccounts never read the Kubernetes API. Each exists only to
+    # give its exporter a distinct Cilium identity, so an app's policy admits
+    # its own exporter and no other.
+    serviceAccount:
+      sonarr: &serviceAccount { automountServiceAccountToken: false }
+      radarr: *serviceAccount
+      lidarr: *serviceAccount
+      prowlarr: *serviceAccount
+      bazarr: *serviceAccount
+    service:
+      sonarr:
+        controller: sonarr
+        ports: &ports
+          metrics:
+            port: *port
+      radarr:
+        controller: radarr
+        ports: *ports
+      lidarr:
+        controller: lidarr
+        ports: *ports
+      prowlarr:
+        controller: prowlarr
+        ports: *ports
+      bazarr:
+        controller: bazarr
+        ports: *ports
+    serviceMonitor:
+      app:
+        # All five exporter Services.
+        selector:
+          matchLabels:
+            app.kubernetes.io/name: exportarr
+        endpoints:
+          - port: metrics
+            path: /metrics
+            # Every scrape reads the app's whole library through its API
+            # (v2.3.0 has no cache); library counts move slowly.
+            interval: 2m
+            scrapeTimeout: 1m
+            relabelings:
+              # instance names the app, not a pod IP, for the dashboard's
+              # per-app instance selectors.
+              - sourceLabels: [__meta_kubernetes_pod_label_app_kubernetes_io_controller]
+                targetLabel: instance

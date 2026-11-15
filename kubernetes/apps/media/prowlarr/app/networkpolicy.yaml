@@ -51,4 +51,10 @@ spec:
             k8s:io.kubernetes.pod.namespace: media
             app.kubernetes.io/name: lidarr
             io.cilium.k8s.policy.serviceaccount: lidarr
+        # Library metrics (read-only API calls).
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: media
+            app.kubernetes.io/name: exportarr
+            app.kubernetes.io/controller: prowlarr
+            io.cilium.k8s.policy.serviceaccount: exportarr-prowlarr
       toPorts: *port
