@@ -593,11 +593,11 @@ jobs:
         with:
           persist-credentials: false
 
-      - name: Install ShellCheck and Task
+      - name: Install ShellCheck, Task and age
         if: needs.pre-job.outputs.scripts_changed == 'true'
         uses: jdx/mise-action@b44d12e7d0d8ee7461bb893e1b1993500433185b # v5.2.7
         with:
-          install_args: "aqua:koalaman/shellcheck aqua:go-task/task"
+          install_args: "aqua:koalaman/shellcheck aqua:go-task/task aqua:FiloSottile/age"
 
       # The root Taskfile includes every file under .taskfiles/, so listing
       # all tasks parses each one. It needs no kubeconfig, dotenv or secrets.
@@ -650,6 +650,10 @@ jobs:
       - name: Test planned NetBird router guards and firewall delta offline
         if: needs.pre-job.outputs.scripts_changed == 'true'
         run: PYTHONDONTWRITEBYTECODE=1 python3 scripts/ci/test-netbird-router-prep.py
+
+      - name: Test PVE configuration capture acceptance offline
+        if: needs.pre-job.outputs.scripts_changed == 'true'
+        run: scripts/ci/test-pve-capture.sh
 
       - name: No shell changes
         if: needs.pre-job.outputs.scripts_changed != 'true'
