@@ -4,7 +4,7 @@ Current-state record and recovery procedure for the two-node NVIDIA DGX Spark
 cluster. It began as phase 3 of the superseded
 [network-topology plan](../plans/20260821-network-topology.md#phase-3--dgx-sparks), which keeps the original rationale; the VLAN, fabric and addressing decisions now live in [architecture](../architecture.md).
 
-**Status (2026-08-27, open items updated 2026-11-14):** LAN, storage VLAN, direct fabric, host anti-transit, raw RDMA, NCCL, DNS and the RTL8127 burn-in are configured and tested. The Workloads containment slice is applied and validated. The storage-leg throughput and gateway fabric-route checks ([#1516](https://github.com/kelchm/home-lab/issues/1516)) remain open; see [Remaining work](#remaining-work).
+**Status (2026-08-27, validation updated 2026-11-15):** LAN, storage VLAN, direct fabric, host anti-transit, raw RDMA, NCCL, DNS and the RTL8127 burn-in are configured and tested. The Workloads containment slice is applied and validated. Both Sparks passed the storage-leg throughput and gateway fabric-route checks ([#1516](https://github.com/kelchm/home-lab/issues/1516)); see the [dated results and limits](#storage-vlan-and-gateway-route-checks-2026-11-15) and [Remaining work](#remaining-work).
 
 **Host recovery checks passed (2026-09-30):** after swapping the port 7/8 modules and replugging both cable ends, both links passed 30 minutes idle and a complete C4 250k cold/replay pair at 10GbE with zero new carrier drops. Both inference containers are stopped through SparkRun; management/storage probes and GPU-idle checks pass. The fault's cause is unconfirmed. [#649](https://github.com/kelchm/home-lab/issues/649) closed on 2026-10-30 because the drops stopped recurring: spark-2 had been up since October 25 with only startup carrier events and none in the preceding 72 hours, after a further cable replacement of unknown date. No switch-side recheck or load test was done for that closure.
 
@@ -430,7 +430,7 @@ forwarding-guard, and reboot-persistence results are from 2026-08-22.
 | Gate | Result | Status |
 |---|---|---|
 | Static routes after reboot | Default only via `10.32.21.1`; VLAN 25 and both fabric `/24`s connected-only | Pass |
-| Storage L2 reachability | Both storage source IPs reached NAS `10.32.25.5` in about 0.3-1.0 ms | Partial; throughput deferred |
+| Storage L2 reachability | Both storage source IPs reached NAS `10.32.25.5` in one hop; 2026-11-15 traces were 0.289/0.593 ms | Pass |
 | Fabric jumbo frames | 8972-byte ICMP payload on both logical paths, 0% loss | Pass |
 | Raw RDMA, concurrent paths | 98.04 Gb/s per path; 196.08 Gb/s aggregate before and after readdress | Pass |
 | NCCL all-gather, 16 GiB, warmed | Initial 23.82 GB/s; post-fabric-readdress 24.05 GB/s; post-LAN-readdress 22.47 GB/s; zero wrong values | Pass |
@@ -438,11 +438,11 @@ forwarding-guard, and reboot-persistence results are from 2026-08-22.
 | Fabric transit | Routed negative test dropped 3/3 packets; bridge-container A/B passed only with the guard absent | Pass; guard closes a proven Docker forwarding path |
 | Guard across Docker restart | Unchanged guard invocation IDs; table present in 67/67 and 64/64 samples; no guard-table nft events | Pass |
 | Reboot persistence | All four profiles, EEE-off, jumbo reachability, and nftables guard returned | Pass |
-| Spark to NAS iperf3 + one-hop trace | Not run | Open ([#1516](https://github.com/kelchm/home-lab/issues/1516)) |
+| Spark to NAS iperf3 + one-hop trace | Both Sparks sustained about 9.39 Gb/s in each direction over VLAN 25, with Athena as the first hop | Pass, 2026-11-15; TCP retransmissions noted below ([#1516](https://github.com/kelchm/home-lab/issues/1516)) |
 | RTL8127 10-minute full-duplex burn | Standard `rx_errors`, `rx_missed`, and `rx_mac_error` remained zero on both hosts | Pass; vendor counter monitored |
 | RTL8127 captured line-rate sample | 9.40 Gb/s simultaneously in each direction for 60 seconds; zero TCP retransmits | Pass |
 | IoT to Spark negative test | Firewall intentionally deferred | Not run; Workloads zone checks belong to [#348](https://github.com/kelchm/home-lab/issues/348) |
-| Gateway has no fabric route | No route was added for `198.19.240.0/20`; read-back verification pending | Open ([#1516](https://github.com/kelchm/home-lab/issues/1516)) |
+| Gateway has no fabric route | Kernel and FRR all-VRF read-back found neither fabric `/24` nor a non-default route covering either | Pass, 2026-11-15 ([#1516](https://github.com/kelchm/home-lab/issues/1516)) |
 
 The Main endpoint was a MacBook Pro on Wi-Fi. The result is a useful routed
 end-to-end client baseline and is strong for that path, but it does not isolate
@@ -455,6 +455,27 @@ Spark 1 and from 336 to 622 on Spark 2. A captured 60-second repeat then ran at
 RX errors, drops, or missed packets; `rx_mac_missed` increased by another 26 on
 each host. This does not fail the defined `rx_errors` gate, but retain it as a
 trend to compare after driver updates or any reported link instability.
+
+### Storage VLAN and gateway route checks (2026-11-15)
+
+Both storage legs passed the at-least-9-Gb/s target in [#1516](https://github.com/kelchm/home-lab/issues/1516). Receiver goodput and sender TCP retransmissions were:
+
+| Spark storage source | Spark → Athena (Gb/s) | Retransmissions | Athena → Spark (Gb/s) | Retransmissions |
+|---|---:|---:|---:|---:|
+| `spark-1`, `10.32.25.31` | 9.3902 | 0 | 9.3897 | 12,324 |
+| `spark-2`, `10.32.25.32` | 9.3902 | 0 | 9.3901 | 12,373 |
+
+Each run used four TCP streams, 15 measured seconds after two omitted warm-up seconds, and MTU 1500. Clients bound their storage source address with `-B`; the server bound only `10.32.25.5:5201`. Matching iperf3 3.21 clients and server used the existing [on-demand tool image pin](../../tools/iperf3/iperf3.yaml), `docker.io/networkstatic/iperf3@sha256:5b99d62400dc1ffd8ac212dba1c576f27ce4df01d6cd3cba0fbdca6850ca1e90`. The inference head stayed healthy and idle throughout the sampled test windows, with unchanged request and completion-token counters.
+
+The containers used host networking, an unprivileged UID, no capabilities, a read-only root and a 64 MiB writable `/tmp` tmpfs. iperf3 needs writable temporary files; omitting the tmpfs caused an invalid setup attempt. Each one-off server had a 90-second hard lifetime and a 20-second maximum test duration. Wait for its listening socket using a passive socket listing before starting the client: a connection probe would consume the one-off server, and starting before it listens can produce a refused connection. Use `-c 10.32.25.5 -B <storage-source> -P 4 -t 15 -O 2 -J`, adding `-R` for Athena-to-Spark traffic.
+
+On both Sparks, `ip route get 10.32.25.5 from <storage-source>` selected `enP7s7.25` directly, with no gateway. Source-bound ICMP traceroutes reached Athena as hop 1 in 0.289 ms on spark-1 and 0.593 ms on spark-2. The physical storage links reported 10000 Mb/s full duplex. These are switched TCP throughput measurements; they do not measure NAS disk or NFS performance or the gateway's inter-VLAN capacity.
+
+Athena-to-Spark traffic had substantial TCP retransmissions despite meeting the throughput target. Supplemental single-stream reverse runs still sustained 9.3867/9.3813 Gb/s with 7,031/7,742 retransmissions, so the observation is not confined to four-stream tests. Neither Spark gained standard interface errors, drops or carrier changes across the four-stream runs; carrier-change counts remained unchanged through final cleanup. Athena's physical and OVS storage-interface error/drop counters were zero at cleanup, but no before-snapshot was captured for a NAS counter delta. The cause of the TCP retransmissions was not established; this acceptance does not claim loss-free links.
+
+Gateway read-back used `ip -j -4 route show table all` and `vtysh -c 'show ip route vrf all json'`. Across 75 kernel entries and 36 distinct FRR IPv4 prefixes, neither `198.19.240.0/24` nor `198.19.241.0/24` had a route within it or a non-default covering aggregate, including `198.19.240.0/20`. The ordinary default route was excluded from that test. Positive controls found the connected Storage subnet in the kernel and a known Cilium route in FRR, confirming that both reads returned populated routing tables.
+
+All temporary test containers, their listening sockets and the newly pulled test image were removed from Athena and both Sparks. Existing workloads remained running with start times preceding the test, and the inference head was healthy and idle after cleanup. No host, DSM, NFS export or gateway configuration changed. Raw JSON results, idle samples, traces, counter snapshots, private route tables, cleanup receipts and invalid setup-attempt evidence are retained outside Git in the operator validation directory `home-lab-validation-20261115/spark-storage-network/`.
 
 ### Raw RDMA command shape
 
@@ -569,11 +590,9 @@ Do not mark this runbook complete until these are resolved:
 
 - [x] Spark-2 management/storage carrier loss: [#649](https://github.com/kelchm/home-lab/issues/649) closed on 2026-10-30 as no longer reproducing, cause unknown, without running the recovery gate. The gate and reopen trigger under [Management SSH drops with NIC carrier loss](#management-ssh-drops-with-nic-carrier-loss) apply if it recurs.
 - Deferred: no Spark workload mounts Athena NFS today; each host keeps its own model cache. When one first needs a mount, export only the required share to `10.32.25.31` and `10.32.25.32` and use those storage source addresses. Do not broaden unrelated exports.
-- [ ] Run Spark-to-NAS `iperf3` over VLAN 25 and record at least 9 Gb/s plus a
-      direct/one-hop trace ([#1516](https://github.com/kelchm/home-lab/issues/1516)). No DSM or export changes were made on 2026-08-21.
+- [x] Both Sparks passed source-bound VLAN 25 `iperf3` in both directions at about 9.39 Gb/s, with Athena as hop 1, on 2026-11-15 ([#1516](https://github.com/kelchm/home-lab/issues/1516)). See the [results and retransmission limits](#storage-vlan-and-gateway-route-checks-2026-11-15). No DSM or export configuration changed.
 - [x] Add `spark-1.home.kelch.io`, `spark-2.home.kelch.io`, and the two storage DNS records. The four UniFi-local records were added and resolved through the VLAN 20 gateway on 2026-08-26. Fabric names remain `/etc/hosts` only.
-- [ ] Read back the gateway routing table and prove that no route for
-      `198.19.240.0/20` or either fabric prefix is present ([#1516](https://github.com/kelchm/home-lab/issues/1516)).
+- [x] Gateway kernel and FRR all-VRF read-back on 2026-11-15 found no route within either fabric prefix or a non-default aggregate covering it, including `198.19.240.0/20` ([#1516](https://github.com/kelchm/home-lab/issues/1516)).
 - [x] ~~Apply the network-plan firewall matrix, then run the IoT SSH negative test and Main inference-port positive test.~~ Superseded: port 8888 admission is the host [API access policy](../../sparks/inference/sparkrun/README.md#api-access), and Workloads zone placement with its checks belongs to [#348](https://github.com/kelchm/home-lab/issues/348).
 - [x] Retain `/etc/sudoers.d/99-dgx-bringup` as the explicit [operator sudo](#operator-sudo) decision ([#1517](https://github.com/kelchm/home-lab/issues/1517)); its grant, dependencies and revisit triggers are recorded above.
 - [x] Remove obsolete `known_hosts` entries: the bring-up DHCP addresses
