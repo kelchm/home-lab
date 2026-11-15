@@ -14,7 +14,7 @@ MCP_SCHEME = os.getenv("MCP_SCHEME", "https")
 MCP_HOST = os.getenv("MCP_HOST", "mcphub.home.kelch.io")
 MCP_PORT = int(os.getenv("MCP_PORT", "443"))
 MCP_PATH = os.getenv("MCP_PATH", "/mcp/homelab-read")
-MCP_TOOL_NAME = os.getenv("MCP_TOOL_NAME", "grafana__list_datasources")
+MCP_TOOL_NAME = os.getenv("MCP_TOOL_NAME", "grafana-list_datasources")
 MCP_API_KEY = os.getenv("MCP_API_KEY")
 MCP_HOST_HEADER = os.getenv("MCP_HOST_HEADER")
 

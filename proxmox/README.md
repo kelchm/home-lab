@@ -150,25 +150,60 @@ pvesm list backups-pve-sbx --vmid VMID
 
 Restore to an unused VMID on the intended node, then remove or disconnect every NIC before first boot. Never boot a restored copy beside its source with the same network identity.
 
+For a timed drill, first verify cluster quorum, the intended node's current storage health and free capacity, and that no backup or migration is active. Use a representative current archive and an unused disposable VMID (400–499); add that VMID to `daily-backups`' explicit exclusions before restoring. Check that the VMID has no pre-existing disks or firewall file. Record the original job configuration, archive size, source and target nodes, kernel and PVE versions, and any datacenter/storage restore bandwidth limits. Restore with automatic start disabled. Immediately after completion, disable on-boot startup, replace inherited tags with `disposable`, remove inherited NICs, host-device passthrough, shared-host filesystems, hook scripts and cloud-init provisioning media in one configuration update, and verify the resulting configuration before starting the copy. Measure archive restoration separately from time to the first successful guest-agent response, then validate recovered application data without printing credentials or private content. Record archive and logical byte throughput separately, retaining the task's sparse-byte accounting and cache limitations. After shutting down and verifying the disposable identity, remove only its guest and disks, check for leftover disks and its firewall file, and restore the exact prior backup exclusion configuration. `qm destroy --purge` also edits backup-job exclusions; compare the final job field by field with the saved configuration, including absent versus empty exclusions.
+
+A drill on the current ASPM-disabled baseline measures recovery on that dated configuration; it does not pass the separate controlled storage qualification in [#1507](https://github.com/kelchm/home-lab/issues/1507). Stop on an unhealthy storage preflight or new AER/NVMe errors. A successful restore is not a zero-error qualification window.
+
 ```sh
-qmrestore /mnt/pve/backups-pve-sbx/dump/ARCHIVE.vma.zst RESTORE_VMID --storage local-lvm --unique 1
-for nic in $(qm config RESTORE_VMID | sed -n 's/^\(net[0-9]\+\):.*/\1/p'); do
-    qm set RESTORE_VMID --delete "$nic"
-done
-restored_config=$(qm config RESTORE_VMID) || { echo "Unable to read restored VM configuration" >&2; exit 1; }
-remaining_nics=$(printf '%s\n' "$restored_config" | sed -n 's/^\(net[0-9]\+\):.*/\1/p')
-if [ -n "$remaining_nics" ]; then
-    echo "Refusing to start RESTORE_VMID: network interfaces remain: $remaining_nics" >&2
+set -eu
+restore_vmid=401 # Choose an unused disposable VMID and exclude it from daily-backups first.
+qmrestore /mnt/pve/backups-pve-sbx/dump/ARCHIVE.vma.zst "$restore_vmid" --storage local-lvm --unique 1 --start 0 --ha-managed 0
+restored_config=$(qm config "$restore_vmid") || { echo "Unable to read restored configuration" >&2; exit 1; }
+isolation_items=$(printf '%s\n' "$restored_config" | awk '
+    /^(net[0-9]+|hostpci[0-9]+|usb[0-9]+|virtiofs[0-9]+|parallel[0-9]+|hookscript|args|startup|cicustom|ipconfig[0-9]+):/ ||
+    /^(ide|sata|scsi|virtio)[0-9]+:.*cloudinit/ ||
+    (/^serial[0-9]+:/ && $2 != "socket") { sub(/:.*/, ""); print }
+' | paste -sd, -)
+if [ -n "$isolation_items" ]; then
+    qm set "$restore_vmid" --onboot 0 --protection 0 --tags disposable --delete "$isolation_items"
+else
+    qm set "$restore_vmid" --onboot 0 --protection 0 --tags disposable
+fi
+restored_config=$(qm config "$restore_vmid") || { echo "Unable to read isolated configuration" >&2; exit 1; }
+remaining=$(printf '%s\n' "$restored_config" | awk -v vmid="$restore_vmid" '
+    /^(net[0-9]+|hostpci[0-9]+|usb[0-9]+|virtiofs[0-9]+|parallel[0-9]+|hookscript|args|cicustom|ipconfig[0-9]+):/ ||
+    /^(ide|sata|scsi|virtio)[0-9]+:.*cloudinit/ ||
+    (/^serial[0-9]+:/ && $2 != "socket") { print $1 }
+    /^(ide|sata|scsi|virtio|efidisk|tpmstate|unused)[0-9]+:/ && $2 !~ ("^local-lvm:vm-" vmid "-") { print $1 }
+')
+if [ -n "$remaining" ]; then
+    echo "Refusing to start: isolation or disk-ownership checks failed for $remaining" >&2
     exit 1
 fi
-printf '%s\n' "$restored_config"
-qm start RESTORE_VMID
-qm guest cmd RESTORE_VMID ping
+qm start "$restore_vmid"
+qm guest cmd "$restore_vmid" ping
 ```
 
 After validating the recovered filesystem and application state, shut down the isolated copy. Destroy it only when the VMID, node, and disposable purpose have been rechecked.
 
-The initial acceptance drill used disposable VM 300. A 60-second 70/30 random read/write `fio` run on node 1 completed without error, an online local-disk migration to node 2 used VLAN 25 with 252 ms guest downtime, and a guest-agent-consistent 334 MB VZDump archive completed in 14 seconds. The archive restored on node 3 as VM 301, booted with its NIC removed, and passed filesystem and QEMU guest-agent checks. Both disposable VMs were then destroyed; `backups-pve-sbx:backup/vzdump-qemu-300-2026_08_27-11_35_57.vma.zst` remains as the recovery artifact. Restore elapsed time was not captured, so the RTO/restore-throughput acceptance measurement remains open ([#1513](https://github.com/kelchm/home-lab/issues/1513)).
+The initial acceptance drill used disposable VM 300. A 60-second 70/30 random read/write `fio` run on node 1 completed without error, an online local-disk migration to node 2 used VLAN 25 with 252 ms guest downtime, and a guest-agent-consistent 334 MB VZDump archive completed in 14 seconds. The archive restored on node 3 as VM 301, booted with its NIC removed, and passed filesystem and QEMU guest-agent checks. Both disposable VMs were then destroyed; `backups-pve-sbx:backup/vzdump-qemu-300-2026_08_27-11_35_57.vma.zst` remains as the recovery artifact. Restore elapsed time was not captured in that drill; the representative measurement below completes [#1513](https://github.com/kelchm/home-lab/issues/1513).
+
+### Timed Hermes restore — 2026-11-15
+
+At 19:24:44 UTC (14:24 EST), the current `hermes-1` backup from `pve-sbx-1`, `backups-pve-sbx:backup/vzdump-qemu-200-2026_11_15-05_00_21.vma.zst`, restored to disposable VM 401 on idle `pve-sbx-3` using `local-lvm`. The target ran PVE 9.2.21 and kernel `7.0.14-25-pve`, with firmware ASPM disabled. Quorum, storage capacity, task inactivity, AER and NVMe health checks passed before the drill. No datacenter, source-storage or target-storage restore bandwidth limit was configured, and no CLI limit was supplied.
+
+| Measurement | Observed result |
+| --- | --- |
+| Compressed archive | 4,876,158,251 bytes |
+| Logical bytes read / sparse bytes | 34,360,328,192 / 18,942,128,128 (55.1% sparse) |
+| Archive restoration | 43.3 seconds, successful PVE restore task |
+| Archive / logical throughput | 107.4 / 756.6 MiB/s; logical throughput includes sparse data and is not physical disk-write throughput |
+| Boot request to first guest-agent response | 14.5 seconds; one-second polling plus command overhead |
+| Restore request to first guest-agent response | 154.3 seconds, including a 96.6-second pause for isolation/configuration checks; the 57.8-second sum of restore and boot phases excludes that pause |
+
+The restored copy had no NICs, passthrough, hooks or cloud-init media, with `onboot=0`, replacement tag `disposable` and an explicit backup exclusion. All nine recovered SQLite databases passed read-only `integrity_check`; Hermes state and its credential file were present without exposing their contents. Docker, Hermes and Caddy ran, and the dashboard/API answered HTTP 200 over loopback. These no-network checks do not qualify external integrations, TLS renewal or client access. Caches were not flushed; node 3 had not read this archive during the drill, while NAS cache state was unmeasured and could reflect that day's backup. This single sample does not establish a cold-cache or guaranteed recovery-time bound.
+
+The 30-second shutdown command timed out, but the copy subsequently stopped without a forced stop. It was verified stopped before destruction. VM 401, its owned disks, firewall file and any HA entry were absent after cleanup; `daily-backups` matched its saved pre-drill configuration exactly, including the absent exclusion field. Production guest placement, state and uptimes were unchanged, the cluster remained quorate, and the target's AER and SMART media/error counters remained zero. Private receipts are retained under `/Users/kelchm/Documents/home-lab-validation-20261115/pve-restore/`. The controlled storage qualification in [#1507](https://github.com/kelchm/home-lab/issues/1507) remains open.
 
 ## Host baseline artifacts
 
@@ -238,7 +273,6 @@ These choices carry forward from the original [cluster plan](../docs/plans/20260
 None of these has a recorded result since the 2026-08-27 commissioning record above; no record is not a pass. Retiring the historical plan does not clear these gates or qualify PVE for irreplaceable data.
 
 - Repeat the idle and I/O acceptance window on every host under the firmware-level PCIe ASPM disable, leaving NVMe APST unchanged: [#1507](https://github.com/kelchm/home-lab/issues/1507). Node 3's earlier clean 100-cycle screen preceded two later errors and is not sufficient evidence for the gate.
-- Repeat a timed isolated restore after the storage requalification and record restore RTO and throughput: [#1513](https://github.com/kelchm/home-lab/issues/1513), held on #1507.
 - Complete physical cold-power removal and recovery on all three nodes, then remove the obsolete SanDisk qualification USB from node 1 once its NVMe cold-power boot is proven: [#1508](https://github.com/kelchm/home-lab/issues/1508). GLKVM cannot assert ATX power.
 - Enroll TOTP for `kelchm@pve`: [#1509](https://github.com/kelchm/home-lab/issues/1509).
 - Configure and test an authenticated SMTP notification target; direct-to-MX Postfix delivery from the home public IP is rejected by Gmail: [#1510](https://github.com/kelchm/home-lab/issues/1510).
