@@ -78,7 +78,6 @@ Retained dated plans keep the status header `**Status:** <Proposed|Active|Implem
 
 ### Unfinished
 
-- [20260620-nas-out-of-cluster-workloads](plans/20260620-nas-out-of-cluster-workloads.md) — Synology-hosted S3 backup target and Git-driven deployment model for workloads outside Kubernetes.
 - [20260703-observability-rework](plans/20260703-observability-rework.md) — converge on VictoriaMetrics/VictoriaLogs and cover Kubernetes, PVE, DGX Spark, Synology, UniFi, logs, flows, and security events through one operating model.
 - [20260814-pve-cluster](plans/20260814-pve-cluster.md) — implemented core design for the independent three-node PVE cluster, with remaining hardware acceptance and identity/certificate gates tracked in the live operator documentation.
 - [20260821-network-topology](plans/20260821-network-topology.md) — active, partially implemented VLAN/zone topology, DGX placement, PVE wiring, and second-cluster reservations.
@@ -90,6 +89,7 @@ Implemented or superseded plans preserve context. Use the maintained documentati
 - [20260508-arr-suite-setup](plans/20260508-arr-suite-setup.md) — the original media-stack deployment plan.
 - [20260509-kaniop-migration](plans/20260509-kaniop-migration.md) — Kanidm → kaniop operator pivot.
 - [20260513-arr-hardlink-rework](plans/20260513-arr-hardlink-rework.md) — single share-root mount + NFSv4 ACL isolation.
+- [20260620-nas-out-of-cluster-workloads](plans/20260620-nas-out-of-cluster-workloads.md) — superseded Synology S3 and deployment proposal; current operations live under `synology/`, with remaining deployment acceptance in [#379](https://github.com/kelchm/home-lab/issues/379).
 - [20260620-metamcp-mcp-rollout](plans/20260620-metamcp-mcp-rollout.md) — MetaMCP gateway + curated backend MCP server rollout.
 - [20260622-sequenced-dependency-upgrades](plans/20260622-sequenced-dependency-upgrades.md) — ordered major-version upgrade pass for k8s-prod (Longhorn → Talos → k8s → Gateway API/Traefik → kaniop).
 - [20260622-tailscale-operator](plans/20260622-tailscale-operator.md) — superseded Kubernetes-operator subnet-router design retained as historical context.
