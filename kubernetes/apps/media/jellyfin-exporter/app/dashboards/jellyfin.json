@@ -344,7 +344,8 @@
         }
       ],
       "title": "Active Streams",
-      "type": "stat"
+      "type": "stat",
+      "description": "Sessions with an item loaded, including paused playback. Zero is shown only while the playing collector succeeds."
     },
     {
       "datasource": {
@@ -1160,7 +1161,7 @@
         "type": "prometheus",
         "uid": "${data_source}"
       },
-      "description": "Timeline of active playback sessions. Gaps indicate paused or stopped playback.",
+      "description": "Playback sessions by media type and play method, including paused sessions. Gaps indicate no loaded sessions or unavailable collector data.",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -1723,7 +1724,7 @@
                 "uid": "${data_source}"
               },
               "editorMode": "code",
-              "expr": "(jellyfin_storage_used_bytes{instance=~\"$instance\",location!=\"library\"} + jellyfin_storage_free_bytes{instance=~\"$instance\",location!=\"library\"})\nor\nlabel_replace(\n  max without (name, path) (jellyfin_storage_used_bytes{instance=~\"$instance\",location=\"library\"})\n  + max without (name, path) (jellyfin_storage_free_bytes{instance=~\"$instance\",location=\"library\"}),\n  \"name\", \"Libraries\", \"\", \"\"\n)",
+              "expr": "((jellyfin_storage_used_bytes{instance=~\"$instance\",location!=\"library\"} >= 0) + (jellyfin_storage_free_bytes{instance=~\"$instance\",location!=\"library\"} >= 0))\nor\nlabel_replace(\n  max without (name, path) ((jellyfin_storage_used_bytes{instance=~\"$instance\",location=\"library\"} >= 0))\n  + max without (name, path) ((jellyfin_storage_free_bytes{instance=~\"$instance\",location=\"library\"} >= 0)),\n  \"name\", \"Libraries\", \"\", \"\"\n)",
               "legendFormat": "{{name}} ({{location}})",
               "instant": true,
               "refId": "A"
@@ -1802,7 +1803,7 @@
                 "uid": "${data_source}"
               },
               "editorMode": "code",
-              "expr": "100 * jellyfin_storage_used_bytes{instance=~\"$instance\",location!=\"library\"}\n/ (jellyfin_storage_used_bytes{instance=~\"$instance\",location!=\"library\"} + jellyfin_storage_free_bytes{instance=~\"$instance\",location!=\"library\"})\nor\nlabel_replace(\n  100 * max without (name, path) (jellyfin_storage_used_bytes{instance=~\"$instance\",location=\"library\"})\n  / (\n    max without (name, path) (jellyfin_storage_used_bytes{instance=~\"$instance\",location=\"library\"})\n    + max without (name, path) (jellyfin_storage_free_bytes{instance=~\"$instance\",location=\"library\"})\n  ),\n  \"name\", \"Libraries\", \"\", \"\"\n)",
+              "expr": "100 * (jellyfin_storage_used_bytes{instance=~\"$instance\",location!=\"library\"} >= 0)\n/ ((jellyfin_storage_used_bytes{instance=~\"$instance\",location!=\"library\"} >= 0) + (jellyfin_storage_free_bytes{instance=~\"$instance\",location!=\"library\"} >= 0))\nor\nlabel_replace(\n  100 * max without (name, path) ((jellyfin_storage_used_bytes{instance=~\"$instance\",location=\"library\"} >= 0))\n  / (\n    max without (name, path) ((jellyfin_storage_used_bytes{instance=~\"$instance\",location=\"library\"} >= 0))\n    + max without (name, path) ((jellyfin_storage_free_bytes{instance=~\"$instance\",location=\"library\"} >= 0))\n  ),\n  \"name\", \"Libraries\", \"\", \"\"\n)",
               "legendFormat": "{{name}} ({{location}})",
               "refId": "A",
               "instant": true,
@@ -1817,7 +1818,7 @@
             "type": "prometheus",
             "uid": "${data_source}"
           },
-          "description": "Storage breakdown per location. Libraries sharing the same disk are merged into one row.",
+          "description": "Filesystem usage per configured location. Library folders share one media-library filesystem here and are merged into one row; other locations may also repeat a filesystem, so no total is summed across rows.",
           "fieldConfig": {
             "defaults": {
               "color": {
@@ -1928,7 +1929,7 @@
               "reducer": [
                 "sum"
               ],
-              "show": true
+              "show": false
             },
             "showHeader": true,
             "sortBy": [
@@ -1945,7 +1946,7 @@
                 "uid": "${data_source}"
               },
               "editorMode": "code",
-              "expr": "max by (name, location) (jellyfin_storage_used_bytes{instance=~\"$instance\",location!=\"library\"})\nor\nlabel_replace(\n  max without (name, path) (jellyfin_storage_used_bytes{instance=~\"$instance\",location=\"library\"}),\n  \"name\", \"Libraries\", \"\", \"\"\n)",
+              "expr": "max by (name, location) ((jellyfin_storage_used_bytes{instance=~\"$instance\",location!=\"library\"} >= 0))\nor\nlabel_replace(\n  max without (name, path) ((jellyfin_storage_used_bytes{instance=~\"$instance\",location=\"library\"} >= 0)),\n  \"name\", \"Libraries\", \"\", \"\"\n)",
               "format": "table",
               "instant": true,
               "refId": "used"
@@ -1956,7 +1957,7 @@
                 "uid": "${data_source}"
               },
               "editorMode": "code",
-              "expr": "max by (name, location) (jellyfin_storage_free_bytes{instance=~\"$instance\",location!=\"library\"})\nor\nlabel_replace(\n  max without (name, path) (jellyfin_storage_free_bytes{instance=~\"$instance\",location=\"library\"}),\n  \"name\", \"Libraries\", \"\", \"\"\n)",
+              "expr": "max by (name, location) ((jellyfin_storage_free_bytes{instance=~\"$instance\",location!=\"library\"} >= 0))\nor\nlabel_replace(\n  max without (name, path) ((jellyfin_storage_free_bytes{instance=~\"$instance\",location=\"library\"} >= 0)),\n  \"name\", \"Libraries\", \"\", \"\"\n)",
               "format": "table",
               "instant": true,
               "refId": "free"
@@ -2119,7 +2120,7 @@
                 "uid": "${data_source}"
               },
               "editorMode": "code",
-              "expr": "label_replace(\n  max without (name, path) (jellyfin_storage_used_bytes{instance=~\"$instance\",location=\"library\"}),\n  \"name\", \"Libraries\", \"\", \"\"\n)",
+              "expr": "label_replace(\n  max without (name, path) ((jellyfin_storage_used_bytes{instance=~\"$instance\",location=\"library\"} >= 0)),\n  \"name\", \"Libraries\", \"\", \"\"\n)",
               "legendFormat": "{{name}} - Used",
               "refId": "A"
             },
@@ -2129,7 +2130,7 @@
                 "uid": "${data_source}"
               },
               "editorMode": "code",
-              "expr": "label_replace(\n  max without (name, path) (jellyfin_storage_free_bytes{instance=~\"$instance\",location=\"library\"}),\n  \"name\", \"Libraries\", \"\", \"\"\n)",
+              "expr": "label_replace(\n  max without (name, path) ((jellyfin_storage_free_bytes{instance=~\"$instance\",location=\"library\"} >= 0)),\n  \"name\", \"Libraries\", \"\", \"\"\n)",
               "legendFormat": "{{name}} - Free",
               "refId": "B"
             }

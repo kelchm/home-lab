@@ -68,6 +68,12 @@ spec:
                 memory: 128Mi
     defaultPodOptions:
       automountServiceAccountToken: false
+      # Resolve the configured multi-label service name as absolute first;
+      # the DNS policy permits only that name, not search-suffix variants.
+      dnsConfig:
+        options:
+          - name: ndots
+            value: "1"
       securityContext:
         runAsNonRoot: true
         runAsUser: 65534

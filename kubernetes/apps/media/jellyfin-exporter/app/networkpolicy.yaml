@@ -36,6 +36,9 @@ spec:
               protocol: UDP
             - port: "53"
               protocol: TCP
+          rules:
+            dns:
+              - matchName: jellyfin.media.svc.cluster.local
     # Paths are RE2 regexes matched against the whole request target,
     # query string included, so each /Sessions call is listed exactly.
     - toEndpoints:
