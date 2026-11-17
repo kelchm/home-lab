@@ -2,7 +2,7 @@ name: modelkeep
 
 services:
   modelkeep:
-    image: ghcr.io/kaznak/modelkeep:v0.4.12@sha256:ce4a960abe4068a1f328e68627f6a8ecfb6f26349fc22438d8e139e62a3070c0
+    image: ghcr.io/kaznak/modelkeep:v0.4.13@sha256:21f67a13e863bbdd10a83838ca6d6120860d271ade1af1316e920cb5da49f602
     # The DSM service account `modelkeep`, so archive ACLs name a real principal.
     user: "1045:100"
     read_only: true
