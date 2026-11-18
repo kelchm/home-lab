@@ -307,7 +307,7 @@ jobs:
 
       - name: Install Kubernetes validation tools
         if: needs.pre-job.outputs.kubernetes_changed == 'true'
-        uses: jdx/mise-action@d5574b52816a478f9d4e6529a3f6ff17a8a36785 # v5.2.8
+        uses: jdx/mise-action@236a21c3b91f5db6d4e174b348674a0f0caac06d # v5.2.9
         with:
           install_args: "aqua:fluxcd/flux2 aqua:yannh/kubeconform aqua:mikefarah/yq aqua:prometheus/prometheus aqua:prometheus/alertmanager"
 
@@ -420,7 +420,7 @@ jobs:
 
       - name: Install Talos validation tools
         if: needs.pre-job.outputs.talos_changed == 'true'
-        uses: jdx/mise-action@d5574b52816a478f9d4e6529a3f6ff17a8a36785 # v5.2.8
+        uses: jdx/mise-action@236a21c3b91f5db6d4e174b348674a0f0caac06d # v5.2.9
         with:
           install_args: "aqua:budimanjojo/talhelper aqua:siderolabs/talos aqua:mikefarah/yq aqua:jqlang/jq"
 
@@ -445,7 +445,7 @@ jobs:
 
       - name: Install bootstrap validation tools
         if: needs.pre-job.outputs.bootstrap_changed == 'true'
-        uses: jdx/mise-action@d5574b52816a478f9d4e6529a3f6ff17a8a36785 # v5.2.8
+        uses: jdx/mise-action@236a21c3b91f5db6d4e174b348674a0f0caac06d # v5.2.9
         with:
           install_args: "aqua:helm/helm aqua:helmfile/helmfile aqua:yannh/kubeconform"
 
@@ -483,7 +483,7 @@ jobs:
 
       - name: Install SOPS validation tools
         if: needs.pre-job.outputs.sops_changed == 'true'
-        uses: jdx/mise-action@d5574b52816a478f9d4e6529a3f6ff17a8a36785 # v5.2.8
+        uses: jdx/mise-action@236a21c3b91f5db6d4e174b348674a0f0caac06d # v5.2.9
         with:
           install_args: "aqua:getsops/sops aqua:mikefarah/yq aqua:FiloSottile/age"
 
@@ -518,7 +518,7 @@ jobs:
 
       - name: Install yq, ShellCheck, SOPS and age
         if: needs.pre-job.outputs.synology_changed == 'true'
-        uses: jdx/mise-action@d5574b52816a478f9d4e6529a3f6ff17a8a36785 # v5.2.8
+        uses: jdx/mise-action@236a21c3b91f5db6d4e174b348674a0f0caac06d # v5.2.9
         with:
           install_args: "aqua:mikefarah/yq aqua:koalaman/shellcheck aqua:getsops/sops aqua:FiloSottile/age"
 
@@ -562,7 +562,7 @@ jobs:
 
       - name: Install host monitoring validation tools
         if: needs.pre-job.outputs.hosts_changed == 'true'
-        uses: jdx/mise-action@d5574b52816a478f9d4e6529a3f6ff17a8a36785 # v5.2.8
+        uses: jdx/mise-action@236a21c3b91f5db6d4e174b348674a0f0caac06d # v5.2.9
         with:
           install_args: "aqua:mikefarah/yq aqua:prometheus/prometheus"
 
@@ -595,7 +595,7 @@ jobs:
 
       - name: Install ShellCheck, Task and age
         if: needs.pre-job.outputs.scripts_changed == 'true'
-        uses: jdx/mise-action@d5574b52816a478f9d4e6529a3f6ff17a8a36785 # v5.2.8
+        uses: jdx/mise-action@236a21c3b91f5db6d4e174b348674a0f0caac06d # v5.2.9
         with:
           install_args: "aqua:koalaman/shellcheck aqua:go-task/task aqua:FiloSottile/age"
 
@@ -746,7 +746,7 @@ jobs:
 
       - name: Install lychee
         if: needs.pre-job.outputs.docs_changed == 'true'
-        uses: jdx/mise-action@d5574b52816a478f9d4e6529a3f6ff17a8a36785 # v5.2.8
+        uses: jdx/mise-action@236a21c3b91f5db6d4e174b348674a0f0caac06d # v5.2.9
         with:
           install_args: "aqua:lycheeverse/lychee"
 
@@ -817,7 +817,7 @@ jobs:
           persist-credentials: false
 
       - name: Install workflow validation tools
-        uses: jdx/mise-action@d5574b52816a478f9d4e6529a3f6ff17a8a36785 # v5.2.8
+        uses: jdx/mise-action@236a21c3b91f5db6d4e174b348674a0f0caac06d # v5.2.9
         with:
           install_args: "aqua:rhysd/actionlint aqua:koalaman/shellcheck"
 
