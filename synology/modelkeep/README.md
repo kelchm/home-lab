@@ -19,6 +19,8 @@ Retirement removes the service, not its model files. Keep `/volume1/models/model
 
 The files can be read without the service. [SparkNest's inventory loader](../sparknest/ingest.py) retains support for ModelKeep manifests as an offline import format; it does not call the mirror. This does not establish that every retained file has been imported into SparkNest, that a partial revision is a complete model, or that a separate backup exists. Keep the original data until any future deletion is separately approved and its required copies verified.
 
+The [historical upstream-hash check](https://github.com/kelchm/home-lab/blob/ffb9f96278042af60ae514f830e72939ebe54072/synology/modelkeep/README.md#verify-against-upstream-hashes) compares the retained ModelKeep manifest hashes with Hugging Face LFS hashes in `.modelkeep-upstream-files.json` without the service. It does not re-hash payload bytes or cover files without an upstream record; use it alongside payload verification, not as proof of a complete or intact archive.
+
 ## Finish the live retirement
 
 Removing the target from [`.doco-cd.yml`](../.doco-cd.yml) prevents future deployments but does not stop existing containers. After the retirement commit reaches `main`:
