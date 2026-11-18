@@ -17,11 +17,6 @@ reconciliation: false
 # First start on an empty config/ downloads menus before the health gate.
 timeout: 300
 ---
-name: modelkeep
-working_dir: synology/modelkeep
-prune_images: false
-reconciliation: false
----
 name: offsite-backup
 working_dir: synology/offsite-backup
 prune_images: false
