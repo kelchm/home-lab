@@ -77,6 +77,8 @@ For later applies, update the applied Compose/config copies and use `compose up 
 
 The inventory covers Athena's ModelKeep archive and import-staging caches; the Mac's HF, LM Studio, Ollama, ComfyUI and flatrate adapter/checkpoint stores; and both Sparks' shared/home HF caches, runtime inputs and existing OCR models. On November 8 it contained 98 collections, 4,888 files and 5,845,171,861,725 logical bytes, including duplicated stores and revisions. Five optional source roots were absent on the Sparks and are reported in inventory warnings. GPU `ComputeCache` directories, `.locks`, zero-byte lock files, Synology metadata, and HF authentication files are excluded. These are configured model stores, not a scan of every disk. Missing/unreadable roots, traversal failures and linked directories are reported; linked directories inside walked trees are not followed.
 
+The [ModelKeep mirror is retired](../modelkeep/); its retained archive remains a file-based import source. The inventory loader's `modelkeep` format reads manifests and payload paths directly and does not require the mirror service.
+
 A source specification is an array of `{name, host, sudo, stores}`. `host` is `local` or an SSH destination. Stores have `{name, root, kind}`, where `kind` is `hf`, `modelkeep`, `models` (owner/model folders), or `tree`. A tree store can specify `exclude_dirs`, such as `["ComputeCache"]`. Refresh the inventory when sources change; the captured stat identity prevents silently ingesting changed files under an old inventory.
 
 ```sh
