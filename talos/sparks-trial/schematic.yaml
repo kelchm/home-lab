@@ -1,0 +1,17 @@
+# Image Factory schematic for the DGX Sparks (GB10, arm64). The ID is derived
+# from this file's contents; register it with a POST to factory.talos.dev.
+customization:
+    extraKernelArgs:
+        # The NVIDIA modules crash or fail to load CUDA under the arm64
+        # branch-target hardening that Talos kernels enable since 1.13.
+        - arm64.nobti
+        # DGX OS sets this; without it ConnectX-7 NCCL bandwidth drops.
+        - pci=pcie_bus_safe
+    systemExtensions:
+        officialExtensions:
+            # The open NVIDIA modules fail to boot GB10 under Talos; LTS
+            # matches the 580.178.04 driver DGX OS runs.
+            - siderolabs/nonfree-kmod-nvidia-lts
+            - siderolabs/nvidia-container-toolkit-lts
+            # RTL8127 10GbE firmware for the in-kernel r8169 driver.
+            - siderolabs/realtek-firmware

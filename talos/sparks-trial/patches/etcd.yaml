@@ -1,0 +1,3 @@
+cluster:
+  etcd:
+    advertisedSubnets: ["10.32.21.0/24"]
