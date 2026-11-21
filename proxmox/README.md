@@ -40,7 +40,7 @@ ssh kelchm@NODE "sudo pvenode config get | grep -E '^acme|^acmedomain'; systemct
 openssl s_client -connect NODE_IP:8006 -servername NODE_FQDN -verify_hostname NODE_FQDN </dev/null
 ```
 
-The initial certificates were issued and hostname-validated on 2026-08-27. A manual `pvenode acme cert renew` correctly refuses while a certificate is outside PVE's 30-day renewal window; do not use `--force` merely to test routine renewal.
+The initial certificates were issued and hostname-validated on 2026-08-27. A manual `pvenode acme cert renew` correctly refuses while a certificate is outside PVE's 30-day renewal window; do not use `--force` merely to test routine renewal. The Pi's `pve-sbx-N` probes raise `HostCertificateExpiring` when a served certificate has less than 14 days left; see [service probes](../docs/runbooks/host-monitoring.md#service-probes).
 
 ## Shared storage
 

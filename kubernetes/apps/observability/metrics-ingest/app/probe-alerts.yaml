@@ -8,12 +8,14 @@ spec:
     - name: pi-probes
       rules:
         # Exporter failures belong to NodeCollectorDown, not every destination.
+        # Certificate-only probes (PVE nodes, NAS S3) watch expiry, not
+        # availability; their failures belong to CertificateProbeFailed.
         - alert: ProbeFailed
           expr: |
             (
-              probe_success{job="pi-blackbox"} == 0
+              probe_success{job="pi-blackbox",probe!~"pve-sbx-1|pve-sbx-2|pve-sbx-3|s3-storage"} == 0
               or on (instance, platform, probe)
-              up{job="pi-blackbox"} == 0
+              up{job="pi-blackbox",probe!~"pve-sbx-1|pve-sbx-2|pve-sbx-3|s3-storage"} == 0
             )
             and on (instance, platform)
             (up{job="pi-blackbox-exporter"} == 1)
@@ -23,6 +25,26 @@ spec:
           annotations:
             summary: "Probe {{ $labels.probe }} is failing from {{ $labels.instance }}"
             description: "{{ $labels.target }} failed the {{ $labels.module }} probe. Check the destination, DNS and the routed path from VLAN 20."
+            runbook_url: https://github.com/kelchm/home-lab/blob/main/docs/runbooks/host-monitoring.md#service-probes
+
+        # A failing certificate-only probe blinds HostCertificateExpiring for
+        # that host. Its outage is PVENodeDown's or the CNPG archiver's; the
+        # hour lets planned PVE reboots pass without a notification.
+        - alert: CertificateProbeFailed
+          expr: |
+            (
+              probe_success{job="pi-blackbox",probe=~"pve-sbx-1|pve-sbx-2|pve-sbx-3|s3-storage"} == 0
+              or on (instance, platform, probe)
+              up{job="pi-blackbox",probe=~"pve-sbx-1|pve-sbx-2|pve-sbx-3|s3-storage"} == 0
+            )
+            and on (instance, platform)
+            (up{job="pi-blackbox-exporter"} == 1)
+          for: 1h
+          labels:
+            severity: warning
+          annotations:
+            summary: "Certificate probe {{ $labels.probe }} has failed for an hour"
+            description: "{{ $labels.target }} failed the {{ $labels.module }} probe, so its certificate expiry is not being checked. Check the host and the routed path from VLAN 20."
             runbook_url: https://github.com/kelchm/home-lab/blob/main/docs/runbooks/host-monitoring.md#service-probes
 
         # Expected inventory from rpi-nixos hosts/ups-compute-rack/probes.nix.
@@ -44,6 +66,10 @@ spec:
               or absent_over_time(probe_success{job="pi-blackbox",instance="ups-compute-rack",platform="pi",probe="unifi-console"}[5m])
               or absent_over_time(probe_success{job="pi-blackbox",instance="ups-compute-rack",platform="pi",probe="k8s-gateway"}[5m])
               or absent_over_time(probe_success{job="pi-blackbox",instance="ups-compute-rack",platform="pi",probe="unifi-gateway"}[5m])
+              or absent_over_time(probe_success{job="pi-blackbox",instance="ups-compute-rack",platform="pi",probe="pve-sbx-1"}[5m])
+              or absent_over_time(probe_success{job="pi-blackbox",instance="ups-compute-rack",platform="pi",probe="pve-sbx-2"}[5m])
+              or absent_over_time(probe_success{job="pi-blackbox",instance="ups-compute-rack",platform="pi",probe="pve-sbx-3"}[5m])
+              or absent_over_time(probe_success{job="pi-blackbox",instance="ups-compute-rack",platform="pi",probe="s3-storage"}[5m])
             )
             unless on (instance, platform, probe)
             (up{job="pi-blackbox"} == 0)
@@ -59,7 +85,7 @@ spec:
 
         - alert: ProbeSlow
           expr: |
-            (avg_over_time(probe_duration_seconds{job="pi-blackbox"}[5m]) > 2)
+            (avg_over_time(probe_duration_seconds{job="pi-blackbox",probe!~"pve-sbx-1|pve-sbx-2|pve-sbx-3|s3-storage"}[5m]) > 2)
             and on (instance, platform, probe)
             (probe_success{job="pi-blackbox"} == 1)
             and on (instance, platform, probe)
@@ -75,7 +101,7 @@ spec:
         # Internal certificates live 160 h and renew with 53 h left; 36 h left means renewal has failed for about 17 h.
         - alert: ProbeCertificateExpiring
           expr: |
-            (probe_ssl_earliest_cert_expiry{job="pi-blackbox",probe!~"athena-dsm|kvm-compute-rack|unifi-console"} - time() < 36 * 3600)
+            (probe_ssl_earliest_cert_expiry{job="pi-blackbox",probe!~"athena-dsm|kvm-compute-rack|unifi-console|pve-sbx-1|pve-sbx-2|pve-sbx-3|s3-storage"} - time() < 36 * 3600)
             and on (instance, platform, probe)
             (probe_success{job="pi-blackbox"} == 1)
             and on (instance, platform, probe)
@@ -89,12 +115,12 @@ spec:
             runbook_url: https://github.com/kelchm/home-lab/blob/main/docs/runbooks/host-monitoring.md#service-probes
 
         # Hosts that renew their own 90-day certificates (Athena DSM, the GLKVM,
-        # the UniFi console)
-        # renew about 30 days before expiry; 14 days left means renewal has
-        # been failing for over two weeks.
+        # the UniFi console, the PVE nodes, the NAS S3 Traefik) renew about
+        # 30 days before expiry; 14 days left means renewal has been failing
+        # for over two weeks.
         - alert: HostCertificateExpiring
           expr: |
-            (probe_ssl_earliest_cert_expiry{job="pi-blackbox",probe=~"athena-dsm|kvm-compute-rack|unifi-console"} - time() < 14 * 24 * 3600)
+            (probe_ssl_earliest_cert_expiry{job="pi-blackbox",probe=~"athena-dsm|kvm-compute-rack|unifi-console|pve-sbx-1|pve-sbx-2|pve-sbx-3|s3-storage"} - time() < 14 * 24 * 3600)
             and on (instance, platform, probe)
             (probe_success{job="pi-blackbox"} == 1)
             and on (instance, platform, probe)
@@ -104,5 +130,5 @@ spec:
             severity: warning
           annotations:
             summary: "Certificate for {{ $labels.probe }} expires in {{ $value | humanizeDuration }}"
-            description: "{{ $labels.target }} has less than 14 days of served certificate validity. Check the host's own ACME renewal: the Athena ACME runbook for athena-dsm, devices/glkvm/README.md#tls for kvm-compute-rack, the UniFi console's certificate settings for unifi-console."
+            description: "{{ $labels.target }} has less than 14 days of served certificate validity. Check the host's own ACME renewal: the Athena ACME runbook for athena-dsm, devices/glkvm/README.md#tls for kvm-compute-rack, the UniFi console's certificate settings for unifi-console, proxmox/README.md#certificates for pve-sbx-N, synology/s3-storage/README.md for s3-storage."
             runbook_url: https://github.com/kelchm/home-lab/blob/main/docs/runbooks/host-monitoring.md#service-probes
