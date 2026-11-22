@@ -16,6 +16,12 @@ Hold back only what has a stated reason, and only as far as the reason reaches. 
 
 Use a constraint when some updates remain acceptable, approval when updates need review, and a content lock when no automatic change is acceptable. Don't exclude a path on a guess about what is frozen there, disable a whole manager or datasource, or hold a whole package when one update type is the problem.
 
+## Kaniop and Kanidm compatibility
+
+Renovate proposes Kanidm server minors separately so a compatible minor can be reviewed while a newer one is waiting for Kaniop support. Repository Validation checks the proposed [Kaniop chart](../../kubernetes/apps/identity/kaniop/app/ocirepository.yaml) and [Kanidm server image](../../kubernetes/apps/identity/kanidm/app/kanidm.yaml) together. It reads `kanidm_client` from the chart release's upstream `Cargo.lock`. The server major must match the SDK major and the server minor must be at most the SDK minor. If the server requires a newer Kaniop release, land the compatible operator update and update the server PR against the new base so CI checks the new pair.
+
+Review server release notes before merging and upgrade [one Kanidm minor at a time](https://kanidm.github.io/kanidm/stable/server_updates.html). After Flux reconciles, confirm that the StatefulSet and all Kanidm Pods run the requested image, that every replica is Ready, and that an actual OIDC login works. If Flux applies the new Kanidm resource and the Pods keep running the previous image, inspect the Kanidm resource status and `UpgradeBlocked` events for Kaniop's reason.
+
 ## Write references
 
 - **Default:** `name:tag@sha256:digest`. The digest makes the pull reproducible and the tag tells Renovate what to follow. Renovate can update the digest while retaining the tag, or propose a newer tag with its matching digest. An exact version tag alone, such as `26.07-py3`, is not a content lock, because the registry can repoint it.

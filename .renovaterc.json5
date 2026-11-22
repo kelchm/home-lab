@@ -169,12 +169,12 @@
       allowedVersions: "/^24\\.04$/",
     },
     {
-      // Kaniop rejects kanidm server minors newer than its bundled client SDK.
-      // Ceiling value is machine-managed by the "Kanidm Ceiling Sync" workflow.
-      description: "kanidm/server: cap at the minor supported by kaniop's SDK",
+      // Repository Validation checks each proposed minor against the pinned Kaniop release.
+      description: "kanidm/server: propose each minor for compatibility validation and review",
       matchDatasources: ["docker"],
       matchPackageNames: ["/kanidm/server$/"],
-      allowedVersions: "<1.12.0",
+      separateMultipleMinor: true,
+      automerge: false,
     },
     {
       // Docker versioning reads "nbxyz24" as a suffix, and a different suffix

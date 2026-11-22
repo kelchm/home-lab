@@ -33,6 +33,10 @@ The same pinned Renovate job runs `scripts/ci/test-renovate-caddy.mjs` against t
 
 The repository configuration job also runs `scripts/ci/test-renovate-cni.mjs` with the same pinned Renovate installation. It checks release agreement and immutable image/source references in the three remote CNI/device-plugin apps, rejects manual drift and missing extraction, and exercises paired release updates plus same-release digest refreshes. The ordinary Kustomize/Flate/schema jobs validate the actual upstream artifacts and local overlays. See [CNI and device-plugin releases](runbooks/dependency-updates.md#cni-and-device-plugin-releases) for provenance, effective render changes and operational acceptance; these offline checks do not establish live CNI or IPAM health.
 
+## Kanidm compatibility
+
+The Kanidm Compatibility job runs on PRs changing either release pin, the checker, its tests or their workflow/toolchain, and on every push to `main`. It checks the manifests in the proposed merge against the SDK resolved in the pinned Kaniop release's upstream `Cargo.lock`. A failed fetch or an unsupported version pair fails `Validation Success`. Run `python3 scripts/ci/test-kanidm-compatibility.py` for the offline boundary tests, or `mise exec aqua:mikefarah/yq -- python3 scripts/ci/validate-kanidm-compatibility.py` to check the current pins. The [dependency updates runbook](runbooks/dependency-updates.md#kaniop-and-kanidm-compatibility) covers rollout verification.
+
 ## Label checks
 
 Label Catalog Validation runs the pinned label-sync action in read-only dry-run mode when label configuration or its workflows change on a PR, and on every push to `main`. It parses the catalog and prints planned label changes in the job log. Errors reported by the action fail `Validation Success`; planned deletions or merges are visible but do not themselves fail the dry run. The separate Label Sync workflow applies catalog changes after merge.

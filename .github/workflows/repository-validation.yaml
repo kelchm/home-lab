@@ -26,6 +26,7 @@ jobs:
       bootstrap_changed: ${{ steps.changed-files.outputs.bootstrap_any_changed || 'true' }}
       docs_changed: ${{ steps.changed-files.outputs.docs_any_changed || 'true' }}
       hosts_changed: ${{ steps.changed-files.outputs.hosts_any_changed || 'true' }}
+      kanidm_compatibility_changed: ${{ steps.changed-files.outputs.kanidm_compatibility_any_changed || 'true' }}
       kubernetes_changed: ${{ steps.changed-files.outputs.kubernetes_any_changed || 'true' }}
       labels_changed: ${{ steps.changed-files.outputs.labels_any_changed || 'true' }}
       network_changed: ${{ steps.changed-files.outputs.network_any_changed || 'true' }}
@@ -59,6 +60,13 @@ jobs:
               - '.mise.toml'
               - '**/*.md'
               - 'scripts/ci/validate-docs-index.sh'
+            kanidm_compatibility:
+              - '.github/workflows/repository-validation.yaml'
+              - '.mise.toml'
+              - 'kubernetes/apps/identity/kaniop/app/ocirepository.yaml'
+              - 'kubernetes/apps/identity/kanidm/app/kanidm.yaml'
+              - 'scripts/ci/validate-kanidm-compatibility.py'
+              - 'scripts/ci/test-kanidm-compatibility.py'
             kubernetes:
               - '.github/workflows/repository-validation.yaml'
               - '.mise.toml'
@@ -108,7 +116,6 @@ jobs:
               - 'network/**'
             scripts:
               - '.github/workflows/repository-validation.yaml'
-              - '.github/workflows/kanidm-ceiling-sync.yaml'
               - '.github/workflows/renovate-problems.yaml'
               - '.mise.toml'
               - '.renovaterc.json5'
@@ -293,6 +300,35 @@ jobs:
       - name: Diff not required
         if: github.event_name != 'pull_request' || needs.pre-job.outputs.kubernetes_changed != 'true'
         run: echo "Flate diff is only produced for Kubernetes pull requests."
+
+  kanidm-compatibility:
+    name: Kanidm Compatibility
+    needs: pre-job
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        if: needs.pre-job.outputs.kanidm_compatibility_changed == 'true'
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Install yq
+        if: needs.pre-job.outputs.kanidm_compatibility_changed == 'true'
+        uses: jdx/mise-action@90f833d396d0cc3674b631d2d225e306476c303a # v5.2.10
+        with:
+          install_args: "aqua:mikefarah/yq"
+
+      - name: Test the compatibility check offline
+        if: needs.pre-job.outputs.kanidm_compatibility_changed == 'true'
+        run: python3 scripts/ci/test-kanidm-compatibility.py
+
+      - name: Check Kanidm against the pinned Kaniop release
+        if: needs.pre-job.outputs.kanidm_compatibility_changed == 'true'
+        run: python3 scripts/ci/validate-kanidm-compatibility.py
+
+      - name: No Kanidm compatibility changes
+        if: needs.pre-job.outputs.kanidm_compatibility_changed != 'true'
+        run: echo "Kanidm compatibility validation is not required."
 
   kubernetes:
     name: Kubernetes Static Validation
@@ -621,12 +657,6 @@ jobs:
         if: needs.pre-job.outputs.scripts_changed == 'true'
         run: .agents/skills/talos-rollout/scripts/test-gates.sh
 
-      - name: Validate Kanidm ceiling sync
-        if: needs.pre-job.outputs.scripts_changed == 'true'
-        run: |
-          scripts/ci/test-sync-kanidm-version-ceiling.sh
-          scripts/ci/test-publish-kanidm-version-ceiling.sh
-
       - name: Test bootstrap scripts
         if: needs.pre-job.outputs.scripts_changed == 'true'
         run: scripts/ci/test-bootstrap-scripts.sh
@@ -869,6 +899,7 @@ jobs:
       - labels
       - flate-test
       - flate-diff
+      - kanidm-compatibility
       - kubernetes
       - talos
       - bootstrap
