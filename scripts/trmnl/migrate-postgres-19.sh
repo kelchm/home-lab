@@ -95,11 +95,13 @@ create_pod() {
               "test ! -d \"$PGDATA\" || test -z \"$(ls -A \"$PGDATA\")\""
             end) +
             " || { echo Invalid PGDATA on migration claim >&2; exit 1; }; " +
+            # Leave the target application database for pg_restore --create.
+            (if $role == "target" then "export POSTGRES_DB=postgres; " else "" end) +
             "exec docker-entrypoint.sh postgres -c listen_addresses="
           ],
           readinessProbe: {
             exec: {command: ["/bin/sh", "-ec",
-              "test \"$(cat /proc/1/comm)\" = postgres && pg_isready -U \"$POSTGRES_USER\" -d \"$POSTGRES_DB\""]},
+              "test \"$(cat /proc/1/comm)\" = postgres && pg_isready -U \"$POSTGRES_USER\" -d postgres"]},
             periodSeconds: 2,
             timeoutSeconds: 3
           }
@@ -145,6 +147,15 @@ ORDER BY schemaname, tablename
 SELECT 'sequence', schemaname || '.' || sequencename, last_value FROM pg_sequences
   WHERE schemaname NOT IN ('information_schema', 'pg_catalog') ORDER BY schemaname, sequencename;
 SELECT 'extension', extname FROM pg_extension ORDER BY extname;
+SELECT 'database', pg_get_userbyid(datdba), pg_encoding_to_char(encoding),
+       datlocprovider, datcollate, datctype,
+       (SELECT array_agg(acl::text ORDER BY acl::text COLLATE "C") FROM unnest(datacl) AS acl)
+FROM pg_database WHERE datname = current_database();
+SELECT 'setting', CASE WHEN setrole = 0 THEN '' ELSE pg_get_userbyid(setrole)::text END,
+       setdatabase <> 0, unnest(setconfig)
+FROM pg_db_role_setting
+WHERE setdatabase = 0 OR setdatabase = (SELECT oid FROM pg_database WHERE datname = current_database())
+ORDER BY 2, 3, 4;
 SELECT 'role', rolname, rolsuper, rolinherit, rolcreaterole, rolcreatedb, rolcanlogin,
        rolreplication, rolbypassrls, rolconnlimit, rolvaliduntil, md5(rolpassword)
 FROM pg_authid WHERE left(rolname, 3) <> 'pg_' ORDER BY rolname;
@@ -165,7 +176,7 @@ create_pod "$target_pod" "$target_claim" target
 if ! dump_roles |
   "${kube[@]}" exec -i "$target_pod" -- sh -ec '
     export PGOPTIONS="-c log_statement=none -c log_min_error_statement=panic"
-    exec psql -Xq -v ON_ERROR_STOP=1 --single-transaction -U "$POSTGRES_USER" -d "$POSTGRES_DB" -f - >/dev/null 2>&1
+    exec psql -Xq -v ON_ERROR_STOP=1 --single-transaction -U "$POSTGRES_USER" -d postgres -f - >/dev/null 2>&1
   '; then
   echo "$app role restore failed. The PostgreSQL 19 claim is not marked ready." >&2
   exit 1
@@ -173,9 +184,9 @@ fi
 
 "${kube[@]}" exec "$source_pod" -- sh -ec '
   export PGOPTIONS="-c default_transaction_read_only=on"
-  exec pg_dump -U "$POSTGRES_USER" -d "$POSTGRES_DB" --format=custom --lock-wait-timeout=5s
+  exec pg_dump -U "$POSTGRES_USER" -d "$POSTGRES_DB" --create --format=custom --lock-wait-timeout=5s
 ' | "${kube[@]}" exec -i "$target_pod" -- sh -ec '
-  exec pg_restore -U "$POSTGRES_USER" -d "$POSTGRES_DB" --exit-on-error --single-transaction
+  exec pg_restore -U "$POSTGRES_USER" -d postgres --create --exit-on-error
 '
 
 source_fingerprint=$(fingerprint "$source_pod")
@@ -188,4 +199,4 @@ fi
   test "$(cat "$PGDATA/PG_VERSION")" = 19
   touch "$PGDATA/.trmnl-pg19-restored"
 '
-printf '%s: table contents, sequences, extensions and roles match on %s\n' "$app" "$target_claim"
+printf '%s: table contents, sequences, extensions, roles and database metadata match on %s\n' "$app" "$target_claim"

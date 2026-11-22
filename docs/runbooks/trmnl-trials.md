@@ -113,7 +113,7 @@ Terminus and BYOS Next keep their databases in dedicated Longhorn claims. The cu
 | Terminus | `terminus-database` | `terminus-pg19` | `/up`, sign in, open an existing device and render a preview |
 | BYOS Next | `byos-next` | `byos-next-pg19` | `/sign-in`, sign in, open an existing recipe and render a preview |
 
-On 2026-11-22, isolated copies of the trial databases restored into PostgreSQL 19.0 and back into 18.7 with matching data, sequences and extensions. That rehearsal skipped access-control lists. The first live transfer then stopped on a grant to BYOS Next's separate login role. Both live trials recovered on their original 18 claims. The revised helper restored fresh isolated copies of both live databases with roles and grants included. A disposable fixture also passed a password-authenticated read using the restored application role. Application smoke tests are part of the live acceptance.
+On 2026-11-22, isolated copies of the trial databases restored into PostgreSQL 19.0 and back into 18.7 with matching data, sequences and extensions. That rehearsal skipped access-control lists. The first live transfer then stopped on a grant to BYOS Next's separate login role. Both live trials recovered on their original 18 claims. The revised helper restored fresh isolated copies of both live databases and verified roles, grants and database metadata. Disposable fixtures also verified password authentication and that the restored application role could connect, read a granted table and use its original database-scoped settings. Application smoke tests are part of the live acceptance.
 
 ### Prepare both databases before merging
 
@@ -124,7 +124,7 @@ kubectl -n trmnl-trials create -f kubernetes/apps/trmnl-trials/app/postgres-19-c
 kubectl -n trmnl-trials wait --for=jsonpath='{.status.phase}'=Bound pvc/terminus-pg19 pvc/byos-next-pg19 --timeout=120s
 ```
 
-For each trial, set `app` to its name. Suspend its HelmRelease, wait for any active reconciliation to finish, then scale down the Deployment. Confirm that its Pod, including the Terminus worker, is gone. The [migration helper](../../scripts/trmnl/migrate-postgres-19.sh) checks suspension, zero replicas and that no Pod mounts either claim before starting its transfer Pods. The two database processes listen only on local sockets. The helper streams roles and login verifiers first, then restores the final database dump with its grants. It compares roles, memberships, table contents, sequences and extensions before marking the target restored. It removes its Pods on exit.
+For each trial, set `app` to its name. Suspend its HelmRelease, wait for any active reconciliation to finish, then scale down the Deployment. Confirm that its Pod, including the Terminus worker, is gone. The [migration helper](../../scripts/trmnl/migrate-postgres-19.sh) checks suspension, zero replicas and that no Pod mounts either claim before starting its transfer Pods. The two database processes listen only on local sockets. The helper streams roles and login verifiers first, then creates the application database from the final dump to preserve database-level grants and settings. It compares database metadata, roles, memberships, table contents, sequences and extensions before marking the target restored. It removes its Pods on exit.
 
 ```sh
 app=terminus
