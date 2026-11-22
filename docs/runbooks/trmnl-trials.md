@@ -157,7 +157,7 @@ Verify the ready container is PostgreSQL 19 on its new claim. Check PostgreSQL a
 
 ### Recover
 
-Before normal traffic resumes, recovery is to stop the affected trial again, suspend its HelmRelease and revert its claim and image as a pair through a reviewed PR. The original Helm-managed claims have the keep annotation and the new claims are excluded from Flux prune. Confirm the old claim UID and PostgreSQL 18 image in the applied spec before resuming. Keep the PostgreSQL 19 claim for diagnosis and verify app health and restored data on the original claim.
+Before normal traffic resumes, suspend the affected trial's HelmRelease and scale its Deployment to zero again. In a reviewed PR, restore the complete pre-cutover database container and persistence values for that trial. This restores the PostgreSQL 18 image, its original claim, and the image's default entrypoint by removing the PostgreSQL 19 `command` and `args` overrides. The original Helm-managed claims have the keep annotation and the new claims are excluded from Flux prune. Before resuming, confirm the original claim UID and PostgreSQL 18 image, and check that the applied HelmRelease omits both database startup overrides. Keep the PostgreSQL 19 claim for diagnosis and verify app health and restored data on the original claim.
 
 Once a trial has accepted writes on PostgreSQL 19, the 18 claim contains the state at the final dump. Preserve the newer claim and get a decision on how to recover those writes before reverting. If rebuilding from a logical backup on a fresh 19 claim, verify the restored data before writing the `.trmnl-pg19-restored` marker.
 
