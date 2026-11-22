@@ -83,22 +83,30 @@ spec:
                 group: helm.toolkit.fluxcd.io
                 kind: HelmRelease
                 name: longhorn
-            - # The TRMNL PostgreSQL cutover changes claims. An automatic
-              # rollback could return an app to the pre-cutover database.
-              patch: |-
-                apiVersion: helm.toolkit.fluxcd.io/v2
-                kind: HelmRelease
-                metadata:
-                  name: _
-                spec:
-                  upgrade:
-                    strategy:
-                      name: RetryOnFailure
-                    remediation: null
-              target:
-                group: helm.toolkit.fluxcd.io
-                kind: HelmRelease
-                name: terminus|byos-next
       target:
         group: kustomize.toolkit.fluxcd.io
         kind: Kustomization
+    - # The TRMNL cutover changes database claims. Retry on the selected claim
+      # so a failed upgrade cannot return either app to its pre-cutover state.
+      patch: |-
+        - op: add
+          path: /spec/patches/-
+          value:
+            patch: |-
+              apiVersion: helm.toolkit.fluxcd.io/v2
+              kind: HelmRelease
+              metadata:
+                name: _
+              spec:
+                upgrade:
+                  strategy:
+                    name: RetryOnFailure
+                  remediation: null
+            target:
+              group: helm.toolkit.fluxcd.io
+              kind: HelmRelease
+              name: terminus|byos-next
+      target:
+        group: kustomize.toolkit.fluxcd.io
+        kind: Kustomization
+        name: trmnl-trials
