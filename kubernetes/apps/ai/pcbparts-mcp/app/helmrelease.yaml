@@ -24,11 +24,16 @@ spec:
               # No semver tags published; pin the immutable main-<sha>-<date>
               # tag. amd64-only image — all k8s-prod nodes are amd64.
               repository: ghcr.io/averyy/pcbparts-mcp
-              tag: main-1006673-20261118@sha256:36c16327ed61aeb126601d0e792fddb3e3451cc6738070de649010bbda676ad4
+              tag: main-5b5041f-20261121@sha256:67c22af8b3d55cfc84481f00f4a1c46e9c7d8e30e15c38df2df858c6b88e1b93
             env:
               # Every client arrives from the single MCPHub pod IP, so the
               # per-IP limiter is one global bucket; raise it from the default.
               RATE_LIMIT_REQUESTS: "500"
+              # Keep call diagnostics off, application logs on stdout, and
+              # distributor lookups cached only in memory.
+              CALL_LOG_DIR: ""
+              LOG_PATH: ""
+              DISTRIBUTOR_STORE_PATH: ""
               # MCPHub resolves pcbparts.dev to this private Service so short PDF
               # links use upstream's public resolver. Keep the internal name too.
               # Temporary workaround and removal trigger: ../../mcphub/README.md.
