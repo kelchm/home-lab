@@ -110,6 +110,24 @@ create_pod() {
   created_pods+=("$pod")
 }
 
+dump_roles() {
+  "${kube[@]}" exec -i "$source_pod" -- sh -se <<'SH'
+set -o pipefail
+export PGOPTIONS="-c default_transaction_read_only=on"
+pg_dumpall --roles-only --quote-all-identifiers -U "$POSTGRES_USER" -l "$POSTGRES_DB" |
+  awk -v name="$POSTGRES_USER" '
+    BEGIN {
+      gsub(/"/, "\"\"", name)
+      create_bootstrap_role = "CREATE ROLE \"" name "\";"
+    }
+    # initdb already created this role. Preserve its ALTER ROLE and grants.
+    $0 == create_bootstrap_role { skipped++; next }
+    { print }
+    END { if (skipped != 1) exit 1 }
+  '
+SH
+}
+
 fingerprint() {
   "${kube[@]}" exec -i "$1" -- sh -ec '
     export PGOPTIONS="-c default_transaction_read_only=on"
@@ -127,12 +145,31 @@ ORDER BY schemaname, tablename
 SELECT 'sequence', schemaname || '.' || sequencename, last_value FROM pg_sequences
   WHERE schemaname NOT IN ('information_schema', 'pg_catalog') ORDER BY schemaname, sequencename;
 SELECT 'extension', extname FROM pg_extension ORDER BY extname;
+SELECT 'role', rolname, rolsuper, rolinherit, rolcreaterole, rolcreatedb, rolcanlogin,
+       rolreplication, rolbypassrls, rolconnlimit, rolvaliduntil, md5(rolpassword)
+FROM pg_authid WHERE left(rolname, 3) <> 'pg_' ORDER BY rolname;
+SELECT 'membership', pg_get_userbyid(roleid), pg_get_userbyid(member), pg_get_userbyid(grantor),
+       admin_option, inherit_option, set_option
+FROM pg_auth_members
+WHERE left(pg_get_userbyid(roleid), 3) <> 'pg_' OR left(pg_get_userbyid(member), 3) <> 'pg_'
+ORDER BY 2, 3, 4;
 SQL
 }
 
 create_pod "$source_pod" "$source_claim" source
 create_pod "$target_pod" "$target_claim" target
 "${kube[@]}" wait --for=condition=Ready "pod/$source_pod" "pod/$target_pod" --timeout=180s
+
+# Restore cluster-wide roles before the database dump applies ownership and grants.
+# Keep the role dump, which contains password verifiers, off disk and out of logs.
+if ! dump_roles |
+  "${kube[@]}" exec -i "$target_pod" -- sh -ec '
+    export PGOPTIONS="-c log_statement=none -c log_min_error_statement=panic"
+    exec psql -Xq -v ON_ERROR_STOP=1 --single-transaction -U "$POSTGRES_USER" -d "$POSTGRES_DB" -f - >/dev/null 2>&1
+  '; then
+  echo "$app role restore failed. The PostgreSQL 19 claim is not marked ready." >&2
+  exit 1
+fi
 
 "${kube[@]}" exec "$source_pod" -- sh -ec '
   export PGOPTIONS="-c default_transaction_read_only=on"
@@ -151,4 +188,4 @@ fi
   test "$(cat "$PGDATA/PG_VERSION")" = 19
   touch "$PGDATA/.trmnl-pg19-restored"
 '
-printf '%s: table contents, sequences and extensions match on %s\n' "$app" "$target_claim"
+printf '%s: table contents, sequences, extensions and roles match on %s\n' "$app" "$target_claim"
