@@ -104,6 +104,63 @@ To pause one server without deleting its state, commit `controllers.main.replica
 
 After the owner chooses a winner, export useful settings/images, then remove unwanted HelmRelease references and manifests from the app Kustomization. Keep their Secrets and retained PVCs until data deletion is explicitly wanted. For complete retirement, remove the namespace's `ks.yaml` reference first so Flux uninstalls the Helm releases and removes routes, remove the TRMNL allowance from the Traefik admin policy, and then remove the remaining trial configuration. Namespace pruning is disabled and Helm PVC retention is enabled; explicitly deleting the namespace or PVCs destroys trial data and needs a deliberate final decision. A rollback to a previous application image may not reverse database migrations.
 
+## PostgreSQL 19 cutover
+
+Terminus and BYOS Next keep their databases in dedicated Longhorn claims. The cutover changes both the image and the claim. PostgreSQL 19 starts only on a restored database and Flux retries failures on the selected claim. Keep the PostgreSQL 18 claims until the owner approves retiring them.
+
+| Trial | PostgreSQL 18 claim | PostgreSQL 19 claim | Smoke test |
+| --- | --- | --- | --- |
+| Terminus | `terminus-database` | `terminus-pg19` | `/up`, sign in, open an existing device and render a preview |
+| BYOS Next | `byos-next` | `byos-next-pg19` | `/sign-in`, sign in, open an existing recipe and render a preview |
+
+On 2026-11-22, isolated copies of the actual trial databases restored into the pinned PostgreSQL 19.0 and back into 18.7. Terminus had 27 tables and 329 rows. BYOS Next had 17 tables and 37 rows. Table fingerprints, sequence state and extension inventories matched. Application smoke tests are part of the live acceptance.
+
+### Prepare both databases before merging
+
+Use the reviewed migration branch in an approved window. Both trials are offline until their claims are restored and the cutover PR has merged. Arrange for trial users and devices to stay off during verification. Confirm the production context, both PostgreSQL 18 Deployments and their original claims match the table, and each original volume has a completed Longhorn backup. Record the old claim UIDs and the two HelmRelease revisions. The [new claims](../../kubernetes/apps/trmnl-trials/app/postgres-19-claims.yaml) can be created from the reviewed branch before the HelmRelease changes land:
+
+```sh
+kubectl -n trmnl-trials create -f kubernetes/apps/trmnl-trials/app/postgres-19-claims.yaml
+kubectl -n trmnl-trials wait --for=jsonpath='{.status.phase}'=Bound pvc/terminus-pg19 pvc/byos-next-pg19 --timeout=120s
+```
+
+For each trial, set `app` to its name. Suspend its HelmRelease, wait for any active reconciliation to finish, then scale down the Deployment. Confirm that its Pod, including the Terminus worker, is gone. The [migration helper](../../scripts/trmnl/migrate-postgres-19.sh) checks suspension, zero replicas and that no Pod mounts either claim before starting its transfer Pods. The two database processes listen only on local sockets. The helper streams the final dump to the new claim and marks it restored only after the table contents, sequences and extensions match. It removes its Pods on exit.
+
+```sh
+app=terminus
+flux -n trmnl-trials suspend helmrelease "$app"
+kubectl -n trmnl-trials get helmrelease "$app"
+# Wait for active reconciliation to finish before scaling down.
+kubectl -n trmnl-trials scale "deployment/$app" --replicas=0
+kubectl -n trmnl-trials get pods -l "app.kubernetes.io/instance=$app"
+bash scripts/trmnl/migrate-postgres-19.sh "$app"
+```
+
+Repeat for `byos-next`. Require a successful transfer for both trials in the same maintenance window, with the 18 Deployments kept at zero and the transfer Pods gone, before merging. If either transfer fails, leave the cutover PR open. Once the helper Pods are gone, bring each stopped 18 Deployment back to one replica and resume its HelmRelease. Restarting an 18 Deployment invalidates its 19 restore, even if that transfer succeeded and wrote a marker. Before retrying, replace every invalidated 19 target with an empty claim and rerun both transfers. Preserve an incomplete claim for diagnosis until the owner approves replacing it.
+
+### Activate and verify
+
+With both restores verified and the HelmReleases suspended, merge the cutover PR and reconcile `trmnl-trials` against the new Git revision. Confirm the two HelmRelease specs reference their new claims and PostgreSQL 19 image, still have `spec.suspend: true`, and use `RetryOnFailure` without rollback remediation. Confirm the old claims still have the same UIDs and the new claims are Bound.
+
+```sh
+flux -n flux-system reconcile kustomization cluster-apps --with-source
+flux -n trmnl-trials reconcile kustomization trmnl-trials
+kubectl -n trmnl-trials get helmrelease terminus byos-next
+# Check the applied specs and suspension before resuming either release.
+app=terminus
+flux -n trmnl-trials resume helmrelease "$app"
+flux -n trmnl-trials reconcile helmrelease "$app"
+kubectl -n trmnl-trials rollout status "deployment/$app" --timeout=300s
+```
+
+Verify the ready container is PostgreSQL 19 on its new claim. Check PostgreSQL and application logs, run the smoke test, and verify the restored devices or recipes are present. Repeat for `byos-next`. Before reopening normal use, verify both apps and their backups, and record the cutover and retained claim UIDs in [the trial issue](https://github.com/kelchm/home-lab/issues/1219).
+
+### Recover
+
+Before normal traffic resumes, recovery is to stop the affected trial again, suspend its HelmRelease and revert its claim and image as a pair through a reviewed PR. The original Helm-managed claims have the keep annotation and the new claims are excluded from Flux prune. Confirm the old claim UID and PostgreSQL 18 image in the applied spec before resuming. Keep the PostgreSQL 19 claim for diagnosis and verify app health and restored data on the original claim.
+
+Once a trial has accepted writes on PostgreSQL 19, the 18 claim contains the state at the final dump. Preserve the newer claim and get a decision on how to recover those writes before reverting. If rebuilding from a logical backup on a fresh 19 claim, verify the restored data before writing the `.trmnl-pg19-restored` marker.
+
 ## Verification record
 
 The initial eight-server deployment was adopted by Flux on 2026-11-01 at `f8687927e4f648ae818ce9b9f035a2dcda676d0b`. All eight releases and private routes were healthy. Synthetic device setup/display/image requests succeeded through HTTPS for Terminus and Inker (800×480 PNG) and the four subsequently retired experimental servers (800×480 BMP). Those results established basic protocol and rendering behavior, rather than project maturity or physical-board compatibility.

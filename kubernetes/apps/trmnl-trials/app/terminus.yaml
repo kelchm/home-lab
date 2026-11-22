@@ -80,9 +80,17 @@ spec:
           database:
             image:
               repository: docker.io/library/postgres
-              tag: 18.7-alpine@sha256:0115267ab5a509022df9319c77be365cef335adb71556c75f60f5360ee247e71
+              tag: 19.0-alpine@sha256:8b0ff4cdf221f0c53d7fcda681d3b461be725c492cd881c5ec9c0ad25023f188
             env:
               PGDATA: /var/lib/postgresql/data/pgdata
+            command: ["/bin/sh", "-ec"]
+            args:
+            - |
+              if [ "$(cat "$PGDATA/PG_VERSION" 2>/dev/null)" != 19 ] || [ ! -f "$PGDATA/.trmnl-pg19-restored" ]; then
+                echo "PostgreSQL 19 requires a verified trial database restore" >&2
+                exit 1
+              fi
+              exec docker-entrypoint.sh postgres
             envFrom:
             - secretRef:
                 name: terminus-trial
@@ -196,11 +204,7 @@ spec:
             port: 2300
     persistence:
       database:
-        type: persistentVolumeClaim
-        accessMode: ReadWriteOnce
-        size: 2Gi
-        storageClass: longhorn
-        retain: true
+        existingClaim: terminus-pg19
         advancedMounts:
           main:
             database:
