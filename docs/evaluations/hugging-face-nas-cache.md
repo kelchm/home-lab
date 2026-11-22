@@ -2,7 +2,9 @@
 
 Evaluated September 26 to October 4, 2026. The goal was that any LAN client sets `HF_ENDPOINT` to Athena, asks for a model by its original Hugging Face name, and each file crosses the internet once and is then kept.
 
-**Outcome, October 4, 2026.** None of the candidates was qualified against the whole contract, and none is selected as the archive. Some failed a gate they were run against; others were never run against every gate. ModelKeep v0.4.12 keeps running unchanged on Athena as a pull-through mirror for public repositories ([#634](https://github.com/kelchm/home-lab/issues/634)). Nothing is being built in its place: the custom prototype was a learning exercise and is retired ([PR #711](https://github.com/kelchm/home-lab/pull/711) closed unmerged, [#710](https://github.com/kelchm/home-lab/issues/710) closed as not planned).
+**Outcome, October 4, 2026.** None of the candidates was qualified against the whole contract, and none is selected as the archive. Some failed a gate they were run against; others were never run against every gate. ModelKeep v0.4.12 was left running on Athena as a pull-through mirror for public repositories ([#634](https://github.com/kelchm/home-lab/issues/634)). Nothing was being built in its place: the custom prototype was a learning exercise and is retired ([PR #711](https://github.com/kelchm/home-lab/pull/711) closed unmerged, [#710](https://github.com/kelchm/home-lab/issues/710) closed as not planned).
+
+**Operational update, November 17, 2026.** The owner retired ModelKeep from managed deployments. Its model files remain available directly on Athena; the [retirement note](../../synology/modelkeep/) records the retained state and manual shutdown procedure. The results below remain historical evaluation evidence.
 
 This page records what was tested, what it found, and what a replacement would have to do. Every result describes one pinned version on the dates given. None is a finding that a project cannot work, that its current release still behaves this way, or that writing our own would be cheaper.
 

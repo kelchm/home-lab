@@ -1,5 +1,5 @@
 # Athena deployment: upstream binaries plus an opt-in HF helper patch.
-FROM ubuntu:24.04@sha256:2198e4c65076e9cb0b3d695219df667c0e3b0072da64ca3c2648aca17dcecaf5
+FROM ubuntu:24.04@sha256:9c7f200c07e3d4a03e7249d2c16bf66a51120fb876aa2242cf31451412543289
 
 ARG DEBIAN_FRONTEND=noninteractive
 RUN apt-get update \

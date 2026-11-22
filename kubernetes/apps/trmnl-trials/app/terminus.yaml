@@ -20,7 +20,7 @@ spec:
           app:
             image:
               repository: ghcr.io/usetrmnl/terminus
-              tag: latest@sha256:ca0a62a1c35d4f0eda3d18381243a127edf950047e5fd66213cf07d18b66e8b8
+              tag: latest@sha256:7768174d7a9422162a472376411fdb8af59a9f584a9842687bc62f8d7c6707f7
             env:
               TZ: America/New_York
               HANAMI_PORT: '2300'
@@ -80,7 +80,7 @@ spec:
           database:
             image:
               repository: docker.io/library/postgres
-              tag: 18.7-alpine@sha256:b6972e1115a4ff8eba5d7f7d19184926d1e16d7d1136ae1e1a7ebf286da0f015
+              tag: 18.7-alpine@sha256:0115267ab5a509022df9319c77be365cef335adb71556c75f60f5360ee247e71
             env:
               PGDATA: /var/lib/postgresql/data/pgdata
             envFrom:
@@ -114,7 +114,7 @@ spec:
           worker:
             image:
               repository: ghcr.io/usetrmnl/terminus
-              tag: latest@sha256:ca0a62a1c35d4f0eda3d18381243a127edf950047e5fd66213cf07d18b66e8b8
+              tag: latest@sha256:7768174d7a9422162a472376411fdb8af59a9f584a9842687bc62f8d7c6707f7
             env:
               HANAMI_PORT: '2300'
               API_URI: https://terminus.home.kelch.io
@@ -140,7 +140,7 @@ spec:
             image:
               repository: docker.io/valkey/valkey
               # Minor-only aliases can point to RCs; retain full release precision.
-              tag: 9.1.3-alpine@sha256:bf09d58e96d6b4524a15396b65b242bbe18beebbcc15a04d8ee75ddac62fae0b
+              tag: 9.1.4-alpine@sha256:56729e68bdda139cbd3f6a2538683dc3523325fc5711ea1a379938f1b37893f0
             command:
             - valkey-server
             args:

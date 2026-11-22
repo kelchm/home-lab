@@ -1,110 +1,39 @@
-# ModelKeep on Athena
+# ModelKeep retirement
 
-[ModelKeep](https://github.com/kaznak/modelkeep) v0.4.12 is a pull-through mirror for public Hugging Face repositories. A LAN client points `HF_ENDPOINT` at Athena and requests the original repository IDs. The first request for a file downloads it from Hugging Face through the official client; later requests from any device are served from the archive on Athena, including while Hugging Face is unreachable. [home-lab#608](https://github.com/kelchm/home-lab/issues/608) records the evaluation that selected it.
+ModelKeep is deprecated and removed from this repository's managed deployments at the owner's request on 2026-11-17. It is no longer a supported Hugging Face mirror. Remove any client `HF_ENDPOINT` or `MODEL_ENDPOINT` override pointing at its former endpoints, `http://10.32.10.5:8090` and `http://10.32.25.5:8090`.
 
-doco-cd deploys this project from `main`; the [Synology README](../README.md) describes the deployment model, rollback, and break-glass apply.
+The [deployment issue](https://github.com/kelchm/home-lab/issues/634) and [NAS cache evaluation](../../docs/evaluations/hugging-face-nas-cache.md) retain the historical results and limitations. The upstream source became inaccessible, so the proposed v0.4.13 update was never qualified or deployed.
 
-## Endpoints
+## Retained archive
 
-| Address | Clients |
-|---|---|
-| `http://10.32.10.5:8090` | Main VLAN devices |
-| `http://10.32.25.5:8090` | Storage VLAN hosts, such as the Sparks |
-
-The download port has no authentication, and any client that reaches it can make Athena download public repositories. There is no management listener and no Hugging Face token, so gated and private repositories are unavailable.
-
-## Client configuration
-
-```sh
-export HF_ENDPOINT=http://10.32.10.5:8090
-export HF_HUB_DISABLE_XET=1
-hf download Qwen/Qwen2.5-0.5B-Instruct
-```
-
-ModelKeep never redirects clients to Hugging Face's CDN, and the evaluation's Xet-enabled clients also stayed on the mirror; `HF_HUB_DISABLE_XET=1` is the upstream-recommended setting. llama.cpp reads `MODEL_ENDPOINT`, falling back to `HF_ENDPOINT`.
-
-## Behavior to know
-
-- **Large files that are not archived yet.** ModelKeep answers `503` after 8 seconds while it keeps downloading, and a retry joins that download without fetching anything again. `huggingface_hub` retries on its own, but a multi-gigabyte file can exhaust its retries, and llama.cpp fails on the first `503`. Re-running the same command succeeds once the file is archived. Archive large models ahead of use with the [warm-up procedure](#archive-a-model-ahead-of-use).
-- **Pin a revision for reproducible results.** Requesting a file that the archived `main` does not hold can move `main` to Hugging Face's current commit. Requests by commit hash are unaffected.
-- **Wildcards acquire every matching file.** A request path containing `*` is passed to the downloader as a pattern.
-- **Integrity.** ModelKeep hashes and verifies the bytes it stores, but does not compare them with Hugging Face's published hashes. [Check the archive against upstream hashes](#verify-against-upstream-hashes) after large acquisitions.
-
-## State
-
-`/volume1/models/modelkeep` on the checksummed `models` shared folder holds the archive as ordinary files, readable without ModelKeep:
+Retirement removes the service, not its model files. Keep `/volume1/models/modelkeep`, its manifests, refs, payloads and cache directories. The DSM account `modelkeep` (UID 1045, group `users`/GID 100) and its ACLs remain so these files retain their existing ownership and access.
 
 ```text
 /volume1/models/modelkeep/
 ├── models/<org>/<repo>/
-│   ├── revisions/<commit>/     # payload files, .modelkeep-manifest.json, .modelkeep-upstream-files.json
-│   └── refs/<name>             # commit a mutable ref resolves to
-├── tmp/                        # in-progress acquisitions
-└── cache/xet/                  # official client's chunk cache
+│   ├── revisions/<commit>/
+│   └── refs/<name>
+├── tmp/
+└── cache/xet/
 ```
 
-The container runs as the DSM service account `modelkeep` (`1045:100`). The directory must exist, owned by that account and with an access entry for it, before the first deployment:
+The files can be read without the service. [SparkNest's inventory loader](../sparknest/ingest.py) retains support for ModelKeep manifests as an offline import format; it does not call the mirror. This does not establish that every retained file has been imported into SparkNest, that a partial revision is a complete model, or that a separate backup exists. Keep the original data until any future deletion is separately approved and its required copies verified.
 
-```sh
-ssh kelchm@10.32.20.5 '
-  set -eu
-  sudo mkdir /volume1/models/modelkeep
-  sudo chown modelkeep:users /volume1/models/modelkeep
-  sudo /usr/syno/bin/synoacltool -add /volume1/models/modelkeep user:modelkeep:allow:rwxpdDaARWc--:fd--
-'
-```
+The [historical upstream-hash check](https://github.com/kelchm/home-lab/blob/ffb9f96278042af60ae514f830e72939ebe54072/synology/modelkeep/README.md#verify-against-upstream-hashes) compares the retained ModelKeep manifest hashes with Hugging Face LFS hashes in `.modelkeep-upstream-files.json` without the service. It does not re-hash payload bytes or cover files without an upstream record; use it alongside payload verification, not as proof of a complete or intact archive.
 
-The archive can be rebuilt by downloading again, so it is not backed up.
+## Finish the live retirement
 
-## Archive a model ahead of use
+Removing the target from [`.doco-cd.yml`](../.doco-cd.yml) prevents future deployments but does not stop existing containers. After the retirement commit reaches `main`:
 
-List the repository's files through the mirror, pin the commit, and request each wanted file until it is archived. The `include` expression selects files by path. The script stops with an error if the commit or file list cannot be read, or nothing matches:
+1. Confirm Athena's doco-cd has fetched that revision and resolved its six remaining targets. Check that no ModelKeep deployment is in progress before stopping it; otherwise an already-started deployment could recreate the container.
+2. Confirm no downloads or client connections are active on port 8090. Keep a private copy of the [last tracked Compose definition](https://github.com/kelchm/home-lab/blob/ffb9f96278042af60ae514f830e72939ebe54072/synology/modelkeep/compose.yaml) on Athena for shutdown and recovery.
+3. Set `MODELKEEP_COMPOSE` to that staged file and remove only this Compose project:
 
-```sh
-ssh kelchm@10.32.20.5 '
-  set -eu
-  ep=http://10.32.10.5:8090
-  repo=Qwen/Qwen2.5-7B-Instruct
-  include="\\.(json|safetensors|txt)$"
-  info=$(curl -fsS --connect-timeout 10 --max-time 300 "$ep/api/models/$repo/revision/main")
-  sha=$(printf "%s" "$info" | jq -r .sha)
-  [ ${#sha} -eq 40 ] || { echo "no commit for $repo" >&2; exit 1; }
-  tree=$(curl -fsS --connect-timeout 10 --max-time 300 "$ep/api/models/$repo/tree/$sha?recursive=true")
-  files=$(printf "%s" "$tree" | jq -r --arg re "$include" ".[] | select(.type == \"file\" and (.path | test(\$re))) | .path")
-  [ -n "$files" ] || { echo "no files in $repo match $include" >&2; exit 1; }
-  printf "%s\n" "$files" | while IFS= read -r file; do
-    until curl -fsS -I -o /dev/null "$ep/$repo/resolve/$sha/$file"; do sleep 30; done
-    echo "archived $file"
-  done
-'
-```
+   ```sh
+   sudo /usr/local/bin/docker compose -p modelkeep -f "$MODELKEEP_COMPOSE" down --timeout 30
+   ```
 
-## Verify against upstream hashes
+   Do not pass `--volumes`, remove the archive directory or DSM account, or prune the retained image.
+4. Verify there are no running or stopped containers with `com.docker.compose.project=modelkeep`, no port 8090 listeners or published mappings, and `/volume1/models/modelkeep` still has its previous ownership and directory identity. Confirm doco-cd and the other NAS workloads remain healthy and that a later poll does not recreate ModelKeep.
 
-Each revision records Hugging Face's LFS SHA-256 for its files. This compares them with ModelKeep's manifest. It prints each `MISMATCH`, each revision it could not read (`ERROR`), and each revision without a record (`NO-RECORD`, for revisions archived without upstream metadata), then counts every result; `NOT-ARCHIVED` counts files that a partial revision does not hold. It exits non-zero on any mismatch or error. Small files stored directly in Git are not covered:
-
-```sh
-ssh kelchm@10.32.20.5 '
-  cd /volume1/models/modelkeep/models || exit 1
-  for r in */*/revisions/*/; do
-    [ -d "$r" ] || continue
-    u="$r.modelkeep-upstream-files.json"
-    if [ ! -f "$u" ]; then echo "NO-RECORD $r"; continue; fi
-    sudo jq -r --slurpfile m "$r.modelkeep-manifest.json" \
-      ".files[] | select(.lfs_sha256) | . as \$u | ([\$m[0].files[] | select(.path == \$u.path) | .sha256][0]) as \$s | \"\(if \$s == null then \"NOT-ARCHIVED\" elif \$s == \$u.lfs_sha256 then \"match\" else \"MISMATCH\" end) $r\(\$u.path)\"" \
-      "$u" || echo "ERROR $r"
-  done | awk "{ n[\$1]++ } \$1 == \"MISMATCH\" || \$1 == \"ERROR\" || \$1 == \"NO-RECORD\" { print } END { if (NR == 0) print \"no revisions found\"; for (k in n) print n[k], k; exit (n[\"MISMATCH\"] + n[\"ERROR\"] > 0) }"
-'
-```
-
-A mismatch means the archived file differs from what Hugging Face published; investigate before relying on that revision.
-
-ModelKeep's own `audit` re-hashes every archived file against its manifest:
-
-```sh
-ssh kelchm@10.32.20.5 'sudo /usr/local/bin/docker exec modelkeep-modelkeep-1 /bin/modelkeep audit /data'
-```
-
-## Updates
-
-Before merging an image update, read the release notes and the repository's `docs/adr/` changes for archive-format decisions. The project is young and changes quickly.
+The last deployed image was `ghcr.io/kaznak/modelkeep:v0.4.12@sha256:ce4a960abe4068a1f328e68627f6a8ecfb6f26349fc22438d8e139e62a3070c0`. Its presence on Athena was verified on 2026-11-17; it is retained for recovery. Restoring a mirror requires an intentional decision to restore its Compose definition and deployment target, with the retained data mounted as before. Historical hash checks and ModelKeep's audit were different checks: its audit established consistency with its own manifest, not authenticity against Hugging Face.
