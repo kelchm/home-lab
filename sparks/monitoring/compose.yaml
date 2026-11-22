@@ -17,7 +17,7 @@ x-service: &service
 services:
   node-exporter:
     <<: *service
-    image: quay.io/prometheus/node-exporter:v1.12.1@sha256:1b4e4438faca4dd7e001dd445d161a4a2091b0fededa84093b3a8dfeae1f1be0
+    image: quay.io/prometheus/node-exporter:v1.13.1@sha256:011e2d12c5bff759b90804bda642664775d7b4b127bf5148539bb82d3f590bb7
     user: "65534:65534"
     pid: host
     command:
@@ -50,7 +50,7 @@ services:
   # the host does.
   apt-metrics:
     <<: *service
-    image: docker.io/library/ubuntu:24.04@sha256:73b999393d07f2bf65a40373778a44dc9a6d54ad7718d29247d8ff9413c4d6a8
+    image: docker.io/library/ubuntu:24.04@sha256:9c7f200c07e3d4a03e7249d2c16bf66a51120fb876aa2242cf31451412543289
     # Root without capabilities, to write the root-owned textfile volume.
     user: "0:0"
     entrypoint: ["/bin/sh", "/usr/local/bin/apt-metrics"]
@@ -71,7 +71,7 @@ services:
   # by hand if this service is retired.
   apt-list-refresh:
     <<: *service
-    image: docker.io/library/ubuntu:24.04@sha256:73b999393d07f2bf65a40373778a44dc9a6d54ad7718d29247d8ff9413c4d6a8
+    image: docker.io/library/ubuntu:24.04@sha256:9c7f200c07e3d4a03e7249d2c16bf66a51120fb876aa2242cf31451412543289
     user: "0:0"
     restart: "no"
     labels:
