@@ -24,7 +24,7 @@ spec:
               # No semver tags published; pin the immutable main-<sha>-<date>
               # tag. amd64-only image — all k8s-prod nodes are amd64.
               repository: ghcr.io/averyy/pcbparts-mcp
-              tag: main-c76093c-20261122@sha256:496b75e30a8b5546529369f77e0758125cc38b65aad442d73279d5aede2d8c74
+              tag: main-bd02303-20261122@sha256:07eb13bec192579babece6f253652e5af9246ab7c9adb836ef91bfa84eb1de10
             env:
               # Every client arrives from the single MCPHub pod IP, so the
               # per-IP limiter is one global bucket; raise it from the default.
