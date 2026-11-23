@@ -26,6 +26,7 @@ SHAPES = {
     "deepseek": f"{COMMON} engine_branch inputs_branch inputs_revision patches kit engram",
     "readiness": "mod_files",
     "glm-native": f"{COMMON} {KIT} release_manifest release_sha256 upstream_patch_count kit_patches_sha256",
+    "glm-native-kit": f"{COMMON} {KIT} kit_archive_sha256 engine_version upstream_patch_count upstream_patch_hash build weights drafter",
 }
 # Repository names, image names and package specs are the literal forms consumed
 # by the current builders, not arbitrary URLs, shell expressions or pip options.
@@ -147,6 +148,8 @@ def shape(lock, mod):
         kind = "readiness"
     elif "release_manifest" in lock:
         kind = "glm-native"
+    elif "kit_archive_sha256" in lock:
+        kind = "glm-native-kit"
     elif set(lock) & {"launcher_env", "installed_files", "engine_version"}:
         kind = "glm"
     elif set(lock) & {"kit", "engram", "inputs_revision", "inputs_branch"}:
@@ -209,7 +212,26 @@ def validate_lock(lock, mod):
         hash_value(lock["upstream_patch_hash"], 12, "upstream_patch_hash")
     else:
         pattern(lock["image"], rf"{IMAGE_NAME}:{TAG}", "image", "expected a named local image tag paired with image_id")
-    if kind == "glm":
+    if kind == "glm-native-kit":
+        fields(files, "LICENSE NOTICE.md build.sh prepare.py run.sh serve.py chat_template.jinja", "native kit mod_files")
+        for name, pin in files.items():
+            path = mod / name
+            require(path.is_file() and not path.is_symlink() and hashlib.sha256(path.read_bytes()).hexdigest() == pin,
+                    "mod_files." + name, "missing, linked or changed frozen native kit input")
+        hash_value(lock["kit_archive_sha256"], 64, "kit_archive_sha256")
+        positive(lock["upstream_patch_count"], "upstream_patch_count")
+        hash_value(lock["upstream_patch_hash"], 12, "upstream_patch_hash")
+        pattern(lock["engine_version"], r"[0-9]+\.[0-9]+\.[0-9]+", "engine_version", "expected a release version")
+        build = lock["build"]
+        fields(build, "devel_image runtime_image zig_sha256", "build")
+        for key in ("devel_image", "runtime_image"):
+            image(build[key], f"build.{key}")
+        hash_value(build["zig_sha256"], 64, "build.zig_sha256")
+        source(lock["weights"], "weights")
+        source(lock["drafter"], "drafter")
+        expected = f"1104-{lock['kit_revision'][:7]}-{lock['upstream_patch_hash']}"
+        equal(lock["image"].rsplit(":", 1)[1], expected, "image tag")
+    elif kind == "glm":
         pattern(lock["engine_version"], r"[0-9]+\.[0-9]+\.[0-9]+", "engine_version", "expected a release version")
         env = lock["launcher_env"]
         fields(env, GLM_LAUNCHER, "launcher_env")
@@ -323,7 +345,7 @@ def validate_recipe(recipe, path, locks):
     metadata, defaults = recipe.get("metadata"), recipe.get("defaults")
     require(isinstance(metadata, dict) and isinstance(defaults, dict), "recipe", "metadata and defaults are required")
     equal(metadata.get("profile"), path.stem, "metadata.profile")
-    expected_image = lock["image_id"] if kind in ("qwen-tp1", "deepseek") else lock["image"]
+    expected_image = lock["image_id"] if kind in ("qwen-tp1", "deepseek", "glm-native-kit") else lock["image"]
     equal(recipe.get("container"), expected_image, "container")
     for key in ("engine_revision", "kit_revision", "upstream_patch_count", "upstream_patch_hash"):
         if key in lock:
@@ -334,6 +356,10 @@ def validate_recipe(recipe, path, locks):
         equal(metadata.get("release"), release["release"], "metadata.release")
         equal({"repository": recipe.get("model"), "revision": recipe.get("model_revision")}, release["weights"], "native weights")
         equal({"repository": defaults.get("drafter"), "revision": defaults.get("drafter_revision")}, release["drafter"], "native drafter")
+    elif kind == "glm-native-kit":
+        equal(metadata.get("engine_version"), lock["engine_version"], "metadata.engine_version")
+        equal({"repository": recipe.get("model"), "revision": recipe.get("model_revision")}, lock["weights"], "native weights")
+        equal({"repository": defaults.get("drafter"), "revision": defaults.get("drafter_revision")}, lock["drafter"], "native drafter")
     if kind == "qwen-tp1":
         equal(metadata.get("upstream_patch_count"), lock["kit_patch_count"], "metadata.upstream_patch_count")
     if kind.startswith("qwen"):

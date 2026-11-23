@@ -1,0 +1,34 @@
+{
+  "kit_repository": "MiaAI-Lab/GLM-5.3-Flash-DGX-Sparks-1104",
+  "kit_revision": "6c55c20da31a02d6d381a268fa42f8a9ebe0c5d2",
+  "kit_archive_sha256": "69fff32e3ce8229751c69d59dba9b59e293b3e59d4001eaff92403e0a0968ad7",
+  "engine_repository": "ashhart/TensorFold",
+  "engine_revision": "81de26f649677aa72ae0034d4af6e010cd947038",
+  "engine_version": "1.3.0",
+  "upstream_patch_count": 16,
+  "upstream_patch_hash": "dea5239972ad",
+  "image": "glm53-tf:1104-6c55c20-dea5239972ad",
+  "image_id": "sha256:44b3fdc1cd2b7cf24e4b00bf878ed859d96e35c79ff416922d744daef23ed1af",
+  "weights": {
+    "repository": "Mia-AiLab/GLM-5.3-Flash-EXL3-4bpw-TensorFold",
+    "revision": "078455ffe6472f9a52fbc1139f58b9db2881b25c"
+  },
+  "drafter": {
+    "repository": "incoai/GLM-5.3-Flash-DFlash2",
+    "revision": "bf582e4eacc1810f76656d1811693ff6c6737d2a"
+  },
+  "build": {
+    "devel_image": "nvidia/cuda@sha256:afc92f9727f96346f2912934f11e5a43aa0581aca4a826bd5c8fd4ab6b152bcc",
+    "runtime_image": "nvidia/cuda@sha256:585155539dd4ff2ab653ee59d812aae81a9406a5804596d516c06e3a5719eb26",
+    "zig_sha256": "9e8d11661d4ae3bd57702a3832781e23ad151dde5798e16a5ccd503f65234ff8"
+  },
+  "mod_files": {
+    "LICENSE": "cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30",
+    "NOTICE.md": "e89515bba4cfb70d27b3dc04fb5dbb55a2079f4b21cd57a5782a53ad804ebaf1",
+    "build.sh": "b71434fae638feab59587c3ca02edf312bb0f69aad0b6c4743f0273eec5c1567",
+    "chat_template.jinja": "f2e36c6b7fdd89f5f61564635227a1708e1601357cd41f9b5c0190911573d1e2",
+    "prepare.py": "879757c20fb3b5a5ce2c5eb39a8a2aecb49c316281edb1ecbe875b4b050a232b",
+    "run.sh": "8eb750ab1c526816000c6d9d03944f7a709d6539613f0d77a12de5be16556e30",
+    "serve.py": "22a69dcae47f98e353f44cd75b2ba23e4737947178b059a527b5a38109b74e2f"
+  }
+}

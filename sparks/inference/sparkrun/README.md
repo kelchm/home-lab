@@ -23,6 +23,36 @@ Every profile follows the contract in [#943](https://github.com/kelchm/home-lab/
 
 The native [`glm53-mia-2026.11.07` trial](../deployments/glm53-mia-2026.11.07-agent-1m/README.md) uses this repository’s existing recipe/mod/plugin and rsync flow. The owner authorized a November 7 comparison window with a Python baseline first; the later rerun authorization explicitly required a final return to Python, which passed readiness. The selected release was rejected; [#847](https://github.com/kelchm/home-lab/issues/847) tracks the separate launch-tooling migration.
 
+### TensorFold 1.3.0 benchmark profile
+
+[`glm53-mia-1104-6c55c20-benchmark.yaml`](mia-tensorfold-glm53-native-tp2/glm53-mia-1104-6c55c20-benchmark.yaml) pins Mia's [November 21 kit](https://github.com/MiaAI-Lab/GLM-5.3-Flash-DGX-Sparks-1104/tree/6c55c20da31a02d6d381a268fa42f8a9ebe0c5d2) and its 16 patches on [TensorFold 1.3.0](https://github.com/ashhart/TensorFold/commit/81de26f649677aa72ae0034d4af6e010cd947038). It uses Mia's two-Spark defaults for dense and head precision (q8 and BF16), four streams, shared unsharded FP8 KV pages, DFlash2, a 6.5 GiB reserve, and a 5 GiB requested device prompt cache. SparkRun fixes the window at 1,048,576 tokens with no automatic shrink. The target and drafter stay at the Python profile's cached revisions. Hugging Face's file inventory shows that the newer kit target revision changes only the README and license files.
+
+This is a performance trial. TensorFold 1.3.0 explicitly refuses disk spill and learned conversation states for GLM on CUDA. The Python durable-readiness-v2 profile is the rollback and the serving profile. See the [engine's refusal test](https://github.com/ashhart/TensorFold/blob/81de26f649677aa72ae0034d4af6e010cd947038/zig/src/native/cuda_refusal.zig#L351).
+
+Build on the ARM64 controller with `DOCKER_CONTEXT=colima-tf-build ./mods/mia-tensorfold-glm53-6c55c20/build.sh`. The build pins both CUDA 13.3.1 bases and adds Python for the SparkRun launcher and readiness hooks. It fetches the pinned upstream kit and applies the original engine patches. Validate the loaded Docker config ID against the [lock](mods/mia-tensorfold-glm53-6c55c20/upstream.lock.json) before dry-running the new recipe. Stage only its recipe and mod. Follow the [pre-launch checks](#before-a-launch), including a preserved rollback with an active spill tier and both RoCE rails at full MTU. Flush the live Python rank 0 before stopping its recipe, capture both flush markers, and bring back the same Python profile after the benchmark.
+
+#### November 22 live comparison
+
+Both Sparks loaded the same pinned ARM64 image. SparkRun reached readiness in 165 seconds on the first start. The candidate had four streams sharing 5,498 FP8 pages of 512 tokens (2,814,976 positions), a 1,048,576-token request cap, and 5 GiB of device prompt cache per rank. The Python baseline had a 2,582,528-token pool and active 64 GiB disk spill.
+
+The same client sent 22 byte-identical decode and prefill requests to each profile. Rendered prompt counts matched. Each decode request produced exactly 768 tokens. Each cold prompt reported zero cached tokens and returned the expected marker. Each arm used one server instance, with the already-running Python service as the baseline. The profile comparison includes differences in dense and head precision, templates and cache implementations.
+
+| Measurement | Python 0.6.0 | Native 1.3.0 |
+| --- | ---: | ---: |
+| One stream, end-to-end decode | 67.4 tok/s | 53.7 tok/s |
+| Four streams, aggregate end-to-end decode | 117.2 tok/s | 92.7 tok/s |
+| 6.4K prompt, cold time to first token | 3.36 s | 4.96 s |
+| 26.9K prompt, cold time to first token | 12.94 s | 19.37 s |
+| 111,952-token prompt, cold time to first token | 54.27 s | 79.74 s |
+
+Decode and the two smaller prompt sizes use the median of three runs. The longest prompt ran once per profile. Client traffic counters matched each measured cohort.
+
+Both profiles completed all eight tool turns with the expected call arguments and answer markers. The client replayed the reasoning and call IDs delivered by each profile. Median time to the first answer token was 0.62 s on Python and 1.35 s on native. The median cached share of follow-up input was 99.2% on Python and 84.0% on native.
+
+The candidate drained before both ranks stopped. The original Python profile passed readiness again with its full pool and active spill tier. Replaying the 111,952-token prompt returned the expected marker after one disk load of 111,936 tokens, which the response also reported as cached. Time to first token was 0.47 s. The pinned candidate image stays staged on both Sparks for repeat measurements.
+
+### Python serving kit
+
 `mia-tensorfold-glm53-exl3-tp2/` holds the profile for [Mia's two-Spark GLM kit](https://github.com/MiaAI-Lab/GLM-5.3-Flash-EXL3-2x-DGX-Sparks-TensorFold): TensorFold 0.6.0's Python CUDA engine with Mia's patches, serving Mia's 4 bpw EXL3 checkpoint across both Sparks. The kit's `main` at `3fd60dfc` replaced its v1.10 release after [#941's comparison on October 22](https://github.com/kelchm/home-lab/issues/941#issuecomment-6334247435), in which the same 48 requests gave identical replies on both, and decode and prefill were within about 3% of v1.10's. `bf5f9452` replaced `3fd60dfc` on October 25 and passed [a trial on October 27](https://github.com/kelchm/home-lab/issues/938#issuecomment-6448276787). `bf5f9452` has served day to day since [October 28](https://github.com/kelchm/home-lab/issues/938#issuecomment-6458998037); GLM had last served day to day on October 8, on v1.10.
 
 ### Current profile
