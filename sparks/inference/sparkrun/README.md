@@ -139,6 +139,23 @@ Two additional experiments split the final 2,048-token processing block at 512-t
 
 After the six native trials, both Sparks returned to the original durable Python profile with a 2,582,528-position pool and 64 GiB spill tier. The 111,952-token replay returned the expected answer after loading 111,936 tokens from disk in one read. Time to first token was 0.48 s.
 
+#### Priming a known fork before serving a batch
+
+When several independent questions build on a document or chat history that the server has never seen, the first question can leave a checkpoint past the fork. The second question then has to process the common prefix again. For this case, the [prefix primer](prime_glm_prefix.py) asks the server to tokenize two or more representative requests, finds their longest common sequence of token IDs and submits it as a one-token completion. Then send the original chat requests normally. Use this once before a cold batch whose questions are available together. An already-warm history can serve the first question immediately.
+
+```sh
+python3 prime_glm_prefix.py --url http://10.32.21.31:8888 question-1.json question-2.json
+```
+
+The helper accepts text-only chat bodies for the same served model and defaults to skipping prefixes shorter than 2,048 tokens. The tokens the engine can reuse depend on its checkpoint boundaries. The primer and subsequent chats must reach the same running server.
+
+| Four sequential questions, live durable Python on two Sparks | Ordinary batch | Including prefix discovery and priming | Elapsed reduction |
+| --- | ---: | ---: | ---: |
+| Tickets sharing a 13,124-token document, mean of two batches per mode | 27.03 s | 21.40 s | 20.8% |
+| Workspace B sibling requests sharing 52,251 tokens, one batch per mode | 60.44 s | 35.37 s | 41.5% |
+
+Each batch started with a fresh identifier near the beginning of the prompt to isolate it from the live cache. All four ordinary and primed chats in each matched pair had the same token counts and returned the expected tags. The ordinary batches reused zero tokens on their first two requests and found the shared prefix on the third and fourth. With priming, all four ticket requests reused 13,120 tokens and all four B requests reused 52,224. The B primer itself took 26.49 s, included in the 35.37 s total. These four B forks started without the seed turn in the earlier 18-request benchmark. The serving measurements in this table used the Python profile.
+
 ### Python serving kit
 
 `mia-tensorfold-glm53-exl3-tp2/` holds the profile for [Mia's two-Spark GLM kit](https://github.com/MiaAI-Lab/GLM-5.3-Flash-EXL3-2x-DGX-Sparks-TensorFold): TensorFold 0.6.0's Python CUDA engine with Mia's patches, serving Mia's 4 bpw EXL3 checkpoint across both Sparks. The kit's `main` at `3fd60dfc` replaced its v1.10 release after [#941's comparison on October 22](https://github.com/kelchm/home-lab/issues/941#issuecomment-6334247435), in which the same 48 requests gave identical replies on both, and decode and prefill were within about 3% of v1.10's. `bf5f9452` replaced `3fd60dfc` on October 25 and passed [a trial on October 27](https://github.com/kelchm/home-lab/issues/938#issuecomment-6448276787). `bf5f9452` has served day to day since [October 28](https://github.com/kelchm/home-lab/issues/938#issuecomment-6458998037); GLM had last served day to day on October 8, on v1.10.
