@@ -1,0 +1,416 @@
+Subject: [PATCH] GLM CUDA: optional tensor-core MLA prompt projections
+
+Port kelchm/TensorFold f88a7cb2a onto the Mia 1.3.0 stack and use its
+PDL prologue, profile reporting and rank fingerprint protocol.
+
+diff --git a/zig/kernels/cuda/glm_glue_num.cuh b/zig/kernels/cuda/glm_glue_num.cuh
+new file mode 100644
+--- /dev/null
++++ b/zig/kernels/cuda/glm_glue_num.cuh
+@@ -0,0 +1,139 @@
++// TF_GLM_ABSORB_MMA: head-batched BF16 GEMMs with FP32 MMA sums instead of the SIMT reduction order.
++#pragma once
++
++#include "glm_glue_router.cuh"
++#include "glm_pdl.cuh"
++#include "common/cp_async.cuh"
++
++namespace glm_num {
++
++__device__ __forceinline__ void cp16z(void* dst, const void* src, bool ok) { tf_common::cp16z(dst, src, ok); }
++__device__ __forceinline__ void commit() { tf_common::cp_commit(); }
++template <int N>
++__device__ __forceinline__ void wait() { tf_common::cp_wait<N>(); }
++__device__ __forceinline__ void ldm4(uint32_t* r, const void* p) { qmm_frag::ldmatrix4(r, tf_common::smem(p)); }
++__device__ __forceinline__ void ldm4t(uint32_t* r, const void* p) { qmm_frag::ldmatrix4t(r, tf_common::smem(p)); }
++__device__ __forceinline__ void mma_bf16(float* d, const uint32_t* a, uint32_t b0, uint32_t b1) {
++  const uint32_t b[2] = {b0, b1};
++  glm_router::mma16816(d, a, b);
++}
++
++// B_KN reads [heads][K][N], otherwise [heads][N][K]; 128x128 blocks, K32 steps, padded cp.async stages.
++constexpr int LBM = 128, LBN = 128, LBK = 32, LAP = LBK + 8, LBP = LBN + 8;
++template <bool B_KN>
++struct LatTile {
++  static constexpr int A = LBM * LAP, B = B_KN ? LBK * LBP : LBN * LAP, STAGE = (A + B) * 2;
++};
++
++template <bool B_KN, int STAGES, bool BAD = false>
++__device__ __forceinline__ void latent_mma(const __nv_bfloat16* __restrict__ x, int64_t xr,
++                                           const __nv_bfloat16* __restrict__ w, __nv_bfloat16* __restrict__ out,
++                                           int64_t orow, int64_t rows, int N, int K) {
++  using T = LatTile<B_KN>;
++  constexpr int MT = 4, NT = 4;
++  extern __shared__ __align__(16) unsigned char lat_smem[];
++  const int tid = threadIdx.x, lane = tid & 31, warp = tid >> 5, wm = warp >> 2, wn = warp & 3;
++  const int64_t n0 = (int64_t)blockIdx.x * LBN, m0 = (int64_t)blockIdx.y * LBM, h = blockIdx.z;
++  const __nv_bfloat16* xa = x + h * K;
++  const __nv_bfloat16* wb = w + (BAD ? (h + 1) % gridDim.z : h) * (int64_t)K * N;
++  auto sa = [&](int st) { return reinterpret_cast<__nv_bfloat16*>(lat_smem + st * T::STAGE); };
++  auto sb = [&](int st) { return reinterpret_cast<__nv_bfloat16*>(lat_smem + st * T::STAGE) + T::A; };
++  auto load = [&](int st, int kt) {
++    const int k0 = kt * LBK;
++    __nv_bfloat16* a = sa(st);
++    __nv_bfloat16* b = sb(st);
++#pragma unroll
++    for (int c = tid; c < LBM * (LBK / 8); c += 256) {  // 2 a thread
++      const int r = c >> 2, ch = c & 3;
++      const int64_t row = m0 + r;
++      cp16z(a + r * LAP + ch * 8, xa + (row < rows ? row : 0) * xr + k0 + ch * 8, row < rows);
++    }
++    if constexpr (B_KN) {
++#pragma unroll
++      for (int c = tid; c < LBK * (LBN / 8); c += 256) {
++        const int k = c >> 4, ch = c & 15;
++        cp16z(b + k * LBP + ch * 8, wb + (int64_t)(k0 + k) * N + n0 + ch * 8, true);
++      }
++    } else {
++#pragma unroll
++      for (int c = tid; c < LBN * (LBK / 8); c += 256) {
++        const int n = c >> 2, ch = c & 3;
++        cp16z(b + n * LAP + ch * 8, wb + (n0 + n) * K + k0 + ch * 8, true);
++      }
++    }
++  };
++  float acc[MT][NT][4];
++#pragma unroll
++  for (int i = 0; i < MT; ++i)
++#pragma unroll
++    for (int j = 0; j < NT; ++j)
++#pragma unroll
++      for (int e = 0; e < 4; ++e) acc[i][j][e] = 0.0f;
++  const int steps = K / LBK;
++#pragma unroll
++  for (int s = 0; s < STAGES - 1; ++s) {
++    if (s < steps) load(s, s);
++    commit();
++  }
++  for (int kt = 0; kt < steps; ++kt) {
++    wait<STAGES - 2>();
++    __syncthreads();
++    if (kt + STAGES - 1 < steps) load((kt + STAGES - 1) % STAGES, kt + STAGES - 1);
++    commit();
++    const __nv_bfloat16* a = sa(kt % STAGES);
++    const __nv_bfloat16* b = sb(kt % STAGES);
++#pragma unroll
++    for (int ks = 0; ks < LBK / 16; ++ks) {
++      uint32_t af[MT][4], bfr[NT][2];
++#pragma unroll
++      for (int i = 0; i < MT; ++i) ldm4(af[i], a + (wm * 64 + i * 16 + (lane & 15)) * LAP + ks * 16 + (lane >> 4) * 8);
++#pragma unroll
++      for (int j = 0; j < NT; j += 2) {
++        uint32_t r[4];
++        if constexpr (B_KN)
++          ldm4t(r, b + (ks * 16 + (lane & 7) + ((lane >> 3) & 1) * 8) * LBP + wn * 32 + j * 8 + (lane >> 4) * 8);
++        else
++          ldm4(r, b + (wn * 32 + j * 8 + (lane & 7) + (lane >> 4) * 8) * LAP + ks * 16 + ((lane >> 3) & 1) * 8);
++        bfr[j][0] = r[0], bfr[j][1] = r[1], bfr[j + 1][0] = r[2], bfr[j + 1][1] = r[3];
++      }
++#pragma unroll
++      for (int i = 0; i < MT; ++i)
++#pragma unroll
++        for (int j = 0; j < NT; ++j) mma_bf16(acc[i][j], af[i], bfr[j][0], bfr[j][1]);
++    }
++  }
++  wait<0>();
++  const int g = lane >> 2, t = lane & 3;
++  __nv_bfloat16* o = out + h * N;
++#pragma unroll
++  for (int i = 0; i < MT; ++i)
++#pragma unroll
++    for (int hh = 0; hh < 2; ++hh) {
++      const int64_t row = m0 + wm * 64 + i * 16 + g + hh * 8;
++      if (row >= rows) continue;
++#pragma unroll
++      for (int j = 0; j < NT; ++j) {
++        const int64_t col = n0 + wn * 32 + j * 8 + t * 2;
++        *reinterpret_cast<__nv_bfloat162*>(o + row * orow + col) =
++            __floats2bfloat162_rn(acc[i][j][2 * hh], acc[i][j][2 * hh + 1]);
++      }
++    }
++}
++
++}  // namespace glm_num
++
++// absorb_q for prompt rows: qa [rows][heads][512] = q [rows][heads][256] . wk [heads][256][512] (B as [K][N]).
++extern "C" __global__ void __launch_bounds__(256)
++    tf_glm_latent_mma_kn(const __nv_bfloat16* x, int64_t xr, const __nv_bfloat16* w, __nv_bfloat16* out, int64_t orow,
++                         int64_t rows, int n, int k) {
++  glm_pdl::enter();
++  glm_num::latent_mma<true, 3>(x, xr, w, out, orow, rows, n, k);
++}
++
++// expand_v for prompt rows: out [rows][heads][256] = o_lat [rows][heads][512] . wv [heads][256][512] (B as [N][K]).
++extern "C" __global__ void __launch_bounds__(256)
++    tf_glm_latent_mma_nk(const __nv_bfloat16* x, int64_t xr, const __nv_bfloat16* w, __nv_bfloat16* out, int64_t orow,
++                         int64_t rows, int n, int k) {
++  glm_pdl::enter();
++  glm_num::latent_mma<false, 3>(x, xr, w, out, orow, rows, n, k);
++}
+diff --git a/zig/kernels/cuda/glm_glue.cu b/zig/kernels/cuda/glm_glue.cu
+--- a/zig/kernels/cuda/glm_glue.cu
++++ b/zig/kernels/cuda/glm_glue.cu
+@@ -9,3 +9,4 @@
+ #include "glm_glue_bmm.cuh"
+ #include "glm_glue_attn.cuh"
+ #include "glm_index_decode.cuh"
++#include "glm_glue_num.cuh"
+diff --git a/zig/src/families/glm/cuda_latent.zig b/zig/src/families/glm/cuda_latent.zig
+--- a/zig/src/families/glm/cuda_latent.zig
++++ b/zig/src/families/glm/cuda_latent.zig
+@@ -30,7 +30,22 @@
+ /// latent.absorb_q (BF16 kv_b): out [rows][heads][lw] bf16 = q [rows][heads][d] . wk [heads][d][lw], fp32 sums.
+ pub fn absorbQ(set: glue.Set, stream: cuda.Stream, q: u64, wk: u64, out: u64, rows: usize, heads: usize, d: usize, lw: usize) !void {
+     if (d != 256 or lw != 512) return error.LatentShape;
++    if (mmaRows(set, rows, .{ q, wk, out })) return headsMma(set.glue.latent_mma_kn, glue.latent_mma_smem[0], stream, q, heads * d, wk, out, heads * lw, rows, heads, lw, d);
+     try rowBlocks(set.glue.absorb_q, stream, q, wk, out, rows, heads, lw / 32);
++}
++
++/// TF_GLM_ABSORB_MMA=1 on a prompt's aligned rows; decode windows retain the SIMT kernels.
++fn mmaRows(set: glue.Set, rows: usize, ptrs: [3]u64) bool {
++    if (!set.prompt or !set.absorb_mma or rows < prompt_rows) return false;
++    for (ptrs) |p| if (p % 16 != 0) return false;
++    return true;
++}
++
++fn headsMma(f: cuda.Function, smem: u32, stream: cuda.Stream, x: u64, xr: usize, w: u64, out: u64, orow: usize, rows: usize, heads: usize, n: usize, k: usize) !void {
++    if (n % 128 != 0 or k % 32 != 0 or xr % 8 != 0 or orow % 8 != 0) return error.LatentShape;
++    var a: cuda.Args = .{};
++    inline for (.{ x, @as(i64, @intCast(xr)), w, out, @as(i64, @intCast(orow)), @as(i64, @intCast(rows)), @as(c_int, @intCast(n)), @as(c_int, @intCast(k)) }) |v| a.add(v);
++    try cuda_pdl.launch(f, .{ .grid = .{ .x = @intCast(n / 128), .y = cdiv(rows, 128), .z = @intCast(heads) }, .block = .{ .x = 256 }, .shared = smem }, stream, &a);
+ }
+ 
+ /// The absorb and expand launches: rows in one block in decode windows, prompt_rb a block in prompt chunks.
+@@ -44,6 +59,7 @@
+ /// latent.expand_v (BF16 kv_b): out [rows][heads][dv] bf16 = o_lat [rows][heads][lw] . wv [heads][dv][lw].
+ pub fn expandV(set: glue.Set, stream: cuda.Stream, ol: u64, wv: u64, out: u64, rows: usize, heads: usize, dv: usize, lw: usize) !void {
+     if (dv != 256 or lw != 512) return error.LatentShape;
++    if (mmaRows(set, rows, .{ ol, wv, out })) return headsMma(set.glue.latent_mma_nk, glue.latent_mma_smem[1], stream, ol, heads * lw, wv, out, heads * dv, rows, heads, dv, lw);
+     try rowBlocks(set.glue.expand_v, stream, ol, wv, out, rows, heads, dv / 16);
+ }
+ 
+diff --git a/zig/src/families/glm/cuda_glue.zig b/zig/src/families/glm/cuda_glue.zig
+--- a/zig/src/families/glm/cuda_glue.zig
++++ b/zig/src/families/glm/cuda_glue.zig
+@@ -13,6 +13,7 @@
+     mm: ?*const mm_mod.Kernels = null,
+     packs: ?*const mm_mod.Packed = null,
+     prompt: bool = false,
++    absorb_mma: bool = false,
+     linear: cuda.qlinear.Linear = .{},
+     copy_rows: ?cuda.Function = null,
+     /// A decode window's DSA select on many CTAs (cuda_sparse.decodeSelect; TF_GLM_DSEL, default on).
+@@ -48,6 +49,8 @@
+     hc_partial8: cuda.Function,
+     hc_finish: cuda.Function,
+     hc_finish_f32w: cuda.Function,
++    latent_mma_kn: cuda.Function,
++    latent_mma_nk: cuda.Function,
+     absorb_q: cuda.Function,
+     expand_v: cuda.Function,
+     lat_write: cuda.Function,
+@@ -79,6 +82,8 @@
+     pub fn load(m: cuda.Module) !Kernels {
+         var k: Kernels = undefined;
+         inline for (@typeInfo(Kernels).@"struct".field_names) |name| @field(k, name) = try m.function("tf_glm_" ++ name);
++        try k.latent_mma_kn.allowDynamicShared(latent_mma_smem[0]);
++        try k.latent_mma_nk.allowDynamicShared(latent_mma_smem[1]);
+         try k.bmm_tile.allowDynamicShared(bmm_tile_smem);
+         try k.bmm_tile1.allowDynamicShared(bmm_tile1_smem[1]);
+         try k.chunks_16.allowDynamicShared(chunksSmem(16));
+@@ -168,6 +173,8 @@
+ }
+ 
+ /// glm_glue_bmm.cuh's Tile::smem(f32) of tf_glm_bmm_tile: 3 stages of 128 x and 64 w rows, 64 bf16 a row.
++pub const latent_mma_smem = [2]u32{ 3 * (128 * 40 + 32 * 136) * 2, 3 * (128 * 40 + 128 * 40) * 2 };
++
+ pub const bmm_tile_smem: u32 = 3 * (128 + 64) * 64 * 2;
+ /// tf_glm_bmm_tile1's [bf16, fp32 out]: 3 stages of 128 x and 128 w rows, 32 bf16 a row, or the fp32 tile if larger.
+ pub const bmm_tile1_smem = [2]u32{ 3 * (128 + 128) * 32 * 2, 128 * (128 + 4) * 4 };
+diff --git a/zig/src/families/glm/cuda_forward.zig b/zig/src/families/glm/cuda_forward.zig
+--- a/zig/src/families/glm/cuda_forward.zig
++++ b/zig/src/families/glm/cuda_forward.zig
+@@ -150,6 +150,7 @@
+     stream: cuda.Stream,
+     ranks: []const Rank, // every rank of a local check, or this process's one
+     exchange: Exchange,
++    absorb_mma: bool = false,
+     kda_wide: bool = true, // TF_GLM_KDA_DECODE_WIDE (the Python family's default): decode windows on KDA's three-kernel chain
+     pieces: ?*const Pieces = null, // a prompt chunk's exchanges in row pieces on a second stream (null: whole)
+     split: bool = true, // TF_GLM_PREFILL_REDUCE=split (the default with send/recv): each rank glues its own rows
+@@ -167,7 +168,7 @@
+     }
+ 
+     pub fn set(f: *const Forward) glue.Set {
+-        return .{ .glue = &f.m.glue, .index = if (f.m.index) |*x| x else null, .mm = if (f.m.tiled) &f.m.mm else null, .packs = f.m.packs, .prompt = f.ranks[0].b.prefill, .linear = .{ .lane = &f.m.lane }, .copy_rows = f.m.copy_rows, .dsel = f.m.dsel };
++        return .{ .glue = &f.m.glue, .index = if (f.m.index) |*x| x else null, .mm = if (f.m.tiled) &f.m.mm else null, .packs = f.m.packs, .prompt = f.ranks[0].b.prefill, .absorb_mma = f.absorb_mma, .linear = .{ .lane = &f.m.lane }, .copy_rows = f.m.copy_rows, .dsel = f.m.dsel };
+     }
+ 
+     /// The layer sums' boundary (cuda_boundary.zig): every rank's fp32 partial into every gathered buffer.
+diff --git a/zig/src/families/glm/cuda_engine.zig b/zig/src/families/glm/cuda_engine.zig
+--- a/zig/src/families/glm/cuda_engine.zig
++++ b/zig/src/families/glm/cuda_engine.zig
+@@ -207,6 +207,7 @@
+         }
+         e.bp = try fw.Buffers.init(d, &e.w, prompt_solo.bufferRows(o.settings.solo), true, o.capacity);
+         errdefer e.bp.deinit();
++        if (o.settings.absorb_mma and rank == 0) std.log.info("glm: prompt MLA absorb and expand use tensor cores for aligned passes of 64 or more rows", .{});
+         if (o.settings.solo and rank == 0) std.log.info("glm: prompt passes of {d} rows, {d} while another stream decodes", .{ fw.solo_rows, fw.prefill_rows });
+         if (world > 1 and rank == 0) std.log.info("glm: a prompt chunk's exchanges in {d} row pieces", .{o.settings.pieces});
+         if (pair) e.pair = try prompt_pair.Pair.init(d, &e.w, &e.bp, &e.pieces, o.capacity);
+@@ -294,7 +295,7 @@
+     pub fn view(e: *Engine, b: *fw.Buffers, out: *[1]fw.Rank) fw.Forward {
+         out.* = .{.{ .w = &e.w, .st = &e.cur.st, .b = b }};
+         const im: ?fw.ImageRows = if (e.images) |v| .{ .v = v, .slot = e.slot } else null;
+-        return .{ .d = e.d, .m = &e.m, .stream = e.stream, .ranks = out, .exchange = e.exchange(), .pieces = prompt_pair.piecesOf(e, b), .split = e.settings.split, .ring = e.settings.ring, .kda_wide = e.settings.kda_wide, .images = im, .taps = if (e.drafter) |dr| dr.taps(b == &e.bp) else null, .l2pf = if (e.l2pf) |*p| p else null, .kv = e.kvCtx() };
++        return .{ .d = e.d, .m = &e.m, .stream = e.stream, .ranks = out, .exchange = e.exchange(), .pieces = prompt_pair.piecesOf(e, b), .split = e.settings.split, .ring = e.settings.ring, .kda_wide = e.settings.kda_wide, .absorb_mma = e.settings.absorb_mma, .images = im, .taps = if (e.drafter) |dr| dr.taps(b == &e.bp) else null, .l2pf = if (e.l2pf) |*p| p else null, .kv = e.kvCtx() };
+     }
+ 
+     /// TF_GLM_KV_SHARD: the exchange room for owner-computed attention (a prompt chunk's rows of this rank's heads,
+@@ -532,7 +533,7 @@
+             rows += p.ids.len;
+         }
+         var one: [1]fw.Rank = .{.{ .w = &e.w, .st = segs[0].st, .b = b, .segs = segs[0..parts.len] }};
+-        const f: fw.Forward = .{ .d = e.d, .m = &e.m, .stream = e.stream, .ranks = &one, .exchange = e.exchange(), .pieces = null, .split = e.settings.split, .ring = e.settings.ring, .kda_wide = e.settings.kda_wide, .taps = if (e.drafter) |dr| dr.taps(false) else null, .l2pf = if (e.l2pf) |*p| p else null, .kv = e.kvCtx() };
++        const f: fw.Forward = .{ .d = e.d, .m = &e.m, .stream = e.stream, .ranks = &one, .exchange = e.exchange(), .pieces = null, .split = e.settings.split, .ring = e.settings.ring, .kda_wide = e.settings.kda_wide, .absorb_mma = e.settings.absorb_mma, .taps = if (e.drafter) |dr| dr.taps(false) else null, .l2pf = if (e.l2pf) |*p| p else null, .kv = e.kvCtx() };
+         try f.run(@ptrCast(ids[0..rows]));
+         if (e.drafter) |dr| for (parts, segs[0..parts.len], 0..) |p, g, i| try dr.noteVerify(p.slot, g.row0, g.rows, g.st.pos, i == 0);
+         for (parts, segs[0..parts.len]) |p, g| {
+diff --git a/zig/src/families/glm/cuda_prompts.zig b/zig/src/families/glm/cuda_prompts.zig
+--- a/zig/src/families/glm/cuda_prompts.zig
++++ b/zig/src/families/glm/cuda_prompts.zig
+@@ -38,7 +38,7 @@
+     }
+     try e.gate(null);
+     var one: [1]Rank = .{.{ .w = &e.w, .st = segs[0].st, .b = &e.bp, .segs = segs[0..parts.len] }};
+-    var f: Forward = .{ .d = e.d, .m = &e.m, .stream = e.stream, .ranks = &one, .exchange = e.exchange(), .pieces = &e.pieces, .split = e.settings.split, .ring = e.settings.ring, .kda_wide = e.settings.kda_wide, .taps = if (e.drafter) |dr| dr.taps(true) else null };
++    var f: Forward = .{ .d = e.d, .m = &e.m, .stream = e.stream, .ranks = &one, .exchange = e.exchange(), .pieces = &e.pieces, .split = e.settings.split, .ring = e.settings.ring, .kda_wide = e.settings.kda_wide, .absorb_mma = e.settings.absorb_mma, .taps = if (e.drafter) |dr| dr.taps(true) else null };
+     // TF_GLM_KV_SHARD: a prompt one rank holds alone attends owner-computed, unpieced (an engine without it: none)
+     if (comptime @hasField(@TypeOf(e.settings), "kv_shard") and @hasDecl(@TypeOf(e.*), "kvCtx")) if (e.settings.kv_shard.on) {
+         f.kv = e.kvCtx();
+diff --git a/zig/src/families/glm/cuda_ranks.zig b/zig/src/families/glm/cuda_ranks.zig
+--- a/zig/src/families/glm/cuda_ranks.zig
++++ b/zig/src/families/glm/cuda_ranks.zig
+@@ -30,6 +30,7 @@
+     kv_host: u8 = 0, // TF_GLM_KV_HOST=1: KV pages in host memory (1); with TF_GLM_KV_HOST_SHARED=1, one copy a host (2)
+     kv_host_gib: f64 = 0, // TF_GLM_KV_HOST_GIB: the host pages' GiB (0: one full window)
+     l2pf: l2pf.Options = .{}, // TF_GLM_L2PF and its knobs: a decode window's next weights read into L2 beside it
++    absorb_mma: bool = false,
+     kv_live_half: bool = false, // TF_GLM_KV_LIVE_HALF=1: a keep carries the live KDA half alone (cuda_snapshot_layout.zig)
+     kv_shard: kv_shard.Switches = .{}, // TF_GLM_KV_SHARD and its knobs: each stream's latent rows on one rank
+ 
+@@ -46,6 +47,10 @@
+     /// `read` from a lookup with no blank text, so every name below and in l2pf's reader is unset when blank.
+     fn readSet(get: *const fn ([:0]const u8) ?[]const u8, problem: *[]const u8) !Settings {
+         var s: Settings = .{};
++        s.absorb_mma = @import("sys").environment.value(bool, "TF_GLM_ABSORB_MMA", get("TF_GLM_ABSORB_MMA"), false) catch {
++            problem.* = "TF_GLM_ABSORB_MMA: 0 or 1";
++            return error.BadSetting;
++        };
+         if (get("TF_GLM_PROMPT_K")) |v| {
+             if (std.mem.eql(u8, v, "shape")) s.prompt_fixed_k = true else if (!std.mem.eql(u8, v, "one")) {
+                 problem.* = "TF_GLM_PROMPT_K: one or shape";
+@@ -213,7 +218,7 @@
+ 
+ /// What every rank must agree on, as bytes the communicator carries.
+ pub const Fingerprint = extern struct {
+-    layout: u32 = 22, // this struct's version (21 had no kv_shard words)
++    layout: u32 = 23, // version 22 left the word before capacity unused
+     world: u32,
+     rank: u32,
+     kv8: u32 = 0,
+@@ -241,6 +246,7 @@
+     bits: u32 = 16 << 8 | 16, // TF_GLM_DENSE_BITS << 8 | TF_GLM_HEAD_BITS: every rank's matmuls read the same codes
+     kv_shard: u32 = 0, // TF_GLM_KV_SHARD and _CARRY, _TWINS (kv_shard.Switches.word; 0: off)
+     kv_shard_check: u32 = 0, // TF_GLM_KV_SHARD_CHECK when on (0 off)
++    absorb_mma: u32 = 0, // prompt reduction order must agree on every rank
+     capacity: u64, // tokens a sequence holds
+     heat_high: f64, // the heat bands in degrees (0 and 0: off): every rank must wait alike
+     heat_low: f64,
+@@ -278,6 +284,7 @@
+         bits,
+         kv_shard,
+         kv_shard_check,
++        absorb_mma,
+         capacity,
+         heat_high,
+         heat_low,
+@@ -321,6 +328,7 @@
+             .bits = @as(u32, s.dense_bits) << 8 | s.head_bits,
+             .kv_shard = s.kv_shard.word(),
+             .kv_shard_check = s.kv_shard.checkWord(),
++            .absorb_mma = @intFromBool(s.absorb_mma),
+             .capacity = capacity,
+             .heat_high = if (s.heat) |b| b.high_c else 0,
+             .heat_low = if (s.heat) |b| b.low_c else 0,
+@@ -366,6 +374,7 @@
+             "bits",
+             "kv_shard",
+             "kv_shard_check",
++            "absorb_mma",
+             "capacity",
+             "heat_high",
+             "heat_low",
+@@ -473,6 +482,7 @@
+         .tiled => "TF_GLM_MM",
+         .split => "TF_GLM_PREFILL_REDUCE",
+         .kda_wide => "TF_GLM_KDA_DECODE_WIDE",
++        .absorb_mma => "TF_GLM_ABSORB_MMA",
+         .kda_pad => "TF_GLM_KDA_PAD",
+         .kv_live_half => "TF_GLM_KV_LIVE_HALF",
+         .pieces => "TF_GLM_OVERLAP_PIECES",
+diff --git a/zig/src/core/profile.zig b/zig/src/core/profile.zig
+--- a/zig/src/core/profile.zig
++++ b/zig/src/core/profile.zig
+@@ -10,6 +10,7 @@
+     TF_QWEN_KV_PAGES_ALL,
+     TF_QWEN_KV_SHARE,
+     TF_QWEN_REQUEST_STARTS,
++    TF_GLM_ABSORB_MMA,
+     TF_GLM_REQUEST_STARTS,
+     TF_KV_SHARE,
+     TF_FLASHNEXT_KV_PAGES,
+@@ -143,6 +144,7 @@
+ pub const entries = [_]Entry{
+     .{ .id = .TF_CACHE_EVICT, .families = cuda_cache, .backend = "multiple", .scopes = &.{ .{ .backend = "cuda", .families = cuda_cache }, .{ .backend = "metal", .families = &.{ "nemotron_h", "qwen3_5", "qwen3_5_moe", "qwen4_exp", "glm5_next", "glm_moe_dsa", "minimax_m3_vl", "gemma4", "gemma4_unified", "spark2_5", "llama", "lfm2_moe", "lfm3", "lfm3_vl", "step5_vl", "kimi_k3", "kimi_k31" } }, .{ .backend = "xpu", .families = &.{ "nemotron_h", "lfm3", "qwen3_5", "gemma4" } } }, .class = .experimental, .syntax = .present, .report_values = &.{"decayed_resume"}, .effect = "Opt into bounded resume credit for RAM snapshot eviction", .evidence = "#3241; synthetic host rows gate; default main unchanged" },
+     .{ .id = .TF_QWEN_REQUEST_STARTS, .families = qwen, .class = .arithmetic, .syntax = .one, .effect = "Opt into CUDA message-start prompt cuts", .evidence = "#1334; default-off; GB10 six-turn: resumed equals fresh, one reply differs from unset" },
++    .{ .id = .TF_GLM_ABSORB_MMA, .families = &.{"glm5_next"}, .class = .arithmetic, .syntax = .one, .effect = "Use tensor-core MMA for prompt MLA absorb and expand", .evidence = "Local GLM prompt port f88a7cb2a" },
+     .{ .id = .TF_GLM_REQUEST_STARTS, .families = &.{"glm5_next"}, .class = .arithmetic, .syntax = .one, .effect = "Opt into CUDA message-start prompt cuts", .evidence = "#2396; default-off; GB10 TP=2 receipts in #2404" },
+     .{ .id = .TF_QWEN_KV_PAGES, .families = qwen, .class = .identical, .effect = "KV pool page size; memory and workload tradeoffs", .evidence = "#1357" },
+     .{ .id = .TF_QWEN_KV_PAGES_ALL, .families = qwen, .class = .debug, .syntax = .one, .effect = "Put the engine's own stream on pages too", .evidence = "#1357" },
+diff --git a/zig/src/platform/environment.zig b/zig/src/platform/environment.zig
+--- a/zig/src/platform/environment.zig
++++ b/zig/src/platform/environment.zig
+@@ -105,6 +105,7 @@
+     .{ .name = "TF_SLIDE_TAKE_OUT_CHECK", .scope = .slide, .kind = .flag, .forms = "0 or 1 (1 takes every kept lesson out again to check the facts before it come back)" },
+     .{ .name = "TF_SLIDE_TAP_CHECK", .scope = .slide, .kind = .flag, .forms = "0 or 1 (1 checks tapped rows against a fresh run's)" },
+     .{ .name = "TF_SLIDE_FORGET_FAIL", .scope = .hooks, .kind = .u32, .trim = " ", .forms = "a whole fact index from 0 to 4294967295 (0 disables the planted failure)" },
++    .{ .name = "TF_GLM_ABSORB_MMA", .scope = .glm, .kind = .flag, .forms = "0 or 1" },
+     .{ .name = "TF_GLM_HOST_CACHE", .scope = .glm, .kind = .flag, .forms = "0 or 1" },
+     .{ .name = "TF_GLM_VISION_HOST", .scope = .glm, .kind = .flag, .forms = "0 or 1" },
+     .{ .name = "TF_GLM_PROF", .scope = .glm, .kind = .flag, .forms = "0 or 1" },
+diff --git a/zig/src/families/glm/cuda_env_test.zig b/zig/src/families/glm/cuda_env_test.zig
+--- a/zig/src/families/glm/cuda_env_test.zig
++++ b/zig/src/families/glm/cuda_env_test.zig
+@@ -8,6 +8,7 @@
+ /// The names GLM's CUDA readers pass to the shared parser, and the default each reader keeps.
+ const Name = struct { name: [:0]const u8, default: bool = false };
+ const switches = [_]Name{
++    .{ .name = "TF_GLM_ABSORB_MMA" },
+     .{ .name = "TF_GLM_HOST_CACHE" },
+     .{ .name = "TF_GLM_VISION_HOST" },
+     .{ .name = "TF_GLM_PROF" },
+diff --git a/zig/src/families/glm/cuda_ranks_test.zig b/zig/src/families/glm/cuda_ranks_test.zig
+--- a/zig/src/families/glm/cuda_ranks_test.zig
++++ b/zig/src/families/glm/cuda_ranks_test.zig
+@@ -68,6 +68,10 @@
+     const heat_on: Settings = .{ .heat = .{ .high_c = 92, .low_c = 88 } };
+     all[1] = Fingerprint.of(2, 1, heat_on, 8192, true, h0, h0, hashBytes("/hub/snapshots/423acf37"));
+     try std.testing.expectEqual(Fingerprint.Field.heat_high, mismatch(&all).?.field);
++    try std.testing.expectEqual(@as(usize, 128), @offsetOf(Fingerprint, "capacity"));
++    try std.testing.expectEqual(@as(usize, 288), @sizeOf(Fingerprint));
++    all[1] = Fingerprint.of(2, 1, .{ .absorb_mma = true }, 8192, true, h0, h0, hashBytes("/hub/snapshots/423acf37"));
++    try std.testing.expectEqual(Mismatch{ .field = .absorb_mma, .rank = 1 }, mismatch(&all).?);
+     all[1] = Fingerprint.of(2, 1, .{ .pages = true }, 8192, true, h0, h0, hashBytes("/hub/snapshots/423acf37"));
+     try std.testing.expectEqual(Mismatch{ .field = .pages, .rank = 1 }, mismatch(&all).?); // TF_KV_PAGES on one rank
+     all[1] = Fingerprint.of(2, 1, .{}, 8192, true, h0, h0, hashBytes("/hub/snapshots/other"));

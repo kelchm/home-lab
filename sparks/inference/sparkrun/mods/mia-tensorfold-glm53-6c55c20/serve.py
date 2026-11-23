@@ -12,6 +12,29 @@ import subprocess
 import time
 
 BINARY = '/opt/tensorfold/native/bin/tensorfold-native'
+ENGINE_HOME = Path('/root')
+RUNTIME_CACHE = Path('/cache/runtime')
+
+
+def prepare_digest_cache(env):
+    if env.get('GLM_PERSIST_DIGESTS') != '1':
+        return
+    if env.get('HOME') != str(ENGINE_HOME) or env.get('XDG_CACHE_HOME') != str(RUNTIME_CACHE) or not RUNTIME_CACHE.is_dir():
+        raise ValueError('Persistent checkpoint digests require the SparkRun runtime cache and rank home')
+
+    subtree = Path('.cache/tensorfold/file-digests')
+    link = ENGINE_HOME / subtree
+    store = RUNTIME_CACHE / 'tensorfold-home' / subtree
+    if link.parent.resolve() != link.parent or (store / 'v1').resolve() != store / 'v1':
+        raise ValueError('Unexpected symlink in the checkpoint digest cache path')
+    # The engine itself locks, checksums and publishes the index inside this directory.
+    store.mkdir(mode=0o700, parents=True, exist_ok=True)
+    link.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        link.symlink_to(store, target_is_directory=True)
+    except FileExistsError:
+        if not link.is_symlink() or link.readlink() != store:
+            raise ValueError(f'Existing checkpoint digest cache at {link} has a different location') from None
 
 
 def launch(env):
@@ -151,6 +174,7 @@ def supervise(args, env):
 
 def main():
     args, env = launch(os.environ)
+    prepare_digest_cache(env)
     raise SystemExit(supervise(args, env))
 
 

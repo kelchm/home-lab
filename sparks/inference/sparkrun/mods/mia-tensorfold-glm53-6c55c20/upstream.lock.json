@@ -27,17 +27,29 @@
     "NOTICE.md": "e89515bba4cfb70d27b3dc04fb5dbb55a2079f4b21cd57a5782a53ad804ebaf1",
     "build.sh": "b71434fae638feab59587c3ca02edf312bb0f69aad0b6c4743f0273eec5c1567",
     "chat_template.jinja": "f2e36c6b7fdd89f5f61564635227a1708e1601357cd41f9b5c0190911573d1e2",
-    "prepare.py": "0f8f69608f0ba1df1cdeae8d2cc47480439c15d47ba442136a571884596ff4f7",
+    "prepare.py": "5466216bf02cef2609e9745fd8911b75dd3dcc5ba154a9c0f216bc73457cae57",
     "run.sh": "8eb750ab1c526816000c6d9d03944f7a709d6539613f0d77a12de5be16556e30",
-    "serve.py": "4bc1f633bb56677e70c8a5c7ea307e2fb51fdd30bd1b285686f31f744c72fc1d",
+    "serve.py": "8615d9ee59eaf686235d2c8e4cf582fe267022612958a1b13a27645c3a082805",
     "prompt-s2/build.py": "e4ad8e3c75d54c4f6388e9f66f0b0bdba23d06cfa03b95a72c372c1b83659e7a",
-    "prompt-s2/0017-glm-packed-prompt-s2.patch": "51b5948ebc4673a361b327ae12293e55dcb210e656e4a39c72c4f53dc69a48d3"
+    "prompt-s2/0017-glm-packed-prompt-s2.patch": "51b5948ebc4673a361b327ae12293e55dcb210e656e4a39c72c4f53dc69a48d3",
+    "prompt-s2/0018-glm-prompt-mla-mma.patch": "e0e96fd943d76d7294fda359f37aab6c8a6a8151129eadc90726de4cc1891b67",
+    "prompt-s2/mla-host-tests.patch": "2ee4ffa75b4aeda87c8f839457567075d190d54b5a3ec78b2ab2bea2311c84ca",
+    "prompt-s2/build-mla.py": "8bfdeeb83298d7737904543eef49364464455e298b0cb2f31aea4328c955aba7"
   },
   "derived_image": {
     "name": "prompt-s2",
     "image": "glm53-tf:1104-6c55c20-prompt-s2-51b5948ebc46",
     "image_id": "sha256:8726a0ec8e909e309e67d97b2c5400604881f03777cc81cf3743c067be25bff5",
     "parent_image_id": "sha256:44b3fdc1cd2b7cf24e4b00bf878ed859d96e35c79ff416922d744daef23ed1af",
-    "patch": "prompt-s2/0017-glm-packed-prompt-s2.patch"
+    "patch": "prompt-s2/0017-glm-packed-prompt-s2.patch",
+    "mla_image": {
+      "name": "prompt-s2-mla",
+      "image": "glm53-tf:1104-6c55c20-s2-mla-e0e96fd943d7",
+      "image_id": "sha256:e8fb5242a387db04ac35ce10c7e44790e7c03c56a6dddf2b34c96b46aba0fd34",
+      "manifest_digest": "sha256:ec7e9d96867b7e78bfface75045edd5882949cb0ef6dbe64fc01e1806ce95497",
+      "parent_image_id": "sha256:8726a0ec8e909e309e67d97b2c5400604881f03777cc81cf3743c067be25bff5",
+      "patch": "prompt-s2/0018-glm-prompt-mla-mma.patch",
+      "host_tests": "prompt-s2/mla-host-tests.patch"
+    }
   }
 }

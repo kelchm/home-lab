@@ -66,6 +66,79 @@ def test_mia_130_device_prompt_cache_reaches_engine(profile, cache_gib):
     assert args[args.index('--prompt-cache-gib') + 1] == cache_gib
 
 
+@pytest.fixture
+def digest_launcher(tmp_path, monkeypatch):
+    launcher = load('glm_130_digest_launcher', ROOT / 'mods/mia-tensorfold-glm53-6c55c20/serve.py')
+    home, cache = tmp_path.resolve() / 'root', tmp_path.resolve() / 'runtime'
+    home.mkdir()
+    cache.mkdir()
+    monkeypatch.setattr(launcher, 'ENGINE_HOME', home)
+    monkeypatch.setattr(launcher, 'RUNTIME_CACHE', cache)
+    monkeypatch.setattr(launcher, 'supervise', mock.Mock(return_value=0))
+    # The SDK installs this launcher on each rank with the recipe environment.
+    path = PROFILE.parent / 'glm53-mia-1104-6c55c20-shared.yaml'
+    recipe = Recipe(yaml.safe_load(path.read_text()), source_path=str(path))
+    for key, value in {**recipe.env, 'HOME': str(home), 'XDG_CACHE_HOME': str(cache),
+                       'GLM_PERSIST_DIGESTS': '1', 'RANK': '0', 'FABRIC_MASTER': '192.0.2.1',
+                       'MASTER_PORT': '25000', 'NCCL_IB_HCA': 'mlx5_0,mlx5_1', 'MODEL_PATH': '/target',
+                       'DRAFTER': '/draft', 'SERVED_NAME': 'GLM-5.3-Flash', 'CONTEXT': '1048576',
+                       'MAX_TOKENS': '32768', 'HOST': '0.0.0.0', 'PORT': '8888'}.items():
+        monkeypatch.setenv(key, value)
+    subtree = Path('.cache/tensorfold/file-digests')
+    return launcher, home / subtree, cache / 'tensorfold-home' / subtree
+
+
+@pytest.mark.parametrize('seeded', [False, True])
+def test_mia_digest_cache_survives_rank_relaunch(digest_launcher, seeded):
+    launcher, link, store = digest_launcher
+    index = store / 'v1/index.bin'
+    if seeded:
+        index.parent.mkdir(parents=True)
+        index.write_bytes(b'previously verified test index')
+    for _ in range(2):
+        with pytest.raises(SystemExit) as result:
+            launcher.main()
+        assert result.value.code == 0
+        assert link.readlink() == store and store.is_dir()
+        assert launcher.supervise.call_args.args[1]['HOME'] == str(launcher.ENGINE_HOME)
+    if seeded:
+        assert (link / 'v1/index.bin').read_bytes() == b'previously verified test index'
+
+
+def test_mia_digest_cache_is_opt_in(digest_launcher, monkeypatch):
+    launcher, link, store = digest_launcher
+    monkeypatch.delenv('GLM_PERSIST_DIGESTS')
+    with pytest.raises(SystemExit) as result:
+        launcher.main()
+    assert result.value.code == 0
+    assert not link.is_symlink() and not store.exists()
+
+
+@pytest.mark.parametrize('conflict', ['local-directory', 'other-link', 'redirected-store', 'wrong-runtime-cache'])
+def test_mia_digest_cache_preserves_existing_paths(digest_launcher, tmp_path, monkeypatch, conflict):
+    launcher, link, store = digest_launcher
+    other = tmp_path / 'other'
+    other.mkdir()
+    if conflict == 'local-directory':
+        link.mkdir(parents=True)
+        (link / 'keep').touch()
+    elif conflict == 'other-link':
+        link.parent.mkdir(parents=True)
+        link.symlink_to(other)
+    elif conflict == 'redirected-store':
+        (launcher.RUNTIME_CACHE / 'tensorfold-home').symlink_to(other)
+    else:
+        monkeypatch.setenv('XDG_CACHE_HOME', str(other))
+    with pytest.raises(ValueError):
+        launcher.main()
+    launcher.supervise.assert_not_called()
+    assert not list(other.iterdir())
+    if conflict == 'local-directory':
+        assert (link / 'keep').is_file()
+    elif conflict == 'other-link':
+        assert link.readlink() == other
+
+
 def test_source_real_receipts_accept_identity_child_and_actual_shard():
     report = capacity.check(receipts(), health(), learn_dir=LEARN)
     assert report['aggregate_pool_tokens'] == 3144704

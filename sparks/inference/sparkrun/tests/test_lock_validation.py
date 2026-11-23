@@ -374,3 +374,24 @@ def test_native_derived_patch_is_verified_at_install_and_in_ci(source):
     assert result.returncode != 0 and "changed frozen mod file" in result.stderr
     with pytest.raises(validator.InvalidManifest, match="changed frozen native kit input"):
         validator.validate_repository(source)
+
+
+def test_mla_recipe_requires_its_qualified_s2_child(source):
+    mod = source / "mods/mia-tensorfold-glm53-6c55c20"
+    manifest = mod / "upstream.lock.json"
+    lock = json.loads(manifest.read_text())
+    path = source / "mia-tensorfold-glm53-native-tp2/glm53-mia-1104-6c55c20-shared-mma.yaml"
+    recipe = yaml.safe_load(path.read_text())
+    mla = lock["derived_image"]["mla_image"]
+    assert recipe["metadata"]["image_variant"] == mla["name"]
+    assert recipe["container"] == mla["image_id"]
+
+    # A parent-only recipe must not be able to start the new arithmetic.
+    recipe["metadata"]["image_variant"] = lock["derived_image"]["name"]
+    path.write_text(yaml.safe_dump(recipe))
+    with pytest.raises(validator.InvalidManifest, match="container"):
+        validator.validate_repository(source)
+    mla["parent_image_id"] = lock["image_id"]
+    manifest.write_text(json.dumps(lock))
+    with pytest.raises(validator.InvalidManifest, match="mla_image.parent_image_id"):
+        validator.validate_repository(source)

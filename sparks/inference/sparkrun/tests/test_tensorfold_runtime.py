@@ -394,6 +394,8 @@ def test_native_mod_transfer_is_self_contained(tmp_path, path):
         if "image" in lock:
             if "image_variant" in recipe.metadata:
                 variant = lock["derived_image"]
+                if recipe.metadata["image_variant"] != variant["name"]:
+                    variant = variant["mla_image"]
                 assert variant["name"] == recipe.metadata["image_variant"]
                 assert recipe.container == variant["image_id"]
             else:

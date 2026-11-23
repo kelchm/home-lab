@@ -17,6 +17,7 @@ def main():
     lock = json.loads(manifest.read_text())
     names = {"LICENSE", "NOTICE.md", "build.sh", "prepare.py", "run.sh", "serve.py", "chat_template.jinja"}
     names.update({"prompt-s2/build.py", "prompt-s2/0017-glm-packed-prompt-s2.patch"})
+    names.update({"prompt-s2/build-mla.py", "prompt-s2/0018-glm-prompt-mla-mma.patch", "prompt-s2/mla-host-tests.patch"})
     if set(lock["mod_files"]) != names:
         raise ValueError("Incomplete native TensorFold mod manifest")
     for name, digest in lock["mod_files"].items():

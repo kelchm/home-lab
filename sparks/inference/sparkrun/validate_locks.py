@@ -219,13 +219,25 @@ def validate_lock(lock, mod):
         allowed_files = "LICENSE NOTICE.md build.sh prepare.py run.sh serve.py chat_template.jinja"
         if "derived_image" in lock:
             variant = lock["derived_image"]
-            fields(variant, "name image image_id parent_image_id patch", "derived_image")
+            variant_fields = "name image image_id parent_image_id patch"
+            fields(variant, variant_fields + (" mla_image" if "mla_image" in variant else ""), "derived_image")
             equal(variant["name"], "prompt-s2", "derived_image.name")
             equal(variant["patch"], "prompt-s2/0017-glm-packed-prompt-s2.patch", "derived_image.patch")
             equal(variant["parent_image_id"], lock["image_id"], "derived_image.parent_image_id")
             digest(variant["image_id"], "derived_image.image_id")
             require(variant["image_id"] != lock["image_id"], "derived_image.image_id", "expected a distinct derived config ID")
             allowed_files += " prompt-s2/build.py " + variant["patch"]
+            if "mla_image" in variant:
+                mla = variant["mla_image"]
+                fields(mla, variant_fields + " manifest_digest host_tests", "mla_image")
+                equal(mla["name"], "prompt-s2-mla", "mla_image.name")
+                equal(mla["parent_image_id"], variant["image_id"], "mla_image.parent_image_id")
+                digest(mla["image_id"], "mla_image.image_id")
+                digest(mla["manifest_digest"], "mla_image.manifest_digest")
+                require(mla["image_id"] not in (lock["image_id"], variant["image_id"]), "mla_image.image_id", "expected a distinct config ID")
+                equal(mla["patch"], "prompt-s2/0018-glm-prompt-mla-mma.patch", "mla_image.patch")
+                equal(mla["host_tests"], "prompt-s2/mla-host-tests.patch", "mla_image.host_tests")
+                allowed_files += f" prompt-s2/build-mla.py {mla['patch']} {mla['host_tests']}"
         fields(files, allowed_files, "native kit mod_files")
         for name, pin in files.items():
             path = mod / name
@@ -247,6 +259,9 @@ def validate_lock(lock, mod):
         if "derived_image" in lock:
             tag = f"{lock['image'].rsplit('-', 1)[0]}-{variant['name']}-{files[variant['patch']][:12]}"
             equal(variant["image"], tag, "derived_image.image")
+            if "mla_image" in variant:
+                tag = f"{lock['image'].rsplit('-', 1)[0]}-s2-mla-{files[mla['patch']][:12]}"
+                equal(mla["image"], tag, "mla_image.image")
     elif kind == "glm":
         pattern(lock["engine_version"], r"[0-9]+\.[0-9]+\.[0-9]+", "engine_version", "expected a release version")
         env = lock["launcher_env"]
@@ -341,6 +356,13 @@ def equal(actual, expected, where):
     require(actual == expected, where, f"disagrees with reviewed input: expected {expected!r}, got {actual!r}")
 
 
+def derived_images(lock):
+    if "derived_image" not in lock:
+        return ()
+    s2 = lock["derived_image"]
+    return (s2, s2["mla_image"]) if "mla_image" in s2 else (s2,)
+
+
 def validate_recipe(recipe, path, locks):
     require(isinstance(recipe, dict) and recipe.get("runtime") == "tensorfold" and recipe.get("recipe_version") == "2",
             "recipe", "unsupported recipe shape/runtime")
@@ -363,9 +385,10 @@ def validate_recipe(recipe, path, locks):
     equal(metadata.get("profile"), path.stem, "metadata.profile")
     selected_image = lock
     if "image_variant" in metadata:
-        require("derived_image" in lock, "metadata.image_variant", "engine lock has no derived image")
-        equal(metadata["image_variant"], lock["derived_image"]["name"], "metadata.image_variant")
-        selected_image = lock["derived_image"]
+        images = {image["name"]: image for image in derived_images(lock)}
+        name = metadata["image_variant"]
+        require(isinstance(name, str) and name in images, "metadata.image_variant", "must select a reviewed image in this lock")
+        selected_image = images[name]
     expected_image = selected_image["image_id"] if kind in ("qwen-tp1", "deepseek", "glm-native-kit") else selected_image["image"]
     equal(recipe.get("container"), expected_image, "container")
     for key in ("engine_revision", "kit_revision", "upstream_patch_count", "upstream_patch_hash"):
@@ -456,7 +479,7 @@ def validate_repository(root=ROOT):
             kind = validate_lock(lock, manifest.parent)
             locks[manifest.parent.resolve()] = (lock, kind)
             if kind != "readiness":
-                for record in [lock] + ([lock["derived_image"]] if "derived_image" in lock else []):
+                for record in (lock, *derived_images(lock)):
                     reference, config_id = record["image"], record["image_id"]
                     if reference in images:
                         equal(config_id, images[reference], "image/image_id relationship (same reference, different config IDs)")
