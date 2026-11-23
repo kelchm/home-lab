@@ -103,6 +103,17 @@ The [12 GiB profile](mia-tensorfold-glm53-native-tp2/glm53-mia-1104-6c55c20-tune
 
 All three profiles served the same 24 request bodies. Fifteen short requests measured decode throughput. The cold history seeded three fixed-length coding turns, a complete review and four growing tool-result turns with max reasoning effort. The review took 9.24 s for 362 output tokens on stock, 9.26 s for 407 on the 12 GiB profile and 8.85 s for 407 with shared pages. Request counters matched, and all three profiles passed all four tool-result marker checks.
 
+The live durable Python profile subsequently replayed the same 262,309-token seed and eight warm coding requests. The seed's first token took 136.42 s on Python, 194.27 s on stock native and 188.81 s on shared-page native. The table measures single-stream output tokens per second on the warm requests, including reasoning tokens and each request's wait for its first token. Test writing uses the median of three turns capped at 768 tokens each. The remaining columns divide total output tokens by total request time for the indicated workload.
+
+| Profile | Write tests | Complete one code review | Four tool-result replies | All eight warm requests |
+| --- | ---: | ---: | ---: | ---: |
+| Mia stock native | 53.6 | 39.2 | 25.1 | 45.8 |
+| Native, 12 GiB retained state | 59.2 | 43.9 | 29.1 | 50.4 |
+| Native, shared pages | 61.4 | 46.0 | 28.7 | 51.8 |
+| Durable Python | 62.2 | 45.6 | 32.1 | 53.6 |
+
+Once streaming began, median test-writing decode was 57.5 tok/s on stock native, 66.2 on shared-page native and 69.2 on Python. The completed reviews and tool replies varied in length across profiles. Python returned all four expected tool-result markers, and its request counter advanced by exactly nine across the seed and eight warm turns. The native shared-page measurements here use Mia's original image. The subsequent tensor-core and prefix-priming trials measured different workloads.
+
 The workspace test seeds four independent 52K-token coding histories, creates four sibling branches in each of workspaces B, C and D, then asks for the original release tag from A. Each of its 18 requests has an exact expected answer. The table sums each client's end-to-end request times. The last column measures time to the first output token on the final return to A. Prior requests matter because they determine which checkpoints compete for space.
 
 | Profile and starting cache | All 18 requests | Follow-ups with at least 85% cached | Return to A |
