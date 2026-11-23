@@ -3,6 +3,7 @@
 import argparse
 import hashlib
 import json
+import re
 from pathlib import Path
 
 
@@ -18,6 +19,28 @@ def main():
     names = {"LICENSE", "NOTICE.md", "build.sh", "prepare.py", "run.sh", "serve.py", "chat_template.jinja"}
     names.update({"prompt-s2/build.py", "prompt-s2/0017-glm-packed-prompt-s2.patch"})
     names.update({"prompt-s2/build-mla.py", "prompt-s2/0018-glm-prompt-mla-mma.patch", "prompt-s2/mla-host-tests.patch"})
+    for profile in lock["derived_image"].get("decode_images", []):
+        directory = profile["name"]
+        if not re.fullmatch(r"python-quant(?:-[a-z0-9]+)*", directory):
+            raise ValueError(f"Invalid decode build directory: {directory}")
+        names.update(f"{directory}/{name}" for name in ("variant.json", "host-controls.patch", "oci-record.json.gz"))
+        source = here / directory / "variant.json"
+        if source.parent.is_symlink() or source.is_symlink():
+            raise ValueError(f"Linked decode build manifest: {source}")
+        payload = source.read_bytes()
+        if hashlib.sha256(payload).hexdigest() != lock["mod_files"].get(f"{directory}/variant.json"):
+            raise ValueError(f"Changed decode build manifest: {source}")
+        release = json.loads(payload)
+        for patch in release["patches"]:
+            if not re.fullmatch(r"[0-9]{4}-[a-z0-9-]+\.patch", patch):
+                raise ValueError(f"Invalid engine patch filename: {patch}")
+            parent = "python-quant" if (here / "python-quant" / patch).is_file() else directory
+            names.add(f"{parent}/{patch}")
+    if "python-quant/variant.json" in names:
+        names.update("python-quant/" + name for name in (
+            "build.py", "oci_layers.py", "gzip-layer.go", "README.md", "verify-weights.py",
+            "cuda-inputs.sha256", "extract-primary-fatbins.py",
+        ))
     if set(lock["mod_files"]) != names:
         raise ValueError("Incomplete native TensorFold mod manifest")
     for name, digest in lock["mod_files"].items():

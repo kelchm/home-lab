@@ -1,0 +1,179 @@
+--- a/zig/src/families/glm/dflash.zig
++++ b/zig/src/families/glm/dflash.zig
+@@ -4,7 +4,7 @@
+ const mm = @import("cuda_mm.zig");
+ const q4 = @import("cuda_q4.zig");
+ const taps_mod = @import("cuda_taps.zig");
+-const select = @import("dflash_select.zig");
++pub const selector = @import("dflash_select.zig");
+ const block = @import("dflash_block.zig");
+ 
+ pub const BLOCK: usize = 8;
+@@ -41,7 +41,12 @@
+ 
+ /// TF_GLM_DRAFT_CONFIDENCE: where a DFlash2 chain's chance product stops it (glm_cuda's 0.7).
+ pub fn confidence() !f64 {
+-    return @import("sys").environment.read(f64, "TF_GLM_DRAFT_CONFIDENCE", 0.7);
++    return chainCut(false);
++}
++
++/// Explicit TF_GLM_DRAFT_CONFIDENCE overrides the default of either proposal policy.
++pub fn chainCut(calibrated: bool) !f64 {
++    return @import("sys").environment.read(f64, "TF_GLM_DRAFT_CONFIDENCE", if (calibrated) 0.3 else 0.7);
+ }
+ 
+ /// The drafter MLP split: two ranks as before; three or more only with `wide` (TF_ROCE=1) and 256-aligned shares of FF.
+@@ -96,7 +101,7 @@
+ };
+ 
+ /// One stream's request: `n` rows of its last verify into its context first (0: none), the anchor, rank 0's `out`.
+-pub const Req = struct { slot: u32, pos: i64, n: usize, anchor: u32, propose: bool = true, out: ?[]u32 = null, probs: ?[]f64 = null };
++pub const Req = struct { slot: u32, pos: i64, n: usize, anchor: u32, propose: bool = true, calibrated: bool = false, out: ?[]u32 = null, probs: ?[]f64 = null };
+ 
+ /// Context runs: `n` tap rows at `taps` (consecutive), positions pos0.., into `ring`.
+ pub const Run = struct { ring: u64, taps: u64, n: usize, pos0: i64 };
+@@ -307,7 +312,7 @@
+         if (rank0) {
+             try block.download(dr, e, std.mem.sliceAsBytes(dr.cand[0..@import("dflash_candidates.zig").Layout.init(dr.world, M, CW).read]), dr.gtk);
+             try block.download(dr, e, std.mem.sliceAsBytes(dr.gh[0 .. M * RANK]), dr.g);
+-            for (active, 0..) |q, i| select.select(dr, i, M, q);
++            for (active, 0..) |q, i| selector.select(dr, i, M, q);
+             if (dr.log > dr.calls) for (active) |q| std.log.info("dflash2 round {d}: slot {d} pos {d} kept {d} anchor {d} drafts {any}", .{ dr.calls, q.slot, q.pos, q.n, q.anchor, q.out.?[0 .. BLOCK - 1] });
+             if (dr.calls % 256 == 255) std.log.info("dflash2: {d} rounds, {d} contexts restarted", .{ dr.calls + 1, dr.lost });
+         }
+--- a/zig/src/families/glm/cuda_lanes.zig
++++ b/zig/src/families/glm/cuda_lanes.zig
+@@ -32,6 +32,7 @@
+     x: follow.Leader,
+     whole: bool = false, // prompt passes run whole (TF_GLM_PROMPT_STEPS=0): no other stream's round between chunks
+     alone: bool = false, // each window in its own forward (TF_GLM_SHARED=0)
++    calibrated_greedy: bool = false, // rank 0 scores DFlash2 candidates for greedy requests
+     mtp_confidence: ?f64 = null, // --mtp-confidence: the MTP head's chains stop where their chance falls under it
+     copy_confidence: bool = false, // copy mode keeps head confidence in probabilities so target copies stay priced
+     costs: ?lane_costs.Table = null, // MTP's window and draft prices, timed at load (cuda_lane_costs)
+@@ -586,12 +587,15 @@
+                 n = rows.len;
+                 break :a r.follow[rows.len - 1];
+             } else self.value(r.first orelse return error.NoFirstToken);
+-            reqs[i] = .{ .slot = l.slot, .pos = 0, .n = n, .anchor = anchor, .propose = r.depth > 0, .out = &l.held, .probs = &l.chances };
++            const greedy = if (r.stream.sampling) |s| s.temperature == 0 else true;
++            reqs[i] = .{ .slot = l.slot, .pos = 0, .n = n, .anchor = anchor, .propose = r.depth > 0, .out = &l.held, .probs = &l.chances, .calibrated = self.calibrated_greedy and greedy };
+             held[i] = l;
+         }
+         try self.x.block(reqs[0..requests.len]);
+-        const cut = try dflash.confidence();
+-        for (requests, held[0..requests.len]) |r, l| {
++        const normal_cut = try dflash.confidence();
++        const calibrated_cut = if (self.calibrated_greedy) try dflash.chainCut(true) else normal_cut;
++        for (requests, held[0..requests.len], reqs[0..requests.len]) |r, l, q| {
++            const cut = if (q.calibrated) calibrated_cut else normal_cut;
+             l.held_n = @min(r.depth, max_held);
+             var chain: f64 = 1; // glm_cuda's rule: past the first, a chain stops where its product falls under the cut
+             for (l.chances[0..l.held_n], 0..) |*c, j| {
+--- a/zig/src/families/glm/cuda_native.zig
++++ b/zig/src/families/glm/cuda_native.zig
+@@ -373,7 +373,9 @@
+     const steps = try @import("sys").environment.value(bool, "TF_GLM_PROMPT_STEPS", ranks.environment("TF_GLM_PROMPT_STEPS"), true);
+     const shared = try @import("sys").environment.value(bool, "TF_GLM_SHARED", ranks.environment("TF_GLM_SHARED"), true);
+     own.link.asleep = cuda.tp_watch.open(); // the other ranks begin asleep (follow): the first step wakes them
+-    own.lanes = .{ .x = .{ .e = own.e, .link = &own.link }, .whole = !steps, .alone = !shared, .mtp_confidence = o.mtp_confidence };
++    const calibrated = try @import("sys").environment.read(bool, "TF_GLM_DFLASH_CALIBRATED", false);
++    own.lanes = .{ .x = .{ .e = own.e, .link = &own.link }, .whole = !steps, .alone = !shared, .mtp_confidence = o.mtp_confidence, .calibrated_greedy = calibrated };
++    if (calibrated and own.e.drafter != null) std.log.info("DFlash2 greedy selector: edge 0.6, confidence temperature 2, chain cut {d}", .{try dflash.chainCut(true)});
+     const extra: u64 = (if (o.drafter != null) dflash.ring_bytes else 0) + if (own.e.images) |v| v.streamBytes() else @as(usize, 0);
+     own.layout = if (set.pages) try pages_mod.layout(gpa, own.e, extra) else null;
+     if (own.share > 0) if (own.layout) |*l| { // TF_KV_SHARE: the plan counts each kept state's slot
+--- a/zig/src/families/glm/dflash_select.zig
++++ b/zig/src/families/glm/dflash_select.zig
+@@ -53,11 +53,12 @@
+             const Sc = dr.succ[@as(usize, c[m].id) * RANK ..][0..RANK];
+             var dot: f32 = 0;
+             for (pg, Sc) |a, b| dot += a * bf(b);
+-            sc[m] = c[m].v + dot;
++            sc[m] = c[m].v + if (q.calibrated) 0.6 * dot else dot;
+             if (sc[m] > sc[best]) best = m;
+         }
+         var z: f64 = 0;
+-        for (sc[0..n]) |x| z += @exp(@as(f64, x - sc[best]) / dr.temp);
++        const beta: f64 = if (q.calibrated) 2.0 else dr.temp;
++        for (sc[0..n]) |x| z += @exp(@as(f64, x - sc[best]) / beta);
+         out[t - 1] = c[best].id;
+         if (q.probs) |p| p[t - 1] = 1.0 / z;
+         prev = c[best].id;
+--- a/zig/src/platform/environment.zig
++++ b/zig/src/platform/environment.zig
+@@ -115,6 +115,7 @@
+     .{ .name = "TF_GLM_SHARED", .scope = .glm, .kind = .flag, .forms = "0 or 1" },
+     .{ .name = "TF_GLM_DSEL", .scope = .glm, .kind = .flag, .forms = "0 or 1" },
+     .{ .name = "TF_GLM_DFLASH2_LOG", .scope = .glm, .kind = .u64, .forms = "a whole unsigned 64-bit round count (0 logs no drafts)" },
++    .{ .name = "TF_GLM_DFLASH_CALIBRATED", .scope = .glm, .kind = .flag, .forms = "0 or 1 (default 0); calibrate the rank-0 greedy DFlash2 selector" },
+     .{ .name = "TF_GLM_DRAFT_CONFIDENCE", .scope = .glm, .kind = .real, .max = 1, .forms = "a finite chain-chance cut from 0 to 1 (default 0.7)" },
+     // 2^31 - 32: GLM's slots, the window and its 32 verify rows (glm/cuda_native.zig's capacity), keep i32 positions
+     .{ .name = "TF_GLM_CONTEXT_CEILING", .scope = .glm, .kind = .u64, .first_digit = true, .min = 1, .max = 2147483616, .forms = "a whole token count from 1 to 2147483616 (the window GLM-5.3-Flash may serve in place of config.json's)" },
+--- a/zig/src/core/profile.zig
++++ b/zig/src/core/profile.zig
+@@ -11,6 +11,7 @@
+     TF_QWEN_KV_SHARE,
+     TF_QWEN_REQUEST_STARTS,
+     TF_GLM_KV_POW2,
++    TF_GLM_DFLASH_CALIBRATED,
+     TF_GLM_ABSORB_MMA,
+     TF_GLM_REQUEST_STARTS,
+     TF_KV_SHARE,
+@@ -146,6 +147,7 @@
+     .{ .id = .TF_CACHE_EVICT, .families = cuda_cache, .backend = "multiple", .scopes = &.{ .{ .backend = "cuda", .families = cuda_cache }, .{ .backend = "metal", .families = &.{ "nemotron_h", "qwen3_5", "qwen3_5_moe", "qwen4_exp", "glm5_next", "glm_moe_dsa", "minimax_m3_vl", "gemma4", "gemma4_unified", "spark2_5", "llama", "lfm2_moe", "lfm3", "lfm3_vl", "step5_vl", "kimi_k3", "kimi_k31" } }, .{ .backend = "xpu", .families = &.{ "nemotron_h", "lfm3", "qwen3_5", "gemma4" } } }, .class = .experimental, .syntax = .present, .report_values = &.{"decayed_resume"}, .effect = "Opt into bounded resume credit for RAM snapshot eviction", .evidence = "#3241; synthetic host rows gate; default main unchanged" },
+     .{ .id = .TF_QWEN_REQUEST_STARTS, .families = qwen, .class = .arithmetic, .syntax = .one, .effect = "Opt into CUDA message-start prompt cuts", .evidence = "#1334; default-off; GB10 six-turn: resumed equals fresh, one reply differs from unset" },
+     .{ .id = .TF_GLM_KV_POW2, .families = &.{"glm5_next"}, .class = .arithmetic, .syntax = .one, .effect = "Store latent and pooled index keys as power-of-two scaled E4M3", .evidence = "GLM Python kv8.store_row" },
++    .{ .id = .TF_GLM_DFLASH_CALIBRATED, .families = &.{"glm5_next"}, .class = .experimental, .syntax = .one, .effect = "Use the Python greedy edge weight and confidence temperature for verified DFlash2 proposals", .evidence = "Local matched coding replay" },
+     .{ .id = .TF_GLM_ABSORB_MMA, .families = &.{"glm5_next"}, .class = .arithmetic, .syntax = .one, .effect = "Use tensor-core MMA for prompt MLA absorb and expand", .evidence = "Local GLM prompt port f88a7cb2a" },
+     .{ .id = .TF_GLM_REQUEST_STARTS, .families = &.{"glm5_next"}, .class = .arithmetic, .syntax = .one, .effect = "Opt into CUDA message-start prompt cuts", .evidence = "#2396; default-off; GB10 TP=2 receipts in #2404" },
+     .{ .id = .TF_QWEN_KV_PAGES, .families = qwen, .class = .identical, .effect = "KV pool page size; memory and workload tradeoffs", .evidence = "#1357" },
+--- a/zig/glm_dflash_host.zig
++++ b/zig/glm_dflash_host.zig
+@@ -3,6 +3,46 @@
+ const glm = @import("glm");
+ const registry = @import("core").contract.registry;
+ const t = std.testing;
++
++test "glm dflash: calibrated greedy edge changes the candidate and its temperature changes the chance" {
++    const df = glm.dflash;
++    var dr: df.Drafter = undefined;
++    dr.world = 1;
++    dr.temp = 1;
++    var cand: [df.BLOCK * df.CW]i32 = @splat(-1);
++    var gh: [df.BLOCK * df.RANK]f32 = @splat(0);
++    var pred: [2 * df.RANK]u16 = @splat(0);
++    var succ: [2 * df.RANK]u16 = @splat(0);
++    // The first predecessor feature is one for either token. Token 0 gains an edge of one.
++    pred[0] = 0x3f80;
++    pred[df.RANK] = 0x3f80;
++    succ[0] = 0x3f80;
++    for (1..df.BLOCK) |r| {
++        const i = r * df.CW;
++        cand[i] = 0;
++        cand[i + 1] = 1;
++        cand[i + df.TOPK] = @bitCast(@as(f32, 0));
++        cand[i + df.TOPK + 1] = @bitCast(@as(f32, 0.75));
++        gh[r * df.RANK] = 1;
++    }
++    dr.cand = &cand;
++    dr.gh = &gh;
++    dr.pred = &pred;
++    dr.succ = &succ;
++    var ids: [df.BLOCK - 1]u32 = undefined;
++    var probs: [df.BLOCK - 1]f64 = undefined;
++    var q: df.Req = .{ .slot = 0, .pos = 0, .n = 0, .anchor = 0, .out = &ids, .probs = &probs };
++    for ([_]bool{ false, true }) |calibrated| {
++        q.calibrated = calibrated;
++        df.selector.select(&dr, 0, df.BLOCK, q);
++        const delta: f64 = if (calibrated) (0.75 - 0.6) / 2.0 else (1.0 - 0.75);
++        const expected = 1.0 / (1.0 + @exp(-delta));
++        for (ids, probs) |id, p| {
++            try t.expectEqual(@as(u32, @intFromBool(calibrated)), id);
++            try t.expectApproxEqAbs(expected, p, 1e-8);
++        }
++    }
++}
+ 
+ test "glm dflash: gather and read fit for every supported rank count" {
+     for (1..17) |world| for ([_]usize{ 1, 8, glm.dflash.MAX_M }) |rows| {

@@ -1,0 +1,36 @@
+{
+  "image": "glm53-tf:1104-6c55c20-shared-mma-pyq-ranges-9e8b22519d50",
+  "image_id": "sha256:84c540c3f0c064e3018b5b4cea1e38568b56c1020a6b2b8b031b73e85194c7f7",
+  "manifest_digest": "sha256:e0cb334624630d3b4f2f118b5b34c439fdc5a3f1dc4e1ac5929812a0d7734f4b",
+  "parent_image_id": "sha256:e8fb5242a387db04ac35ce10c7e44790e7c03c56a6dddf2b34c96b46aba0fd34",
+  "patches": {
+    "0019-glm-python-quant.patch": "74ff58666ef29407e9b92d7f416991dac3cc33dfbe3d5b50f061f2703a836f3d",
+    "0020-glm-python-kv.patch": "bd797d92cd830fac4ed0b4378325b83d6f4a9910880f57766b06228e2de27162",
+    "0021-glm-dflash-calibration.patch": "13ea81c487feb394c4c6afc75ee6bb9c41677d11be77bfc1a0d77685bff4f70a",
+    "0022-glm-copy-8-16.patch": "4586f6e11a74f5bb4453651b84a2d1a6d2dfb080a1246093499a253e9bc85fe2",
+    "0023-glm-dflash-only.patch": "1eec66106d0fdbaf5dd31ac6286b07a1efc267a47e063b7de6b763fe898265d8",
+    "0024-glm-verify-index-score-tile.patch": "b3c592ff9f5632b7e2b95289599845b632980cc4eeafee5917e036544ea8dd17",
+    "0025-glm-verify-wide-mla.patch": "f43ac397a105b2508271036cda9727e5854b86951fa9db7db2fe2ea5bbd7a82e",
+    "0026-glm-exl3-decode.patch": "cf14569bc9b6945a5580b527fbf3285234e0b6c1f087df780b87ad352e453c29",
+    "0027-glm-dflash-q4-down.patch": "eda7b4800c7a6ef431f87a2a98fcab2adf1fd0d4a248b8483cd9374c543c435e",
+    "0028-glm-verify-shared-first.patch": "f207e1cc1b4e12255088519d13d217150759beea78f2b641f544df383bf5b548",
+    "0029-glm-verify-tile-ranges.patch": "bf8e1b8f96dcf94bdf533b96c6df83faba16e94c10321607483cf68b43d37e10"
+  },
+  "controls_sha256": "02e192026ae939dabb79d076158c8c7138cc723f322c0c9265f74cc65b07869f",
+  "native_binary_sha256": "859ab47402aeeeef95a65af67a13209c96dd9fbef1bf0bc7e9dd876a99a7b7a2",
+  "mm_fatbin_sha256": "e471499dff22aab7b92d6492f49e2a62a54736fb5544fbc57eaec58b44a8048a",
+  "primary_image_id": "sha256:95e52f41cb92188b40169cfbf81377558a4a18f273f6077663b78dbfbd45e39c",
+  "cuda_inputs_sha256": "1fb2acb549c6b63f37d05bdbe645dabcc946146ec47bb729c1efaddb03c599ee",
+  "oci_record_sha256": "9911b56440b57c80cdda140aa22c13ec16af048a7a08cffcdd30129b6c773d2e",
+  "extra_host_tests": [
+    "test-glm-copies-host",
+    "test-glm-index-emulate",
+    "test-glm-exl3-prompt-host",
+    "test-glm-exl3-host"
+  ],
+  "recompiled_kernel_sha256": {
+    "qmm_group.fatbin": "b672ebea599967c08f6ad834f5366c5e60f86e6782e9eb4db6eb5cf03f8bbbb1",
+    "exl3_experts.fatbin": "3b240de04f8f183e504510505599dc99664421bb2b14dacd5e30a1ef34bd9674"
+  },
+  "q4_private_symbol": "INTERNAL_ce744d04_12_qmm_group_cu_f6c3573a_14"
+}

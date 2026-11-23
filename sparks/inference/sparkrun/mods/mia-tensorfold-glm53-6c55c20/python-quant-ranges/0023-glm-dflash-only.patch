@@ -1,0 +1,358 @@
+diff --git a/zig/glm_dflash_host.zig b/zig/glm_dflash_host.zig
+index 00966bb..ba8524f 100644
+--- a/zig/glm_dflash_host.zig
++++ b/zig/glm_dflash_host.zig
+@@ -4,6 +4,31 @@ const glm = @import("glm");
+ const registry = @import("core").contract.registry;
+ const t = std.testing;
+ 
++test "glm dflash: external-only keeps the draft projection and scheduling when the MTP layer is absent" {
++    var e: glm.engine.Engine = undefined;
++    var dr: glm.dflash.Drafter = undefined;
++    e.drafter = &dr;
++    e.mtp = false;
++    e.w.mtp = null;
++    e.w.external_head = null;
++    try t.expect(e.w.draftHead() == null);
++    const head: glm.q4.Q4 = .{ .w = 11, .s = 12, .b = 13, .n = 64, .k = 128, .npad = 64 };
++    e.w.external_head = head;
++    try t.expectEqualDeep(head, e.w.draftHead().?);
++    var adapter: glm.lanes.Lanes = .{ .x = .{ .e = &e, .link = undefined } };
++    const standalone = adapter.factsWithCopies(true);
++    try t.expect(standalone.speculate and standalone.draft_streams and standalone.hidden_rows);
++    e.mtp = true;
++    const both = adapter.factsWithCopies(true);
++    try t.expectEqualDeep(standalone, both);
++
++    const h: [32]u8 = @splat(0);
++    const ranks = glm.ranks;
++    const fp0 = ranks.Fingerprint.of(2, 0, .{}, 8192, true, h, h, h);
++    const fp1 = ranks.Fingerprint.of(2, 1, .{ .dflash_only = true }, 8192, true, h, h, h);
++    try t.expectEqual(ranks.Fingerprint.Field.mtp, ranks.mismatch(&.{ fp0, fp1 }).?.field);
++}
++
+ test "glm dflash: calibrated greedy edge changes the candidate and its temperature changes the chance" {
+     const df = glm.dflash;
+     var dr: df.Drafter = undefined;
+diff --git a/zig/src/core/profile.zig b/zig/src/core/profile.zig
+index 9eb0c71..7ce20a3 100644
+--- a/zig/src/core/profile.zig
++++ b/zig/src/core/profile.zig
+@@ -10,6 +10,7 @@ pub const Switch = enum {
+     TF_QWEN_KV_PAGES_ALL,
+     TF_QWEN_KV_SHARE,
+     TF_QWEN_REQUEST_STARTS,
++    TF_GLM_DFLASH_ONLY,
+     TF_GLM_KV_POW2,
+     TF_GLM_COPY_8_16,
+     TF_GLM_DFLASH_CALIBRATED,
+@@ -147,6 +148,7 @@ pub const cuda_cache: []const []const u8 = &.{ "nemotron_h", "nemotron_h_omni",
+ pub const entries = [_]Entry{
+     .{ .id = .TF_CACHE_EVICT, .families = cuda_cache, .backend = "multiple", .scopes = &.{ .{ .backend = "cuda", .families = cuda_cache }, .{ .backend = "metal", .families = &.{ "nemotron_h", "qwen3_5", "qwen3_5_moe", "qwen4_exp", "glm5_next", "glm_moe_dsa", "minimax_m3_vl", "gemma4", "gemma4_unified", "spark2_5", "llama", "lfm2_moe", "lfm3", "lfm3_vl", "step5_vl", "kimi_k3", "kimi_k31" } }, .{ .backend = "xpu", .families = &.{ "nemotron_h", "lfm3", "qwen3_5", "gemma4" } } }, .class = .experimental, .syntax = .present, .report_values = &.{"decayed_resume"}, .effect = "Opt into bounded resume credit for RAM snapshot eviction", .evidence = "#3241; synthetic host rows gate; default main unchanged" },
+     .{ .id = .TF_QWEN_REQUEST_STARTS, .families = qwen, .class = .arithmetic, .syntax = .one, .effect = "Opt into CUDA message-start prompt cuts", .evidence = "#1334; default-off; GB10 six-turn: resumed equals fresh, one reply differs from unset" },
++    .{ .id = .TF_GLM_DFLASH_ONLY, .families = &.{"glm5_next"}, .class = .identical, .syntax = .one, .effect = "Keep only the Q4 draft head alongside the external DFlash2 drafter", .evidence = "GLM DFlash2-only prompt and cache layout" },
+     .{ .id = .TF_GLM_KV_POW2, .families = &.{"glm5_next"}, .class = .arithmetic, .syntax = .one, .effect = "Store latent and pooled index keys as power-of-two scaled E4M3", .evidence = "GLM Python kv8.store_row" },
+     .{ .id = .TF_GLM_COPY_8_16, .families = &.{"glm5_next"}, .class = .experimental, .syntax = .one, .effect = "Draft up to 15 verified context tokens after matching 8 prompt tokens or 16 reply tokens", .evidence = "Local coding replay" },
+     .{ .id = .TF_GLM_DFLASH_CALIBRATED, .families = &.{"glm5_next"}, .class = .experimental, .syntax = .one, .effect = "Use the Python greedy edge weight and confidence temperature for verified DFlash2 proposals", .evidence = "Local matched coding replay" },
+diff --git a/zig/src/families/glm/cuda_engine.zig b/zig/src/families/glm/cuda_engine.zig
+index 77fbf25..02f9b3f 100644
+--- a/zig/src/families/glm/cuda_engine.zig
++++ b/zig/src/families/glm/cuda_engine.zig
+@@ -172,7 +172,7 @@ pub const Engine = struct {
+         if (o.settings.layers > c.layers) return error.BadLayers;
+         const layers = try a.alloc(u32, if (o.settings.layers > 0) o.settings.layers else c.layers);
+         for (layers, 0..) |*l, i| l.* = @intCast(i);
+-        e.* = .{ .gpa = gpa, .io = io, .heat_gate = .{ .bands = o.settings.heat, .root = @import("cuda_engine_prof.zig").heatRoot() }, .shared_buf = undefined, .d = d, .c = c, .share = share, .spans = spans, .lib = lib, .comm = comm, .mesh = place, .backend = backend, .collective = backend.collective(), .checkpoint_digest = checkpoint_digest, .settings = o.settings, .m = m, .stream = stream, .pieces = pieces, .w = undefined, .capacity = o.capacity, .bp = undefined, .bd = undefined, .bm = undefined, .pairs = undefined, .smp = undefined, .prompt_out = undefined, .mtp = o.mtp };
++        e.* = .{ .gpa = gpa, .io = io, .heat_gate = .{ .bands = o.settings.heat, .root = @import("cuda_engine_prof.zig").heatRoot() }, .shared_buf = undefined, .d = d, .c = c, .share = share, .spans = spans, .lib = lib, .comm = comm, .mesh = place, .backend = backend, .collective = backend.collective(), .checkpoint_digest = checkpoint_digest, .settings = o.settings, .m = m, .stream = stream, .pieces = pieces, .w = undefined, .capacity = o.capacity, .bp = undefined, .bd = undefined, .bm = undefined, .pairs = undefined, .smp = undefined, .prompt_out = undefined, .mtp = o.mtp and !o.settings.dflash_only };
+         const has_packs = o.settings.dense_bits != 16 or o.settings.head_bits != 16;
+         if (has_packs and !o.settings.tiled) return error.PackedNeedsGlmMm;
+         const Tile = struct {
+@@ -189,7 +189,8 @@ pub const Engine = struct {
+             }
+         };
+         const tiler: Tile = .{ .gpa = gpa, .mk = &e.m.mm, .s = stream, .d = d, .enabled = o.settings.tiled, .dense = o.settings.dense_bits, .head = o.settings.head_bits, .packs = &e.packs };
+-        e.w = try @import("cuda_load_owner.zig").finish(try weights.load(gpa, io, d, stream, e.m.tools(), checkpoint, c, share, layers, o.mtp), tiler, Tile.apply);
++        const draft_weights: weights.DraftWeights = if (o.settings.dflash_only) .external else if (o.mtp) .mtp else .none;
++        e.w = try @import("cuda_load_owner.zig").finish(try weights.loadFor(gpa, io, d, stream, e.m.tools(), checkpoint, c, share, layers, draft_weights), tiler, Tile.apply);
+         errdefer e.w.deinit();
+         errdefer {
+             gpa.free(e.packs.ptrs);
+@@ -214,8 +215,9 @@ pub const Engine = struct {
+         errdefer if (e.pair) |*p| p.deinit();
+         e.bd = try fw.Buffers.init(d, &e.w, fw.window_rows, false, o.capacity);
+         errdefer e.bd.deinit();
+-        e.bm = try fw.Buffers.init(d, &e.w, fw.window_rows, false, o.capacity);
+-        errdefer e.bm.deinit();
++        if (!o.settings.dflash_only) e.bm = try fw.Buffers.init(d, &e.w, fw.window_rows, false, o.capacity);
++        errdefer if (!o.settings.dflash_only) e.bm.deinit();
++        if (o.settings.dflash_only and rank == 0) std.log.info("glm: DFlash2 uses its Q4 output head without loading the checkpoint MTP layer or its KV pages", .{});
+         if (o.mtp) e.bs = try fw.Buffers.initShared(d, &e.w, shared_rows, o.capacity);
+         errdefer if (e.bs) |*b| b.deinit();
+         if (o.settings.kv_shard.on) try e.initKvShard(); // before the room is read: its bytes are the rank's own
+@@ -260,7 +262,7 @@ pub const Engine = struct {
+         e.smp.deinit();
+         e.pairs.free();
+         if (e.bs) |*b| b.deinit();
+-        e.bm.deinit();
++        if (!e.settings.dflash_only) e.bm.deinit();
+         e.bd.deinit();
+         if (e.pair) |*p| p.deinit();
+         e.bp.deinit();
+@@ -348,7 +350,7 @@ pub const Engine = struct {
+         if (made) {
+             const q = try e.gpa.create(Seq);
+             errdefer e.gpa.destroy(q);
+-            q.* = .{ .st = try fw.State.initFormat(e.gpa, e.d, &e.w, e.capacity, e.settings.kv8) };
++            q.* = .{ .st = try fw.State.initWindowFormat(e.gpa, e.d, &e.w, e.capacity, e.settings.kv8, !e.settings.dflash_only) };
+             e.seqs.items[slot] = q;
+         }
+         e.cur = e.seqs.items[slot].?;
+diff --git a/zig/src/families/glm/cuda_env_test.zig b/zig/src/families/glm/cuda_env_test.zig
+index 701a4cd..1b31111 100644
+--- a/zig/src/families/glm/cuda_env_test.zig
++++ b/zig/src/families/glm/cuda_env_test.zig
+@@ -13,6 +13,7 @@ const switches = [_]Name{
+     .{ .name = "TF_GLM_VISION_HOST" },
+     .{ .name = "TF_GLM_PROF" },
+     .{ .name = "TF_GLM_LINK_WAIT" },
++    .{ .name = "TF_GLM_DFLASH_ONLY" },
+     .{ .name = "TF_GLM_KV_POW2" },
+     .{ .name = "TF_GLM_PDL", .default = true },
+     .{ .name = "TF_GLM_PROMPT_STEPS", .default = true },
+diff --git a/zig/src/families/glm/cuda_lane_costs.zig b/zig/src/families/glm/cuda_lane_costs.zig
+index 3e798ed..45e3590 100644
+--- a/zig/src/families/glm/cuda_lane_costs.zig
++++ b/zig/src/families/glm/cuda_lane_costs.zig
+@@ -60,7 +60,7 @@ pub fn tableFor(k: Kept, block: bool) ?Table {
+ pub fn price(gpa: std.mem.Allocator, io: std.Io, ctx: *const cuda.Context, dir: []const u8, x: follow.Leader) !?Table {
+     const e = x.e;
+     const pin = try pinnedForm();
+-    if (!e.mtp or e.capacity < prefix + 2 * fw.window_rows + 2) return untimed(x, pin);
++    if ((!e.mtp and e.drafter == null) or e.capacity < prefix + 2 * fw.window_rows + 2) return untimed(x, pin);
+     var name: [256]u8 = undefined;
+     var shape: [512]u8 = undefined;
+     const block = e.drafter != null;
+@@ -150,13 +150,14 @@ fn keyShape(e: *const engine.Engine, sm: usize, driver: c_int, shape: []u8, pin:
+     const hex = std.fmt.bytesToHex(e.checkpoint_digest, .lower);
+     const draft_hex = std.fmt.bytesToHex(if (e.drafter) |dr| dr.checkpoint_digest else @as([32]u8, @splat(0)), .lower);
+     const tail: []const u8 = if (pin) |f| (if (f) " form factored" else " form classic") else "";
+-    return std.fmt.bufPrint(shape, "sm{d} cuda{d} ranks{d} {s} drafter{d}/{d}/{s} layers{d} l2{d}/{d}/{d}/{d}/{d} warps{d} kda{d} mm{d} bits{d}/{d} kv8{d} pages{d} host{d} roce{d} p2p{s}/{s}/{s} pad{d} pdl{d} dsel{d} wide{d}{s}", .{
+-        sm,                                          driver,                       e.share.world,                          hex[0..],                                   @intFromBool(e.drafter != null),
+-        if (e.drafter) |dr| dr.bits else @as(u8, 0), draft_hex[0..],               set.layers,                             @intFromBool(set.l2pf.on),                  @intFromBool(set.l2pf.named),
+-        set.l2pf.mb,                                 set.l2pf.ctas,                set.l2pf.pace_gbps,                     e.m.experts.nvfp4.warps,                    @intFromBool(set.kda_wide),
+-        @intFromBool(set.tiled),                     set.dense_bits,               set.head_bits,                          @intFromBool(set.kv8),                      @intFromBool(set.pages),
+-        set.kv_host,                                 @intFromBool(set.roce_multi), sys.getenv("NCCL_P2P_LEVEL") orelse "", sys.getenv("NCCL_MIN_NCHANNELS") orelse "", sys.getenv("NCCL_MAX_NCHANNELS") orelse "",
+-        @intFromBool(set.kda_pad),                   @intFromBool(e.m.mm.pdl),     @intFromBool(e.m.dsel),                 @intFromBool(set.roce_wide),                tail,
++    return std.fmt.bufPrint(shape, "sm{d} cuda{d} ranks{d} {s} drafter{d}/{d}/{s} layers{d} l2{d}/{d}/{d}/{d}/{d} warps{d} kda{d} mm{d} bits{d}/{d} kv8{d}/{d} ext{d} pages{d} host{d} roce{d} p2p{s}/{s}/{s} pad{d} pdl{d} dsel{d} wide{d}{s}", .{
++        sm,                                          driver,                                     e.share.world,             hex[0..],                     @intFromBool(e.drafter != null),
++        if (e.drafter) |dr| dr.bits else @as(u8, 0), draft_hex[0..],                             set.layers,                @intFromBool(set.l2pf.on),    @intFromBool(set.l2pf.named),
++        set.l2pf.mb,                                 set.l2pf.ctas,                              set.l2pf.pace_gbps,        e.m.experts.nvfp4.warps,      @intFromBool(set.kda_wide),
++        @intFromBool(set.tiled),                     set.dense_bits,                             set.head_bits,             @intFromBool(set.kv8),        @intFromBool(set.kv_pow2),
++        @intFromBool(set.dflash_only),               @intFromBool(set.pages),                    set.kv_host,               @intFromBool(set.roce_multi), sys.getenv("NCCL_P2P_LEVEL") orelse "",
++        sys.getenv("NCCL_MIN_NCHANNELS") orelse "",  sys.getenv("NCCL_MAX_NCHANNELS") orelse "", @intFromBool(set.kda_pad), @intFromBool(e.m.mm.pdl),     @intFromBool(e.m.dsel),
++        @intFromBool(set.roce_wide),                 tail,
+     });
+ }
+ 
+diff --git a/zig/src/families/glm/cuda_lanes.zig b/zig/src/families/glm/cuda_lanes.zig
+index 523d4e1..5fa281a 100644
+--- a/zig/src/families/glm/cuda_lanes.zig
++++ b/zig/src/families/glm/cuda_lanes.zig
+@@ -97,8 +97,8 @@ pub const Lanes = struct {
+ 
+     /// Round loop facts: copies up to max_rows, head chains to max_drafts, shared windows unless TF_GLM_SHARED=0.
+     pub fn facts(self: *const Lanes) lanes.Model {
+-        const drafting = self.x.e.mtp;
+         const block = self.x.e.drafter != null;
++        const drafting = self.x.e.mtp or block;
+         const costs = if (block) null else if (self.costs) |*c| c else null;
+         const sharing = drafting and !self.alone;
+         return .{
+@@ -127,7 +127,7 @@ pub const Lanes = struct {
+ 
+     /// Root/context copies use the same verify/keep path and shared cost allocator as every target window.
+     pub fn factsWithCopies(self: *Lanes, enabled: bool) lanes.Model {
+-        self.copy_confidence = enabled and self.x.e.mtp;
++        self.copy_confidence = enabled and (self.x.e.mtp or self.x.e.drafter != null);
+         var m = copy_policy.apply(self.facts(), enabled, self.x.e.drafter == null and self.costs != null);
+         if (self.long_copy_match and enabled and self.x.e.drafter != null) {
+             m.fixed_copy_drafts = 15;
+diff --git a/zig/src/families/glm/cuda_native.zig b/zig/src/families/glm/cuda_native.zig
+index 5e5de3f..7521b77 100644
+--- a/zig/src/families/glm/cuda_native.zig
++++ b/zig/src/families/glm/cuda_native.zig
+@@ -211,6 +211,10 @@ pub fn open(gpa: std.mem.Allocator, io: std.Io, ctx: *const cuda.Context, dir: [
+         return err;
+     };
+     try @import("cuda_roce_multi.zig").validate(p.world, p.rank, set.roce_multi);
++    if (set.dflash_only and (o.drafter == null or !o.drafts)) {
++        std.log.err("TF_GLM_DFLASH_ONLY=1 requires --drafter and enabled drafts", .{});
++        return error.BadSetting;
++    }
+     set.kv8 = o.kv8;
+     if (set.kv_pow2 and !set.kv8) {
+         std.log.err("TF_GLM_KV_POW2=1 requires --kv-cache fp8", .{});
+diff --git a/zig/src/families/glm/cuda_ranks.zig b/zig/src/families/glm/cuda_ranks.zig
+index 540408a..45c64fd 100644
+--- a/zig/src/families/glm/cuda_ranks.zig
++++ b/zig/src/families/glm/cuda_ranks.zig
+@@ -30,6 +30,7 @@ pub const Settings = struct {
+     kv_host: u8 = 0, // TF_GLM_KV_HOST=1: KV pages in host memory (1); with TF_GLM_KV_HOST_SHARED=1, one copy a host (2)
+     kv_host_gib: f64 = 0, // TF_GLM_KV_HOST_GIB: the host pages' GiB (0: one full window)
+     l2pf: l2pf.Options = .{}, // TF_GLM_L2PF and its knobs: a decode window's next weights read into L2 beside it
++    dflash_only: bool = false,
+     kv_pow2: bool = false,
+     absorb_mma: bool = false,
+     kv_live_half: bool = false, // TF_GLM_KV_LIVE_HALF=1: a keep carries the live KDA half alone (cuda_snapshot_layout.zig)
+@@ -48,6 +49,10 @@ pub const Settings = struct {
+     /// `read` from a lookup with no blank text, so every name below and in l2pf's reader is unset when blank.
+     fn readSet(get: *const fn ([:0]const u8) ?[]const u8, problem: *[]const u8) !Settings {
+         var s: Settings = .{};
++        s.dflash_only = @import("sys").environment.value(bool, "TF_GLM_DFLASH_ONLY", get("TF_GLM_DFLASH_ONLY"), false) catch {
++            problem.* = "TF_GLM_DFLASH_ONLY: 0 or 1";
++            return error.BadSetting;
++        };
+         s.kv_pow2 = @import("sys").environment.value(bool, "TF_GLM_KV_POW2", get("TF_GLM_KV_POW2"), false) catch {
+             problem.* = "TF_GLM_KV_POW2: 0 or 1";
+             return error.BadSetting;
+@@ -227,7 +232,7 @@ fn wireOpens(get: *const fn ([:0]const u8) ?[]const u8) bool {
+ 
+ /// What every rank must agree on, as bytes the communicator carries.
+ pub const Fingerprint = extern struct {
+-    layout: u32 = 24, // kv8 now distinguishes the two E4M3 cache formats
++    layout: u32 = 25, // mtp distinguishes external drafting without the checkpoint MTP layer
+     world: u32,
+     rank: u32,
+     kv8: u32 = 0,
+@@ -327,7 +332,7 @@ pub const Fingerprint = extern struct {
+             .pieces = s.pieces,
+             .pair = @intFromBool(s.pair),
+             .layers = s.layers,
+-            .mtp = @intFromBool(mtp),
++            .mtp = @as(u32, @intFromBool(mtp)) | (@as(u32, @intFromBool(s.dflash_only)) << 2),
+             .roce_multi = @intFromBool(s.roce_multi),
+             .roce_wide = @intFromBool(s.roce_wide and world >= 3), // two ranks ask by default, so a lone TF_ROCE=1 there is no difference
+             .kv_host = s.kv_host,
+@@ -497,7 +502,7 @@ fn explain(f: Fingerprint.Field) []const u8 {
+         .pieces => "TF_GLM_OVERLAP_PIECES",
+         .pair => "TF_GLM_PROMPT_PAIR",
+         .layers => "TF_GLM_LAYERS",
+-        .mtp => "--no-drafts given to some ranks and not others",
++        .mtp => "--no-drafts, --drafter or TF_GLM_DFLASH_ONLY differs across ranks",
+         .vision => "--vision (or its image tokens) given to some ranks and not others",
+         .video_tokens => "--vision-video-tokens",
+         .max_images => "the image count limit",
+diff --git a/zig/src/families/glm/cuda_ranks_test.zig b/zig/src/families/glm/cuda_ranks_test.zig
+index fae4c24..f403345 100644
+--- a/zig/src/families/glm/cuda_ranks_test.zig
++++ b/zig/src/families/glm/cuda_ranks_test.zig
+@@ -617,7 +617,7 @@ test "TF_GLM_KV_SHARD: read with its knobs, refused by name on a typo, and in th
+     const f0 = Fingerprint.of(2, 0, .{}, 8192, true, h0, h0, hashBytes("/c"));
+     try std.testing.expectEqual(@as(u32, 0), f0.kv_shard);
+     try std.testing.expectEqual(@as(u32, 0), f0.kv_shard_check);
+-    try std.testing.expectEqual(@as(u32, 22), f0.layout);
++    try std.testing.expectEqual(@as(u32, 25), f0.layout);
+     var all = [_]Fingerprint{ f0, Fingerprint.of(2, 1, s, 8192, true, h0, h0, hashBytes("/c")) };
+     try std.testing.expectEqual(Mismatch{ .field = .kv_shard, .rank = 1 }, mismatch(&all).?); // on one rank only
+     all[0] = Fingerprint.of(2, 0, s, 8192, true, h0, h0, hashBytes("/c"));
+diff --git a/zig/src/families/glm/cuda_state.zig b/zig/src/families/glm/cuda_state.zig
+index 41e31d2..ef2053b 100644
+--- a/zig/src/families/glm/cuda_state.zig
++++ b/zig/src/families/glm/cuda_state.zig
+@@ -438,7 +438,11 @@ pub const State = struct {
+     }
+ 
+     pub fn initFormat(gpa: std.mem.Allocator, d: *const cuda.Driver, w: *const weights.Weights, capacity: usize, kv8: bool) !State {
+-        return make(gpa, d, w, capacity, kv8, null, true);
++        return initWindowFormat(gpa, d, w, capacity, kv8, true);
++    }
++
++    pub fn initWindowFormat(gpa: std.mem.Allocator, d: *const cuda.Driver, w: *const weights.Weights, capacity: usize, kv8: bool, head: bool) !State {
++        return make(gpa, d, w, capacity, kv8, null, head);
+     }
+ 
+     /// A sequence whose latent rows and pooled keys are pages of `p`; it holds no rows until a stream maps some.
+diff --git a/zig/src/families/glm/cuda_weights.zig b/zig/src/families/glm/cuda_weights.zig
+index fe26790..26ed172 100644
+--- a/zig/src/families/glm/cuda_weights.zig
++++ b/zig/src/families/glm/cuda_weights.zig
+@@ -43,9 +43,14 @@ pub const Weights = struct {
+     norm: glue.Norm = .{ .bf16 = 0 },
+     head: projection.Proj = .{ .bf16 = 0 }, // [share.vocab][dims]: bf16, or MXFP8 for the lane
+     mtp: ?Mtp = null,
++    external_head: ?q4.Q4 = null,
+     buffers: std.ArrayList(cuda.DeviceBuffer) = .empty,
+     named: std.ArrayList(Named) = .empty,
+ 
++    pub fn draftHead(w: *const Weights) ?q4.Q4 {
++        return w.external_head orelse if (w.mtp) |m| m.draft else null;
++    }
++
+     pub fn deinit(w: *Weights) void {
+         for (w.buffers.items) |*b| b.free();
+         for (w.named.items) |n| w.gpa.free(n.name);
+@@ -533,6 +538,11 @@ fn recipeTable(r: *const core.modelopt.Recipes) ?*const core.modelopt.Recipes {
+ 
+ /// weights.load without the MTP head: embedding, layers, final norm, the rank's head rows (bf16, MXFP8); `pack_dense`.
+ pub fn load(gpa: std.mem.Allocator, io: std.Io, d: *const cuda.Driver, stream: cuda.Stream, tools: Tools, dir: []const u8, c: cfg.Config, share: shard.Share, layers: []const u32, with_mtp: bool) !Weights {
++    return loadFor(gpa, io, d, stream, tools, dir, c, share, layers, if (with_mtp) .mtp else .none);
++}
++
++pub const DraftWeights = enum { none, mtp, external };
++pub fn loadFor(gpa: std.mem.Allocator, io: std.Io, d: *const cuda.Driver, stream: cuda.Stream, tools: Tools, dir: []const u8, c: cfg.Config, share: shard.Share, layers: []const u32, mode: DraftWeights) !Weights {
+     var w: Weights = .{ .gpa = gpa, .config = c, .share = share };
+     errdefer w.deinit();
+     var ck = try core.Checkpoint.openModelPrefix(gpa, io, dir, prefix);
+@@ -552,7 +562,13 @@ pub fn load(gpa: std.mem.Allocator, io: std.Io, d: *const cuda.Driver, stream: c
+     w.norm = try L.norm("norm.weight", .{}, "norm");
+     const vocab: formats.Part = .{ .rel = "lm_head", .rows = .{ share.vocab.lo, share.vocab.hi } };
+     w.head = try formats.cut(&L, &head_ck, &.{"lm_head"}, &.{vocab}, &.{ .bf16, .mxfp8 }, "head", .{});
+-    if (with_mtp and c.mtp > 0) w.mtp = try @import("cuda_mtp_load.zig").load(&L, &head_ck);
++    switch (mode) {
++        .none => {},
++        .mtp => if (c.mtp > 0) {
++            w.mtp = try @import("cuda_mtp_load.zig").load(&L, &head_ck);
++        },
++        .external => w.external_head = try @import("cuda_mtp_load.zig").draft(&L, &head_ck),
++    }
+     return w;
+ }
+ 
+diff --git a/zig/src/families/glm/dflash_block.zig b/zig/src/families/glm/dflash_block.zig
+index db958a3..9e05db3 100644
+--- a/zig/src/families/glm/dflash_block.zig
++++ b/zig/src/families/glm/dflash_block.zig
+@@ -160,7 +160,7 @@ pub fn pass(dr: *Drafter, e: anytype, S: usize, rank0: bool) !void {
+     }
+     // every row through the drafts' 4-bit head (this rank's vocabulary), its 16 best, gathered; rank 0's projections
+     try glue.rmsnorm(set(e), e.stream, dr.x, D, dr.norm, dr.hn, D, dr.xs, df.EPS, M, D);
+-    const head = e.w.mtp.?.draft;
++    const head = e.w.draftHead() orelse return error.DrafterNeedsDraftHead;
+     var r0: usize = 0;
+     while (r0 < M) : (r0 += 16) {
+         const rows = @min(16, M - r0);
+diff --git a/zig/src/families/glm/dflash_load.zig b/zig/src/families/glm/dflash_load.zig
+index a209657..292d112 100644
+--- a/zig/src/families/glm/dflash_load.zig
++++ b/zig/src/families/glm/dflash_load.zig
+@@ -128,7 +128,7 @@ pub fn load(gpa: std.mem.Allocator, io: std.Io, e: anytype, dir: []const u8, ran
+     try checkConfig(gpa, io, dir);
+     const checkpoint_digest = try core.checkpoint_identity.fullIdentity(gpa, io, dir);
+     const d = e.d;
+-    const head = (e.w.mtp orelse return error.DrafterNeedsDraftHead).draft;
++    const head = e.w.draftHead() orelse return error.DrafterNeedsDraftHead;
+     const path = try std.fs.path.join(gpa, &.{ dir, "model.safetensors" });
+     defer gpa.free(path);
+     const file = try std.Io.Dir.cwd().openFile(io, path, .{});
+diff --git a/zig/src/platform/environment.zig b/zig/src/platform/environment.zig
+index fd499c1..d1b4ff7 100644
+--- a/zig/src/platform/environment.zig
++++ b/zig/src/platform/environment.zig
+@@ -110,6 +110,7 @@ pub const rules = [_]Rule{
+     .{ .name = "TF_GLM_VISION_HOST", .scope = .glm, .kind = .flag, .forms = "0 or 1" },
+     .{ .name = "TF_GLM_PROF", .scope = .glm, .kind = .flag, .forms = "0 or 1" },
+     .{ .name = "TF_GLM_LINK_WAIT", .scope = .glm, .kind = .flag, .forms = "0 or 1" },
++    .{ .name = "TF_GLM_DFLASH_ONLY", .scope = .glm, .kind = .flag, .forms = "0 or 1" },
+     .{ .name = "TF_GLM_KV_POW2", .scope = .glm, .kind = .flag, .forms = "0 or 1" },
+     .{ .name = "TF_GLM_PDL", .scope = .glm, .kind = .flag, .forms = "0 or 1" },
+     .{ .name = "TF_GLM_PROMPT_STEPS", .scope = .glm, .kind = .flag, .forms = "0 or 1" },

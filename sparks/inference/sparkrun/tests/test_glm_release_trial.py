@@ -64,6 +64,18 @@ def test_mia_130_device_prompt_cache_reaches_engine(profile, cache_gib):
                                'CONTEXT': '1048576', 'MAX_TOKENS': '32768', 'HOST': '0.0.0.0', 'PORT': '8888'})
     assert args.count('--prompt-cache-gib') == 1
     assert args[args.index('--prompt-cache-gib') + 1] == cache_gib
+    assert args[args.index('--kv-cache') + 1] == 'fp8'
+    assert args[args.index('--drafter-bits') + 1] == '4'
+
+
+def test_coding_recipe_keeps_python_weight_and_cache_formats():
+    profiles = sorted(PROFILE.parent.glob('glm53-mia-1104-6c55c20-coding*.yaml'))
+    assert profiles
+    expected = {'TF_GLM_DENSE_BITS': 'q4-mse', 'TF_GLM_HEAD_BITS': 'fp8',
+                'TF_GLM_KV_POW2': '1', 'TF_GLM_DFLASH_Q4_DOWN': '1'}
+    for path in profiles:
+        recipe = Recipe(yaml.safe_load(path.read_text()), source_path=str(path))
+        assert {key: recipe.env.get(key) for key in expected} == expected, path
 
 
 @pytest.fixture

@@ -27,14 +27,38 @@
     "NOTICE.md": "e89515bba4cfb70d27b3dc04fb5dbb55a2079f4b21cd57a5782a53ad804ebaf1",
     "build.sh": "b71434fae638feab59587c3ca02edf312bb0f69aad0b6c4743f0273eec5c1567",
     "chat_template.jinja": "f2e36c6b7fdd89f5f61564635227a1708e1601357cd41f9b5c0190911573d1e2",
-    "prepare.py": "5466216bf02cef2609e9745fd8911b75dd3dcc5ba154a9c0f216bc73457cae57",
+    "prepare.py": "76f179991e929a1d3c370a1e6d05104dcb0d8e7500459280bc2496f62ab90ace",
     "run.sh": "8eb750ab1c526816000c6d9d03944f7a709d6539613f0d77a12de5be16556e30",
     "serve.py": "8615d9ee59eaf686235d2c8e4cf582fe267022612958a1b13a27645c3a082805",
     "prompt-s2/build.py": "e4ad8e3c75d54c4f6388e9f66f0b0bdba23d06cfa03b95a72c372c1b83659e7a",
     "prompt-s2/0017-glm-packed-prompt-s2.patch": "51b5948ebc4673a361b327ae12293e55dcb210e656e4a39c72c4f53dc69a48d3",
     "prompt-s2/0018-glm-prompt-mla-mma.patch": "e0e96fd943d76d7294fda359f37aab6c8a6a8151129eadc90726de4cc1891b67",
     "prompt-s2/mla-host-tests.patch": "2ee4ffa75b4aeda87c8f839457567075d190d54b5a3ec78b2ab2bea2311c84ca",
-    "prompt-s2/build-mla.py": "8bfdeeb83298d7737904543eef49364464455e298b0cb2f31aea4328c955aba7"
+    "prompt-s2/build-mla.py": "8bfdeeb83298d7737904543eef49364464455e298b0cb2f31aea4328c955aba7",
+    "python-quant/0019-glm-python-quant.patch": "74ff58666ef29407e9b92d7f416991dac3cc33dfbe3d5b50f061f2703a836f3d",
+    "python-quant/0020-glm-python-kv.patch": "bd797d92cd830fac4ed0b4378325b83d6f4a9910880f57766b06228e2de27162",
+    "python-quant/0021-glm-dflash-calibration.patch": "13ea81c487feb394c4c6afc75ee6bb9c41677d11be77bfc1a0d77685bff4f70a",
+    "python-quant/README.md": "478e09f26f474daed54b3c916fd43af80bc17da23f598f682e487ea1b8aafc94",
+    "python-quant/build.py": "d267e1e0e6922c9a26d2e2b0f89768390f7aada0f2a6ecf4f05722d07d4a7577",
+    "python-quant/cuda-inputs.sha256": "1fb2acb549c6b63f37d05bdbe645dabcc946146ec47bb729c1efaddb03c599ee",
+    "python-quant/extract-primary-fatbins.py": "5cb05b39c0010de7bd2b6e1920a90ba8108b03be5b0f385fdb05c1bdfa5561e6",
+    "python-quant/gzip-layer.go": "0cadc50847d8d9787288f3aee4dbb03c7f6022d394a448878996617d54679438",
+    "python-quant/host-controls.patch": "b114ebd82c0ec7b095092b5fbaec4c04d78de418ec2359c5679f2fef80afda6b",
+    "python-quant/oci-record.json.gz": "4f3f7dbc97c6d5bde19bd7e62e12d4af9f9ce615082b4ad34f30a5732d62ed49",
+    "python-quant/oci_layers.py": "bb6dc8e788ec8a9fcff1da4df1be28e0f02dba6296296cef3ad07e9554c7d635",
+    "python-quant/variant.json": "5ee9bb97555044a3816aba95d6739ddd2b11a297b44262ec0001447b04cf6074",
+    "python-quant/verify-weights.py": "574ad782ce4b84ecf3dc424c906e2d53013f133a40420ea98fe19598ddc83ad8",
+    "python-quant-ranges/0022-glm-copy-8-16.patch": "4586f6e11a74f5bb4453651b84a2d1a6d2dfb080a1246093499a253e9bc85fe2",
+    "python-quant-ranges/0023-glm-dflash-only.patch": "1eec66106d0fdbaf5dd31ac6286b07a1efc267a47e063b7de6b763fe898265d8",
+    "python-quant-ranges/0024-glm-verify-index-score-tile.patch": "b3c592ff9f5632b7e2b95289599845b632980cc4eeafee5917e036544ea8dd17",
+    "python-quant-ranges/0025-glm-verify-wide-mla.patch": "f43ac397a105b2508271036cda9727e5854b86951fa9db7db2fe2ea5bbd7a82e",
+    "python-quant-ranges/0026-glm-exl3-decode.patch": "cf14569bc9b6945a5580b527fbf3285234e0b6c1f087df780b87ad352e453c29",
+    "python-quant-ranges/0027-glm-dflash-q4-down.patch": "eda7b4800c7a6ef431f87a2a98fcab2adf1fd0d4a248b8483cd9374c543c435e",
+    "python-quant-ranges/0028-glm-verify-shared-first.patch": "f207e1cc1b4e12255088519d13d217150759beea78f2b641f544df383bf5b548",
+    "python-quant-ranges/0029-glm-verify-tile-ranges.patch": "bf8e1b8f96dcf94bdf533b96c6df83faba16e94c10321607483cf68b43d37e10",
+    "python-quant-ranges/host-controls.patch": "02e192026ae939dabb79d076158c8c7138cc723f322c0c9265f74cc65b07869f",
+    "python-quant-ranges/oci-record.json.gz": "9911b56440b57c80cdda140aa22c13ec16af048a7a08cffcdd30129b6c773d2e",
+    "python-quant-ranges/variant.json": "4176a37f64c2f20a3f800d227c8157226579c5c7bad2da912d93215f2acb6439"
   },
   "derived_image": {
     "name": "prompt-s2",
@@ -50,6 +74,20 @@
       "parent_image_id": "sha256:8726a0ec8e909e309e67d97b2c5400604881f03777cc81cf3743c067be25bff5",
       "patch": "prompt-s2/0018-glm-prompt-mla-mma.patch",
       "host_tests": "prompt-s2/mla-host-tests.patch"
-    }
+    },
+    "decode_images": [
+      {
+        "name": "python-quant",
+        "image": "glm53-tf:1104-6c55c20-shared-mma-python-quant-afac9a6ed96a",
+        "image_id": "sha256:95e52f41cb92188b40169cfbf81377558a4a18f273f6077663b78dbfbd45e39c",
+        "parent_image_id": "sha256:e8fb5242a387db04ac35ce10c7e44790e7c03c56a6dddf2b34c96b46aba0fd34"
+      },
+      {
+        "name": "python-quant-ranges",
+        "image": "glm53-tf:1104-6c55c20-shared-mma-pyq-ranges-9e8b22519d50",
+        "image_id": "sha256:84c540c3f0c064e3018b5b4cea1e38568b56c1020a6b2b8b031b73e85194c7f7",
+        "parent_image_id": "sha256:e8fb5242a387db04ac35ce10c7e44790e7c03c56a6dddf2b34c96b46aba0fd34"
+      }
+    ]
   }
 }

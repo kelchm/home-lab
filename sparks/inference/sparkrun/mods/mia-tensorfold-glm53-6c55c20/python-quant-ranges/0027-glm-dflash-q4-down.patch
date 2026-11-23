@@ -1,0 +1,295 @@
+--- a/zig/kernels/cuda/qmm_group.cu
++++ b/zig/kernels/cuda/qmm_group.cu
+@@ -330,6 +330,8 @@
+ // The instantiations Nemotron's windows launch on sm_121 (tile 2: rows <= 16, bf16 out).
+ template __global__ void tf_qmm_group::group_kernel<64, 16, 64, 1, 4, 8, false, false, false, false>(
+     const __nv_bfloat16* __restrict__, const float* __restrict__, const __grid_constant__ tf_qmm_group::Parts, int, int, int, int, int);
++template __global__ void tf_qmm_group::group_kernel<64, 16, 64, 1, 4, 8, true, false, false, false>(
++    const __nv_bfloat16* __restrict__, const float* __restrict__, const __grid_constant__ tf_qmm_group::Parts, int, int, int, int, int);
+ 
+ template __global__ void tf_qmm_group::group_kernel<64, 16, 128, 1, 8, 4, false, false, false, false>(
+     const __nv_bfloat16* __restrict__, const float* __restrict__, const __grid_constant__ tf_qmm_group::Parts, int, int, int, int, int);
+--- a/zig/src/core/profile.zig
++++ b/zig/src/core/profile.zig
+@@ -13,6 +13,7 @@
+     TF_GLM_EXL3_DECODE,
+     TF_GLM_DECODE_MLA_WIDE,
+     TF_GLM_DECODE_SCORE_TILE,
++    TF_GLM_DFLASH_Q4_DOWN,
+     TF_GLM_DFLASH_ONLY,
+     TF_GLM_KV_POW2,
+     TF_GLM_COPY_8_16,
+@@ -154,6 +155,7 @@
+     .{ .id = .TF_GLM_EXL3_DECODE, .families = &.{"glm5_next"}, .class = .identical, .syntax = .one, .effect = "Use the uniform four-bit routed experts for short GLM TP2 decode windows", .evidence = "GLM per-slot FP32 expert parity" },
+     .{ .id = .TF_GLM_DECODE_MLA_WIDE, .families = &.{"glm5_next"}, .class = .identical, .syntax = .one, .effect = "Share a paged FP8 latent tile across 32 attention heads in long decode windows", .evidence = "Paged GB10 partial and BF16 output equality" },
+     .{ .id = .TF_GLM_DECODE_SCORE_TILE, .families = &.{"glm5_next"}, .class = .identical, .syntax = .one, .effect = "Share pooled-key score tiles across long-context verification rows", .evidence = "GLM index launch and device score parity" },
++    .{ .id = .TF_GLM_DFLASH_Q4_DOWN, .families = &.{"glm5_next"}, .class = .identical, .syntax = .one, .effect = "Use Python-compatible Q4 DFlash2 MLP down projections with FP32 rank partials", .evidence = "GLM DFlash2 target-verified proposal equivalence" },
+     .{ .id = .TF_GLM_DFLASH_ONLY, .families = &.{"glm5_next"}, .class = .identical, .syntax = .one, .effect = "Keep only the Q4 draft head alongside the external DFlash2 drafter", .evidence = "GLM DFlash2-only prompt and cache layout" },
+     .{ .id = .TF_GLM_KV_POW2, .families = &.{"glm5_next"}, .class = .arithmetic, .syntax = .one, .effect = "Store latent and pooled index keys as power-of-two scaled E4M3", .evidence = "GLM Python kv8.store_row" },
+     .{ .id = .TF_GLM_COPY_8_16, .families = &.{"glm5_next"}, .class = .experimental, .syntax = .one, .effect = "Draft up to 15 verified context tokens after matching 8 prompt tokens or 16 reply tokens", .evidence = "Local coding replay" },
+--- a/zig/src/families/glm/cuda_env_test.zig
++++ b/zig/src/families/glm/cuda_env_test.zig
+@@ -16,6 +16,7 @@
+     .{ .name = "TF_GLM_DECODE_MLA_WIDE" },
+     .{ .name = "TF_GLM_EXL3_DECODE" },
+     .{ .name = "TF_GLM_DECODE_SCORE_TILE" },
++    .{ .name = "TF_GLM_DFLASH_Q4_DOWN" },
+     .{ .name = "TF_GLM_DFLASH_ONLY" },
+     .{ .name = "TF_GLM_KV_POW2" },
+     .{ .name = "TF_GLM_PDL", .default = true },
+--- a/zig/src/families/glm/cuda_native.zig
++++ b/zig/src/families/glm/cuda_native.zig
+@@ -211,6 +211,10 @@
+         return err;
+     };
+     try @import("cuda_roce_multi.zig").validate(p.world, p.rank, set.roce_multi);
++    if (set.dflash_q4_down and (o.drafter == null or !o.drafts or o.drafter_bits != 4)) {
++        std.log.err("TF_GLM_DFLASH_Q4_DOWN=1 requires enabled DFlash2 and --drafter-bits 4", .{});
++        return error.BadSetting;
++    }
+     if (set.dflash_only and (o.drafter == null or !o.drafts)) {
+         std.log.err("TF_GLM_DFLASH_ONLY=1 requires --drafter and enabled drafts", .{});
+         return error.BadSetting;
+--- a/zig/src/families/glm/cuda_q4.zig
++++ b/zig/src/families/glm/cuda_q4.zig
+@@ -5,6 +5,7 @@
+ 
+ /// qmm_group.cu's tile-2 instantiation (LaneTile<64, 16, 64, 1, 4, 8>, bf16 out), as zig/kernels/cuda exports it.
+ const group_symbol = "_ZN12tf_qmm_group12group_kernelILi64ELi16ELi64ELi1ELi4ELi8ELb0ELb0ELb0ELb0EEEvPK13__nv_bfloat16PKfNS_5PartsEiiiii";
++const group_f32_symbol = "_ZN12tf_qmm_group12group_kernelILi64ELi16ELi64ELi1ELi4ELi8ELb1ELb0ELb0ELb0EEEvPK13__nv_bfloat16PKfNS_5PartsEiiiii";
+ const group_smem: u32 = 35328; // LaneTile<64, 16, 64, 1, 4, 8>::SMEM
+ 
+ /// qmm_group.cu's Part and Parts, passed by value: four projections at most, one used here.
+@@ -19,6 +20,7 @@
+ pub const Q4 = struct { w: u64, s: u64, b: u64, n: usize, k: usize, npad: usize };
+ 
+ pub const Kernels = struct {
++    group_f32: cuda.Function,
+     group: cuda.Function,
+     pack_dense: cuda.Function,
+     transpose: cuda.Function,
+@@ -27,11 +29,13 @@
+     /// From the qmm_group and affine4_pack modules.
+     pub fn load(group: cuda.Module, ops: cuda.Module, ctx: *const cuda.Context) !Kernels {
+         const k: Kernels = .{
++            .group_f32 = try group.function(group_f32_symbol),
+             .group = try group.function(group_symbol),
+             .pack_dense = try ops.function("tf_pack_dense"),
+             .transpose = try ops.function("tf_transpose_pad16"),
+             .gb10 = try ctx.attribute(.compute_capability_major) == 12 and try ctx.attribute(.compute_capability_minor) == 1,
+         };
++        try k.group_f32.allowDynamicShared(group_smem);
+         try k.group.allowDynamicShared(group_smem);
+         return k;
+     }
+@@ -78,6 +82,11 @@
+ 
+ /// qmm.matmul of a Q4 (tile 2, up to 16 rows): x bf16 (`ldx` apart), group sums xs fp32 [rows][k/64] -> out bf16.
+ pub fn matmul(ks: *const Kernels, stream: cuda.Stream, x: u64, ldx: usize, xs: u64, q: Q4, out: u64, rows: usize) !void {
++    return matmulOutput(ks, stream, x, ldx, xs, q, out, rows, false);
++}
++
++/// A row-parallel projection retains its unrounded accumulator until after tensor-parallel summation.
++pub fn matmulOutput(ks: *const Kernels, stream: cuda.Stream, x: u64, ldx: usize, xs: u64, q: Q4, out: u64, rows: usize, wide: bool) !void {
+     if (rows == 0 or rows > 16) return error.WindowTooWide;
+     const sk = splitK(q.n, q.k);
+     const tiles = (q.n + 63) / 64;
+@@ -98,7 +107,7 @@
+         .cluster = if (sk > 1) .{ .x = @intCast(sk) } else null,
+         .pdl = ks.gb10,
+     };
+-    try cuda.launch.launch(ks.group, cfg, stream, &a);
++    try cuda.launch.launch(if (wide) ks.group_f32 else ks.group, cfg, stream, &a);
+ }
+ 
+ test "the draft head's shape takes one K slice; npad rounds to 128s" {
+--- a/zig/src/families/glm/cuda_ranks.zig
++++ b/zig/src/families/glm/cuda_ranks.zig
+@@ -30,6 +30,7 @@
+     kv_host: u8 = 0, // TF_GLM_KV_HOST=1: KV pages in host memory (1); with TF_GLM_KV_HOST_SHARED=1, one copy a host (2)
+     kv_host_gib: f64 = 0, // TF_GLM_KV_HOST_GIB: the host pages' GiB (0: one full window)
+     l2pf: l2pf.Options = .{}, // TF_GLM_L2PF and its knobs: a decode window's next weights read into L2 beside it
++    dflash_q4_down: bool = false,
+     dflash_only: bool = false,
+     kv_pow2: bool = false,
+     exl3_decode: bool = false,
+@@ -62,6 +63,10 @@
+         };
+         s.decode_score_tile = @import("sys").environment.value(bool, "TF_GLM_DECODE_SCORE_TILE", get("TF_GLM_DECODE_SCORE_TILE"), false) catch {
+             problem.* = "TF_GLM_DECODE_SCORE_TILE: 0 or 1";
++            return error.BadSetting;
++        };
++        s.dflash_q4_down = @import("sys").environment.value(bool, "TF_GLM_DFLASH_Q4_DOWN", get("TF_GLM_DFLASH_Q4_DOWN"), false) catch {
++            problem.* = "TF_GLM_DFLASH_Q4_DOWN: 0 or 1";
+             return error.BadSetting;
+         };
+         s.dflash_only = @import("sys").environment.value(bool, "TF_GLM_DFLASH_ONLY", get("TF_GLM_DFLASH_ONLY"), false) catch {
+@@ -247,7 +252,7 @@
+ 
+ /// What every rank must agree on, as bytes the communicator carries.
+ pub const Fingerprint = extern struct {
+-    layout: u32 = 28, // tiled and three decode switches occupy one word
++    layout: u32 = 29, // mtp also identifies DFlash2 down projection precision
+     world: u32,
+     rank: u32,
+     kv8: u32 = 0,
+@@ -356,7 +361,7 @@
+             .pieces = s.pieces,
+             .pair = @intFromBool(s.pair),
+             .layers = s.layers,
+-            .mtp = @as(u32, @intFromBool(mtp)) | (@as(u32, @intFromBool(s.dflash_only)) << 2),
++            .mtp = @as(u32, @intFromBool(mtp)) | (@as(u32, @intFromBool(s.dflash_only)) << 2) | (@as(u32, @intFromBool(s.dflash_q4_down)) << 3),
+             .roce_multi = @intFromBool(s.roce_multi),
+             .roce_wide = @intFromBool(s.roce_wide and world >= 3), // two ranks ask by default, so a lone TF_ROCE=1 there is no difference
+             .kv_host = s.kv_host,
+@@ -388,6 +393,12 @@
+     const h: [32]u8 = @splat(0);
+     const all = [_]Fingerprint{ Fingerprint.of(2, 0, .{}, 8192, true, h, h, h), Fingerprint.of(2, 1, .{ .decode_mla_wide = true }, 8192, true, h, h, h) };
+     try std.testing.expectEqual(Mismatch{ .field = .decode_mla_wide, .rank = 1 }, mismatch(&all).?);
++}
++
++test "fingerprints: agreeing ranks require the same DFlash2 down format" {
++    const h: [32]u8 = @splat(0);
++    const all = [_]Fingerprint{ Fingerprint.of(2, 0, .{}, 8192, true, h, h, h), Fingerprint.of(2, 1, .{ .dflash_q4_down = true }, 8192, true, h, h, h) };
++    try std.testing.expectEqual(Mismatch{ .field = .mtp, .rank = 1 }, mismatch(&all).?);
+ }
+ 
+ test "fingerprints: agreeing ranks require the same verification scorer" {
+@@ -552,7 +563,7 @@
+         .pieces => "TF_GLM_OVERLAP_PIECES",
+         .pair => "TF_GLM_PROMPT_PAIR",
+         .layers => "TF_GLM_LAYERS",
+-        .mtp => "--no-drafts, --drafter or TF_GLM_DFLASH_ONLY differs across ranks",
++        .mtp => "--no-drafts, --drafter, TF_GLM_DFLASH_ONLY or TF_GLM_DFLASH_Q4_DOWN differs across ranks",
+         .vision => "--vision (or its image tokens) given to some ranks and not others",
+         .video_tokens => "--vision-video-tokens",
+         .max_images => "the image count limit",
+--- a/zig/src/families/glm/cuda_ranks_test.zig
++++ b/zig/src/families/glm/cuda_ranks_test.zig
+@@ -617,7 +617,7 @@
+     const f0 = Fingerprint.of(2, 0, .{}, 8192, true, h0, h0, hashBytes("/c"));
+     try std.testing.expectEqual(@as(u32, 0), f0.kv_shard);
+     try std.testing.expectEqual(@as(u32, 0), f0.kv_shard_check);
+-    try std.testing.expectEqual(@as(u32, 28), f0.layout);
++    try std.testing.expectEqual(@as(u32, 29), f0.layout);
+     var all = [_]Fingerprint{ f0, Fingerprint.of(2, 1, s, 8192, true, h0, h0, hashBytes("/c")) };
+     try std.testing.expectEqual(Mismatch{ .field = .kv_shard, .rank = 1 }, mismatch(&all).?); // on one rank only
+     all[0] = Fingerprint.of(2, 0, s, 8192, true, h0, h0, hashBytes("/c"));
+--- a/zig/src/families/glm/dflash.zig
++++ b/zig/src/families/glm/dflash.zig
+@@ -87,8 +87,8 @@
+ /// A drafter linear: 4 bits (--drafter-bits 4, the default; they only propose) or bf16 tiled for glm_mm.
+ pub const Lin = union(enum) { q4: q4.Q4, bf16: mm.Tiled };
+ 
+-/// down and the selector's projection stay bf16 (their fp32 outputs are gathered or read on the host).
+-pub const LayerW = struct { in_norm: u64, post_norm: u64, qn: u64, kn: u64, a_base: u64, m_base: u64, qkv: Lin, kv: Lin, o: Lin, gu: Lin, down: mm.Tiled, a_proj: Lin, m_proj: Lin };
++/// The row-parallel down writes fp32 partials at either precision. The selector projection remains bf16.
++pub const LayerW = struct { in_norm: u64, post_norm: u64, qn: u64, kn: u64, a_base: u64, m_base: u64, qkv: Lin, kv: Lin, o: Lin, gu: Lin, down: Lin, a_proj: Lin, m_proj: Lin };
+ 
+ /// A stream's drafter state by slot: its ring, where its context starts, and its last verify's tap rows.
+ pub const Slot = struct {
+--- a/zig/src/families/glm/dflash_block.zig
++++ b/zig/src/families/glm/dflash_block.zig
+@@ -18,12 +18,11 @@
+     return .{ .glue = &e.m.glue, .mm = &e.m.mm };
+ }
+ 
+-/// out[m, n] = x[m, k] . w^T, bf16 out (`wide`: fp32, glm_mm only): 4 bits 16 rows a launch, or glm_mm.
++/// out[m, n] = x[m, k] . w^T, bf16 out (`wide`: unrounded fp32 rank partials): 4 bits 16 rows a launch, or glm_mm.
+ fn lin(dr: *const Drafter, e: anytype, x: u64, w: df.Lin, out: u64, m: usize, wide: bool) !void {
+     switch (w) {
+         .bf16 => |t| try mm.matmul(&e.m.mm, e.stream, x, t.k, t, out, dr.part, m, wide, false),
+         .q4 => |q| {
+-            if (wide) return error.WideFromFourBits;
+             var a: cuda.Args = .{};
+             a.add(x);
+             a.add(@as(i32, @intCast(q.k)));
+@@ -33,7 +32,8 @@
+             var r0: usize = 0;
+             while (r0 < m) : (r0 += 16) {
+                 const rows = @min(16, m - r0);
+-                try q4.matmul(&e.m.q4, e.stream, x + r0 * q.k * 2, q.k, dr.gs + r0 * (q.k / 64) * 4, q, out + r0 * q.n * 2, rows);
++                const elem_bytes: usize = if (wide) 4 else 2;
++                try q4.matmulOutput(&e.m.q4, e.stream, x + r0 * q.k * 2, q.k, dr.gs + r0 * (q.k / 64) * 4, q, out + r0 * q.n * elem_bytes, rows, wide);
+             }
+         },
+     }
+@@ -147,7 +147,7 @@
+         }
+         if (dr.split) { // each rank's share of down's K as fp32 partials, gathered and summed in rank order
+             const bytes = M * D * 4;
+-            try linB(dr, e, dr.act, l.down, dr.sums + e.share.rank * bytes, M, true);
++            try lin(dr, e, dr.act, l.down, dr.sums + e.share.rank * bytes, M, true);
+             try gather(e, dr.sums, bytes);
+             var a: cuda.Args = .{};
+             a.add(dr.sums);
+@@ -155,7 +155,7 @@
+             a.add(@as(i32, @intCast(M)));
+             a.add(@as(i32, @intCast(dr.world)));
+             try go(dr.k.sumn, .{ .x = @intCast(M), .y = D / 1024 }, 256, e, &a);
+-        } else try linB(dr, e, dr.act, l.down, dr.a, M, false);
++        } else try lin(dr, e, dr.act, l.down, dr.a, M, false);
+         try conv(dr, e, dr.a, 1, l.m_base + 2 * D * 2, dr.x, true, M);
+     }
+     // every row through the drafts' 4-bit head (this rank's vocabulary), its 16 best, gathered; rank 0's projections
+--- a/zig/src/families/glm/dflash_load.zig
++++ b/zig/src/families/glm/dflash_load.zig
+@@ -57,6 +57,11 @@
+         const p = try l.take(n);
+         try l.w.upload(p - l.w.ptr, try l.read(name, n));
+         return p;
++    }
++
++    fn down(l: *Loader, name: []const u8, part: ?[4]usize, quantized: bool) !df.Lin {
++        if (quantized) return l.linear(&.{name}, &.{D}, FF, part);
++        return .{ .bf16 = try l.linearB(&.{name}, &.{D}, FF, part) };
+     }
+ 
+     /// `names` stacked as linear(), at the drafter's bits: quantize4 then q4's tiling, or glm_mm's.
+@@ -151,7 +156,10 @@
+     const small: u64 = 6 * 4096 * 2 + 2 * 128 * 2 + 2 * 2 * 2 * D * 2 + 16 * 256;
+     const per: u64 = if (bits == 4) 1 else 4; // quarter-bytes a weight: 4 bits (plus scales and biases below) or bf16
+     const lin_elems: u64 = df.QKV * D + 2 * KVW * D + D * D + 2 * ff * D + 2 * KVW * D + 5 * D * D / df.LAYERS;
+-    const total: u64 = df.LAYERS * (lin_elems * per / 2 + lin_elems / 16 + D * ff * 2 + small + 32 * 256) + df.RANK * D * 2 + 2 * D * 2 + 64 * 256;
++    // The same arena owns the down projection in each layer. Its Q4 storage includes both bf16 metadata arrays.
++    const down_parts = q4.bytes(D, ff);
++    const down_bytes = if (e.settings.dflash_q4_down) down_parts[0] + down_parts[1] + down_parts[2] else D * ff * 2;
++    const total: u64 = df.LAYERS * (lin_elems * per / 2 + lin_elems / 16 + down_bytes + small + 32 * 256) + df.RANK * D * 2 + 2 * D * 2 + 64 * 256;
+     var wbuf = try cuda.DeviceBuffer.alloc(d, total);
+     errdefer wbuf.free();
+     var tmp = try cuda.DeviceBuffer.alloc(d, 2 * FF * D * 2); // the largest linear as stored
+@@ -188,10 +196,10 @@
+         const down = try layerName(&nb[3], i, "mlp.down_proj.weight");
+         if (split) { // this rank's share of the MLP width: gate and up rows, down columns, at rank * ff
+             lw.gu = try l.linear(&.{ gate, up }, &.{ FF, FF }, D, .{ rank * ff, ff, 0, D });
+-            lw.down = try l.linearB(&.{down}, &.{D}, FF, .{ 0, 0, rank * ff, ff });
++            lw.down = try l.down(down, .{ 0, 0, rank * ff, ff }, e.settings.dflash_q4_down);
+         } else {
+             lw.gu = try l.linear(&.{ gate, up }, &.{ FF, FF }, D, null);
+-            lw.down = try l.linearB(&.{down}, &.{D}, FF, null);
++            lw.down = try l.down(down, null, e.settings.dflash_q4_down);
+         }
+         lw.a_proj = try l.linear(&.{try layerName(&nb[1], i, "attention_conv.kernel_projection.weight")}, &.{KVW}, D, null);
+         lw.m_proj = try l.linear(&.{try layerName(&nb[1], i, "mlp_conv.kernel_projection.weight")}, &.{KVW}, D, null);
+@@ -235,10 +243,9 @@
+     const chunks: u64 = (head_n + 4095) / 4096;
+     var part: u64 = 16;
+     for (dr.layers) |l| {
+-        for ([_]df.Lin{ l.qkv, l.kv, l.o, l.gu, l.a_proj, l.m_proj }) |w| if (w == .bf16) {
++        for ([_]df.Lin{ l.qkv, l.kv, l.o, l.gu, l.down, l.a_proj, l.m_proj }) |w| if (w == .bf16) {
+             part = @max(part, mm.partBytes(64, w.bf16));
+         };
+-        part = @max(part, mm.partBytes(64, l.down));
+     }
+     if (dr.fc == .bf16) part = @max(part, mm.partBytes(64, dr.fc.bf16));
+     part = @max(part, mm.partBytes(64, dr.hproj));
+--- a/zig/src/platform/environment.zig
++++ b/zig/src/platform/environment.zig
+@@ -113,6 +113,7 @@
+     .{ .name = "TF_GLM_EXL3_DECODE", .scope = .glm, .kind = .flag, .forms = "0 or 1" },
+     .{ .name = "TF_GLM_DECODE_MLA_WIDE", .scope = .glm, .kind = .flag, .forms = "0 or 1" },
+     .{ .name = "TF_GLM_DECODE_SCORE_TILE", .scope = .glm, .kind = .flag, .forms = "0 or 1" },
++    .{ .name = "TF_GLM_DFLASH_Q4_DOWN", .scope = .glm, .kind = .flag, .forms = "0 or 1" },
+     .{ .name = "TF_GLM_DFLASH_ONLY", .scope = .glm, .kind = .flag, .forms = "0 or 1" },
+     .{ .name = "TF_GLM_KV_POW2", .scope = .glm, .kind = .flag, .forms = "0 or 1" },
+     .{ .name = "TF_GLM_PDL", .scope = .glm, .kind = .flag, .forms = "0 or 1" },

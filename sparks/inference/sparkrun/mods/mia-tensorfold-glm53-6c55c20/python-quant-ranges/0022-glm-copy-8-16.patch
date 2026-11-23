@@ -1,0 +1,225 @@
+--- a/zig/src/platform/environment.zig
++++ b/zig/src/platform/environment.zig
+@@ -116,6 +116,7 @@
+     .{ .name = "TF_GLM_SHARED", .scope = .glm, .kind = .flag, .forms = "0 or 1" },
+     .{ .name = "TF_GLM_DSEL", .scope = .glm, .kind = .flag, .forms = "0 or 1" },
+     .{ .name = "TF_GLM_DFLASH2_LOG", .scope = .glm, .kind = .u64, .forms = "a whole unsigned 64-bit round count (0 logs no drafts)" },
++    .{ .name = "TF_GLM_COPY_8_16", .scope = .glm, .kind = .flag, .forms = "0 or 1 (default 0); use 8-token prompt and 16-token reply matches for up to 15 copy drafts" },
+     .{ .name = "TF_GLM_DFLASH_CALIBRATED", .scope = .glm, .kind = .flag, .forms = "0 or 1 (default 0); calibrate the rank-0 greedy DFlash2 selector" },
+     .{ .name = "TF_GLM_DRAFT_CONFIDENCE", .scope = .glm, .kind = .real, .max = 1, .forms = "a finite chain-chance cut from 0 to 1 (default 0.7)" },
+     // 2^31 - 32: GLM's slots, the window and its 32 verify rows (glm/cuda_native.zig's capacity), keep i32 positions
+--- a/zig/src/core/profile.zig
++++ b/zig/src/core/profile.zig
+@@ -11,6 +11,7 @@
+     TF_QWEN_KV_SHARE,
+     TF_QWEN_REQUEST_STARTS,
+     TF_GLM_KV_POW2,
++    TF_GLM_COPY_8_16,
+     TF_GLM_DFLASH_CALIBRATED,
+     TF_GLM_ABSORB_MMA,
+     TF_GLM_REQUEST_STARTS,
+@@ -147,6 +148,7 @@
+     .{ .id = .TF_CACHE_EVICT, .families = cuda_cache, .backend = "multiple", .scopes = &.{ .{ .backend = "cuda", .families = cuda_cache }, .{ .backend = "metal", .families = &.{ "nemotron_h", "qwen3_5", "qwen3_5_moe", "qwen4_exp", "glm5_next", "glm_moe_dsa", "minimax_m3_vl", "gemma4", "gemma4_unified", "spark2_5", "llama", "lfm2_moe", "lfm3", "lfm3_vl", "step5_vl", "kimi_k3", "kimi_k31" } }, .{ .backend = "xpu", .families = &.{ "nemotron_h", "lfm3", "qwen3_5", "gemma4" } } }, .class = .experimental, .syntax = .present, .report_values = &.{"decayed_resume"}, .effect = "Opt into bounded resume credit for RAM snapshot eviction", .evidence = "#3241; synthetic host rows gate; default main unchanged" },
+     .{ .id = .TF_QWEN_REQUEST_STARTS, .families = qwen, .class = .arithmetic, .syntax = .one, .effect = "Opt into CUDA message-start prompt cuts", .evidence = "#1334; default-off; GB10 six-turn: resumed equals fresh, one reply differs from unset" },
+     .{ .id = .TF_GLM_KV_POW2, .families = &.{"glm5_next"}, .class = .arithmetic, .syntax = .one, .effect = "Store latent and pooled index keys as power-of-two scaled E4M3", .evidence = "GLM Python kv8.store_row" },
++    .{ .id = .TF_GLM_COPY_8_16, .families = &.{"glm5_next"}, .class = .experimental, .syntax = .one, .effect = "Draft up to 15 verified context tokens after matching 8 prompt tokens or 16 reply tokens", .evidence = "Local coding replay" },
+     .{ .id = .TF_GLM_DFLASH_CALIBRATED, .families = &.{"glm5_next"}, .class = .experimental, .syntax = .one, .effect = "Use the Python greedy edge weight and confidence temperature for verified DFlash2 proposals", .evidence = "Local matched coding replay" },
+     .{ .id = .TF_GLM_ABSORB_MMA, .families = &.{"glm5_next"}, .class = .arithmetic, .syntax = .one, .effect = "Use tensor-core MMA for prompt MLA absorb and expand", .evidence = "Local GLM prompt port f88a7cb2a" },
+     .{ .id = .TF_GLM_REQUEST_STARTS, .families = &.{"glm5_next"}, .class = .arithmetic, .syntax = .one, .effect = "Opt into CUDA message-start prompt cuts", .evidence = "#2396; default-off; GB10 TP=2 receipts in #2404" },
+--- a/zig/src/core/lanes/config.zig
++++ b/zig/src/core/lanes/config.zig
+@@ -17,6 +17,8 @@
+     allocate_shared_drafts: bool = false, // reserve useful shared head rows before a proposal pass
+     limit_shared_drafts: bool = false, // retain the cost rule's depth cap before reserving shared rows
+     root_copies: bool = false, // verified context copies precede head drafts and skip their proposal pass
++    copy_reply_match: u32 = 0, // optional longer match for a source inside the reply
++    fixed_copy_drafts: ?u32 = null, // optional fixed context-copy proposal width
+     copy_drafts: bool = true, // global serving switch, independent of shared verification capacity
+     own_copy_rates: bool = false, // a copy window is priced by its stream's own copies, not copy_rate's prior
+ 
+@@ -112,6 +114,7 @@
+     shared_drafts: u32 = 0, // Model.shared_drafts
+     lone_cost_tile: u32 = 0, // Model.lone_cost_tile
+     context_copies: bool = false, // Model.context_copies, within the existing verification width
++    copy_reply_match: u32 = 0, // see Model.copy_reply_match
+     enter_match: i64 = 8, // matching tokens a copy needs (rejects coincidental indentation)
+     copy_rate: f64 = 0.94, // a copied token's chance of landing in allocation
+     lone_copies: bool = true, // Model.lone_copies
+@@ -122,7 +125,7 @@
+         const width: u32 = @max(1, @min(@max(m.exact_width, 1), max_rows));
+         if (m.draft_confidence) |floor| if (!(floor >= 0 and floor <= 1)) return error.InvalidDraftConfidence;
+         if (m.head_trees and m.draft_confidence != null) return error.DraftConfidenceNeedsChain;
+-        const max_copy = if (m.copy_drafts) width - 1 else 0;
++        const max_copy = if (m.copy_drafts) @min(width - 1, m.fixed_copy_drafts orelse width - 1) else 0;
+         const first_rows: i64 = if (m.first_copy_rows != 0) m.first_copy_rows else width;
+         const first_copy: u32 = @intCast(@max(1, @min(@as(i64, max_copy), first_rows - 1)));
+         const prior = if (m.draft_prior.len > 0) m.draft_prior else &default_prior;
+@@ -155,12 +158,13 @@
+             .root_copies = m.root_copies and m.copy_drafts,
+             .context_copies = m.context_copies and m.copy_drafts,
+             .enter_match = @max(1, m.copy_match),
++            .copy_reply_match = m.copy_reply_match,
+             .lone_copies = m.lone_copies,
+             .lone_cost_tile = m.lone_cost_tile,
+             .family_width = width,
+             .max_copy = max_copy,
+             .own_copy_rates = m.own_copy_rates,
+-            .first_copy = first_copy,
++            .first_copy = if (m.fixed_copy_drafts != null) max_copy else first_copy,
+             .base_width = @min(width, first_copy + 1),
+             .family_mtp = m.mtp and width >= 2 and m.speculate,
+             .speculate_early = m.speculate_early and !(m.root_copies and m.copy_drafts),
+@@ -239,3 +243,16 @@
+         for (shared) |cost| try std.testing.expectEqual(@as(?f64, cost.ms), explicit.shared_costs.get(cost.width));
+     }
+ }
++
++test "bounded copy depth stays below the family's exact target window" {
++    const a = std.testing.allocator;
++    const m: Model = .{ .exact_width = 32, .first_copy_rows = 4, .copy_reply_match = 16, .copy_match = 8, .fixed_copy_drafts = 15 };
++    for ([_]u32{ 32, 12, 2 }) |maximum| {
++        var c = try Config.init(a, m, maximum, maximum - 1);
++        defer c.deinit(a);
++        try std.testing.expectEqual(@min(maximum - 1, 15), c.max_copy);
++        try std.testing.expectEqual(c.max_copy, c.first_copy);
++        try std.testing.expectEqual(@min(maximum, 4), c.base_width);
++        try std.testing.expectEqual(@as(u32, 16), c.copy_reply_match);
++    }
++}
+--- a/zig/src/core/lanes/proposer.zig
++++ b/zig/src/core/lanes/proposer.zig
+@@ -59,6 +59,7 @@
+     silence_rounds: i64 = 16,
+     window: usize = 4,
+     confident_match: i64 = 24,
++    prompt_copy: ?struct { prompt_len: usize, reply_match: u32 } = null,
+ };
+ 
+ /// Continuations backed by enough matching context; silent for `silence_rounds` asks (not rounds) after rejections.
+@@ -187,7 +188,16 @@
+             if (end >= history.len) continue;
+             var length: i64 = 0;
+             while (length < s.params.max_extension and length < end and history[end - 1 - @as(usize, @intCast(length))] == joined(history, tail, len - 1 - @as(usize, @intCast(length)))) length += 1;
+-            if (length > best_len) {
++            if (s.params.prompt_copy) |policy| {
++                // Occurrences whose last min_match tokens begin in the reply need a longer prefix.
++                const match: usize = @intCast(s.params.min_match);
++                const needed: i64 = if (end >= policy.prompt_len and end - policy.prompt_len >= match) policy.reply_match else s.params.min_match;
++                if (length < needed) continue;
++                // Prefer the latest occurrence with a full continuation, then the earliest partial one.
++                best_len = length;
++                best_end = end;
++                if (history.len - end >= @as(usize, @intCast(max_draft))) break;
++            } else if (length > best_len) {
+                 best_len = length;
+                 best_end = end;
+                 if (length >= s.params.max_extension) break;
+@@ -226,6 +236,20 @@
+         }
+     }
+ };
++
++test "context copy prefers full continuations and requires a longer match from the reply" {
++    const a = std.testing.allocator;
++    var s = try SuffixLookup.init(a, .{ .ngram = 2, .min_match = 2, .prompt_copy = .{ .prompt_len = 6, .reply_match = 4 } });
++    defer s.deinit();
++    // The more recent reply occurrence has only the last two tokens in common, so the prompt wins.
++    try std.testing.expectEqualSlices(u32, &.{ 3, 4, 8 }, try s.propose(&.{ 1, 2, 3, 4, 8, 9, 7, 7, 1, 2, 99, 98, 97, 6, 1, 2 }, 3));
++    // The reply's four-token suffix now matches and offers a full recent continuation.
++    try std.testing.expectEqualSlices(u32, &.{ 99, 98, 97 }, try s.propose(&.{ 1, 2, 3, 4, 8, 9, 7, 7, 1, 2, 99, 98, 97, 7, 7, 1, 2 }, 3));
++    var partial = try SuffixLookup.init(a, .{ .ngram = 2, .min_match = 2, .prompt_copy = .{ .prompt_len = 99, .reply_match = 4 } });
++    defer partial.deinit();
++    // No full occurrence: return the longest available continuation (the earliest match).
++    try std.testing.expectEqualSlices(u32, &.{ 1, 2, 1, 2 }, try partial.propose(&.{ 1, 2, 1, 2, 1, 2 }, 7));
++}
+ 
+ test "suffix lookup copies the continuation after a repeated n-gram" {
+     const gpa = std.testing.allocator;
+--- a/zig/src/core/lane_stream.zig
++++ b/zig/src/core/lane_stream.zig
+@@ -33,7 +33,14 @@
+     } else |_| {};
+     if (h.proposers) |ps| {
+         job.custom = ps.make(ps.ctx, h.gpa, r.prompt, r.eos) catch return !h.drop(job, "the drafter could not start");
+-    } else job.proposer = lanes.SuffixLookup.init(h.gpa, .{ .min_match = h.min_match }) catch return !h.drop(job, "the drafter could not start");
++    } else {
++        const c = h.core.cfg;
++        const prompt_copy = c.copy_reply_match > 0;
++        job.proposer = lanes.SuffixLookup.init(h.gpa, .{
++            .min_match = if (prompt_copy) c.enter_match else h.min_match,
++            .prompt_copy = if (prompt_copy) .{ .prompt_len = r.prompt.len, .reply_match = c.copy_reply_match } else null,
++        }) catch return !h.drop(job, "the drafter could not start");
++    }
+     const recall = recalls.reader(h, job);
+     // Ours until Stream.init succeeds: the stream only borrows it, and a stream that never starts never frees it.
+     const reply_grammar = if (r.structure) |st| h.constraint(st) catch |e| {
+--- a/zig/src/families/glm/cuda_lanes.zig
++++ b/zig/src/families/glm/cuda_lanes.zig
+@@ -32,6 +32,7 @@
+     x: follow.Leader,
+     whole: bool = false, // prompt passes run whole (TF_GLM_PROMPT_STEPS=0): no other stream's round between chunks
+     alone: bool = false, // each window in its own forward (TF_GLM_SHARED=0)
++    long_copy_match: bool = false, // rank 0 selects candidate windows from the current request history
+     calibrated_greedy: bool = false, // rank 0 scores DFlash2 candidates for greedy requests
+     mtp_confidence: ?f64 = null, // --mtp-confidence: the MTP head's chains stop where their chance falls under it
+     copy_confidence: bool = false, // copy mode keeps head confidence in probabilities so target copies stay priced
+@@ -127,7 +128,13 @@
+     /// Root/context copies use the same verify/keep path and shared cost allocator as every target window.
+     pub fn factsWithCopies(self: *Lanes, enabled: bool) lanes.Model {
+         self.copy_confidence = enabled and self.x.e.mtp;
+-        return copy_policy.apply(self.facts(), enabled, self.x.e.drafter == null and self.costs != null);
++        var m = copy_policy.apply(self.facts(), enabled, self.x.e.drafter == null and self.costs != null);
++        if (self.long_copy_match and enabled and self.x.e.drafter != null) {
++            m.fixed_copy_drafts = 15;
++            m.copy_match = 8;
++            m.copy_reply_match = 16;
++        }
++        return m;
+     }
+ 
+     fn of(ptr: *anyopaque) *Lanes {
+--- a/zig/src/families/glm/cuda_native.zig
++++ b/zig/src/families/glm/cuda_native.zig
+@@ -378,7 +378,9 @@
+     const shared = try @import("sys").environment.value(bool, "TF_GLM_SHARED", ranks.environment("TF_GLM_SHARED"), true);
+     own.link.asleep = cuda.tp_watch.open(); // the other ranks begin asleep (follow): the first step wakes them
+     const calibrated = try @import("sys").environment.read(bool, "TF_GLM_DFLASH_CALIBRATED", false);
+-    own.lanes = .{ .x = .{ .e = own.e, .link = &own.link }, .whole = !steps, .alone = !shared, .mtp_confidence = o.mtp_confidence, .calibrated_greedy = calibrated };
++    const long_copy_match = try @import("sys").environment.read(bool, "TF_GLM_COPY_8_16", false);
++    own.lanes = .{ .x = .{ .e = own.e, .link = &own.link }, .whole = !steps, .alone = !shared, .mtp_confidence = o.mtp_confidence, .calibrated_greedy = calibrated, .long_copy_match = long_copy_match };
++    if (long_copy_match and own.copies and own.e.drafter != null) std.log.info("verified copies: prompt match 8, reply match 16, up to 15 drafts", .{});
+     if (calibrated and own.e.drafter != null) std.log.info("DFlash2 greedy selector: edge 0.6, confidence temperature 2, chain cut {d}", .{try dflash.chainCut(true)});
+     const extra: u64 = (if (o.drafter != null) dflash.ring_bytes else 0) + if (own.e.images) |v| v.streamBytes() else @as(usize, 0);
+     own.layout = if (set.pages) try pages_mod.layout(gpa, own.e, extra) else null;
+--- a/zig/src/native/copy_drafts_cuda_test.zig
++++ b/zig/src/native/copy_drafts_cuda_test.zig
+@@ -488,3 +488,29 @@
+         }
+     }
+ }
++
++test "CUDA lane copies: opt-in GLM DFlash preconditions and depth preserve forced windows" {
++    const f = @import("glm_cuda");
++    var target: f.engine.Engine = undefined;
++    target.mtp = true;
++    target.drafter = @ptrFromInt(0x1000);
++    var b: f.lanes.Lanes = .{ .x = .{ .e = &target, .link = undefined } };
++    const off = b.factsWithCopies(true);
++    b.long_copy_match = true;
++    try std.testing.expectEqualDeep(b.facts(), b.factsWithCopies(false));
++    const on = b.factsWithCopies(true);
++    try std.testing.expect(on.root_copies and on.own_copy_rates);
++    try std.testing.expectEqual(@as(i64, 8), on.copy_match);
++    try std.testing.expectEqual(@as(u32, 16), on.copy_reply_match);
++    for ([_]u32{ 32, 12, 2 }) |width| {
++        var c = try lanes.Config.init(a, on, width, width - 1);
++        defer c.deinit(a);
++        var previous = try lanes.Config.init(a, off, width, width - 1);
++        defer previous.deinit(a);
++        try std.testing.expectEqual(@min(width - 1, 15), c.first_copy);
++        try std.testing.expectEqual(c.first_copy, c.max_copy);
++        try std.testing.expectEqual(previous.base_width, c.base_width);
++    }
++    target.drafter = null;
++    try std.testing.expectEqual(@as(u32, 0), b.factsWithCopies(true).copy_reply_match);
++}

@@ -220,7 +220,8 @@ def validate_lock(lock, mod):
         if "derived_image" in lock:
             variant = lock["derived_image"]
             variant_fields = "name image image_id parent_image_id patch"
-            fields(variant, variant_fields + (" mla_image" if "mla_image" in variant else ""), "derived_image")
+            optional = [key for key in ("mla_image", "decode_images") if key in variant]
+            fields(variant, " ".join([variant_fields, *optional]), "derived_image")
             equal(variant["name"], "prompt-s2", "derived_image.name")
             equal(variant["patch"], "prompt-s2/0017-glm-packed-prompt-s2.patch", "derived_image.patch")
             equal(variant["parent_image_id"], lock["image_id"], "derived_image.parent_image_id")
@@ -238,6 +239,9 @@ def validate_lock(lock, mod):
                 equal(mla["patch"], "prompt-s2/0018-glm-prompt-mla-mma.patch", "mla_image.patch")
                 equal(mla["host_tests"], "prompt-s2/mla-host-tests.patch", "mla_image.host_tests")
                 allowed_files += f" prompt-s2/build-mla.py {mla['patch']} {mla['host_tests']}"
+            if "decode_images" in variant:
+                require("mla_image" in variant, "decode_images", "requires the MLA parent")
+                allowed_files += " " + " ".join(decode_files(lock, mod))
         fields(files, allowed_files, "native kit mod_files")
         for name, pin in files.items():
             path = mod / name
@@ -356,11 +360,67 @@ def equal(actual, expected, where):
     require(actual == expected, where, f"disagrees with reviewed input: expected {expected!r}, got {actual!r}")
 
 
+def decode_files(lock, mod):
+    variants = lock["derived_image"]
+    parent = variants["mla_image"]
+    configs = {lock["image_id"], variants["image_id"], parent["image_id"]}
+    manifests = {parent["manifest_digest"]}
+    names = set()
+    primary = "python-quant"
+    paths = {f"{primary}/{name}" for name in (
+        "build.py", "oci_layers.py", "gzip-layer.go", "README.md", "verify-weights.py",
+        "cuda-inputs.sha256", "extract-primary-fatbins.py",
+    )}
+    images = variants["decode_images"]
+    require(isinstance(images, list) and images, "decode_images", "expected reviewed build profiles")
+    for image in images:
+        fields(image, "name image image_id parent_image_id", "decode image")
+        name = image["name"]
+        pattern(name, r"python-quant(?:-[a-z0-9]+)*", "decode image name", "invalid build directory")
+        require(name not in names, "decode image name", "duplicate")
+        names.add(name)
+        digest(image["image_id"], "decode image config")
+        require(image["image_id"] not in configs, "decode image config", "must be distinct")
+        configs.add(image["image_id"])
+        equal(image["parent_image_id"], parent["image_id"], "decode image parent")
+        source = f"{name}/variant.json"
+        paths.add(source)
+        manifest = mod / source
+        require(not manifest.parent.is_symlink() and not manifest.is_symlink() and manifest.is_file(), source, "expected a local build manifest")
+        equal(hashlib.sha256(manifest.read_bytes()).hexdigest(), lock["mod_files"].get(source), source)
+        release = read_json(manifest)
+        for k in ("image", "image_id", "parent_image_id"):
+            equal(release[k], image[k], source + "." + k)
+        digest(release["manifest_digest"], source + ".manifest_digest")
+        require(release["manifest_digest"] not in manifests | configs, source, "expected a distinct OCI manifest")
+        manifests.add(release["manifest_digest"])
+        for key, filename in (("controls_sha256", "host-controls.patch"), ("oci_record_sha256", "oci-record.json.gz")):
+            path = f"{name}/{filename}"
+            paths.add(path)
+            equal(release[key], lock["mod_files"].get(path), path)
+        patches = release["patches"]
+        require(isinstance(patches, dict) and patches, source, "missing engine patches")
+        combined = hashlib.sha256()
+        for patch, checksum in sorted(patches.items()):
+            pattern(patch, r"[0-9]{4}-[a-z0-9-]+\.patch", source, "expected a numbered engine patch")
+            path = f"{primary}/{patch}" if f"{primary}/{patch}" in lock["mod_files"] else f"{name}/{patch}"
+            paths.add(path)
+            equal(checksum, lock["mod_files"].get(path), path)
+            combined.update((mod / path).read_bytes())
+        pattern(image["image"], rf"{IMAGE_NAME}:{TAG}", "decode image tag", "expected a named image")
+        require(image["image"].endswith("-" + combined.hexdigest()[:12]), source, "tag disagrees with its engine patches")
+    require(primary in names, "decode_images", "missing the source of the quantization kernels")
+    require(not configs & manifests, "decode_images", "OCI configs and manifests must be distinct")
+    return paths
+
+
 def derived_images(lock):
     if "derived_image" not in lock:
         return ()
     s2 = lock["derived_image"]
-    return (s2, s2["mla_image"]) if "mla_image" in s2 else (s2,)
+    if "mla_image" not in s2:
+        return (s2,)
+    return (s2, s2["mla_image"], *s2.get("decode_images", ()))
 
 
 def validate_recipe(recipe, path, locks):

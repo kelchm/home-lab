@@ -1,0 +1,577 @@
+--- /dev/null
++++ b/zig/kernels/cuda/glm_exl3_decode.cuh
+@@ -0,0 +1,196 @@
++// GLM TP2's four-bit routed experts for short verifier windows.
++// Adapted from TensorFold 0.6.0 families/glm5_next/cuda/exl3.cu, Apache-2.0, Copyright 2026 TensorFold contributors.
++// EXL3 format after ExLlamaV3, MIT, Copyright (c) 2025 Turboderp. The non-caching vector load and staging
++// follow jayleaton/glm53-tensorfold-spark patch 0580, Apache-2.0, Copyright 2026 Jay Leaton.
++// This specialization keeps only production decode order 0, NC depth 1, gate/up split 4, down split 1.
++// GLM's loader preserves the native bases of its contiguous uniform-width expert banks.
++#pragma once
++namespace tf_glm_exl3_decode {
++using tf_exl3::mma16816;
++using tf_exl3::fwht128;
++using tf_exl3::HAD_SCALE;
++
++// Two values of the "mcg" codebook from two 16-bit states, as a half2 (first state in .x).
++__device__ __forceinline__ uint32_t mcg2(uint32_t s0, uint32_t s1) {
++    uint32_t x0 = s0 * 0xCBAC1FEDu;
++    uint32_t x1 = s1 * 0xCBAC1FEDu;
++    x0 = (x0 & 0x8FFF8FFFu) ^ 0x3B603B60u;
++    x1 = (x1 & 0x8FFF8FFFu) ^ 0x3B603B60u;
++    uint32_t lo = __byte_perm(x0, x1, 0x5410);
++    uint32_t hi = __byte_perm(x0, x1, 0x7632);
++    half2 r = __hadd2(*reinterpret_cast<half2*>(&lo), *reinterpret_cast<half2*>(&hi));
++    return *reinterpret_cast<uint32_t*>(&r);
++}
++
++// This lane's eight values of a 4-bit tile (word = tile[lane]) as the B fragments of its two n8 halves.
++__device__ __forceinline__ void decode_tile(uint32_t w, int lane, uint32_t (&b0)[2], uint32_t (&b1)[2]) {
++    uint32_t p = __shfl_sync(0xffffffffu, w, (lane + 31) & 31);
++    uint32_t s = __funnelshift_r(w, p, 20);
++    b0[0] = mcg2((s >> 8) & 0xffffu, (s >> 4) & 0xffffu);
++    b0[1] = mcg2(s & 0xffffu, w >> 16);
++    b1[0] = mcg2((w >> 12) & 0xffffu, (w >> 8) & 0xffffu);
++    b1[1] = mcg2((w >> 4) & 0xffffu, w & 0xffffu);
++}
++
++__device__ __forceinline__ uint32_t load_pair(const half* x, bool ok) {
++    return ok ? *reinterpret_cast<const uint32_t*>(x) : 0u;
++}
++
++// 16 bytes of trellis words, read once a window (no L1 allocation); asm volatile keeps it where it stands relative
++// to the (volatile) mma, so the ring depth is what the code says (patches/0580 of jayleaton/glm53-tensorfold-spark).
++__device__ __forceinline__ uint4 ldg_nc_v4(const uint32_t* p) {
++    uint4 v;
++    asm volatile("ld.global.nc.L1::no_allocate.v4.u32 {%0,%1,%2,%3}, [%4];"
++                 : "=r"(v.x), "=r"(v.y), "=r"(v.z), "=r"(v.w)
++                 : "l"(p));
++    return v;
++}
++
++template <bool DOWN>
++__device__ __forceinline__ void projection(const half* __restrict__ X, const uint32_t* __restrict__ T0,
++    const uint32_t* __restrict__ T1, const int* __restrict__ items, const int* __restrict__ counts,
++    const int* __restrict__ members, float* __restrict__ Z, int P, int E, const half* __restrict__ svh_d,
++    float* __restrict__ y) {
++    constexpr int W = 4, NT = 8, STEPS = 16, SK = DOWN ? 1 : 4;
++    constexpr int K = DOWN ? 1024 : 4096, N = DOWN ? 4096 : 1024;
++    constexpr int slots = 9;
++    const int item = blockIdx.x, nblock = blockIdx.y, zz = blockIdx.z;
++    const int total = counts[0];
++    const int e = items[3 * item], first = items[3 * item + 1], cnt = items[3 * item + 2];
++    if (item >= total || e >= E) return;
++    const int mat = zz / SK, split = zz % SK;
++    const uint32_t* T = mat ? T1 : T0;
++    const int warp = threadIdx.x >> 5, lane = threadIdx.x & 31;
++    const int g = lane >> 2, t = lane & 3;
++    const int KT = K >> 4, NTILES = N >> 4;
++
++    __shared__ int rows_sh[16];
++    __shared__ __align__(16) float red[W][16][NT * 16];
++    constexpr int NV = NT / 4;                           // LD 1: 16-byte loads a lane a k step
++    constexpr int PD = 1;
++    uint4 rv[PD][NV];
++    const uint32_t* tbase = T + (((size_t)e * KT + split * (KT / SK) + warp * STEPS) * NTILES + nblock * NT) * 32;
++    const size_t kstep = (size_t)NTILES * 32;            // words from one k tile to the next
++    {
++#pragma unroll
++        for (int d = 0; d < PD; ++d)
++#pragma unroll
++            for (int v = 0; v < NV; ++v) rv[d][v] = ldg_nc_v4(tbase + d * kstep + 128 * v + 4 * lane);
++    }
++    if (threadIdx.x < 16) rows_sh[threadIdx.x] = (int)threadIdx.x < cnt ? members[first + threadIdx.x] : -1;
++    __syncthreads();
++    const int r0 = rows_sh[g], r1 = rows_sh[g + 8];
++    const int xr0 = r0 < 0 ? 0 : (!DOWN ? r0 / slots : r0), xr1 = r1 < 0 ? 0 : (!DOWN ? r1 / slots : r1);
++    const half* x0 = X + (size_t)xr0 * K + 2 * t;
++    const half* x1 = X + (size_t)xr1 * K + 2 * t;
++    const int nt0 = nblock * NT;
++    const int kt0 = split * (KT / SK) + warp * STEPS;
++
++    float acc[NT][2][4];
++#pragma unroll
++    for (int i = 0; i < NT; ++i)
++#pragma unroll
++        for (int h = 0; h < 2; ++h)
++#pragma unroll
++            for (int c = 0; c < 4; ++c) acc[i][h][c] = 0.f;
++
++    {
++        uint32_t ra[PD][4];
++#pragma unroll
++        for (int d = 0; d < PD; ++d) {
++            const int k = (kt0 + d) * 16;
++            ra[d][0] = load_pair(x0 + k, r0 >= 0); ra[d][1] = load_pair(x1 + k, r1 >= 0);
++            ra[d][2] = load_pair(x0 + k + 8, r0 >= 0); ra[d][3] = load_pair(x1 + k + 8, r1 >= 0);
++        }
++        uint32_t* stage = reinterpret_cast<uint32_t*>(&red[warp][0][0]);
++        for (int kb = 0; kb < STEPS; kb += PD) {
++#pragma unroll
++            for (int d = 0; d < PD; ++d) {
++                const int s = kb + d;
++                const bool more = s + PD < STEPS;
++                uint32_t a[4], words[NT];
++#pragma unroll
++                for (int c = 0; c < 4; ++c) a[c] = ra[d][c];
++                __syncwarp();                            // every lane has read the previous step back
++#pragma unroll
++                for (int v = 0; v < NV; ++v) *reinterpret_cast<uint4*>(stage + 128 * v + 4 * lane) = rv[d][v];
++                if (more) {                              // the slot's registers are free again
++#pragma unroll
++                    for (int v = 0; v < NV; ++v)
++                        rv[d][v] = ldg_nc_v4(tbase + (size_t)(s + PD) * kstep + 128 * v + 4 * lane);
++                    const int k = (kt0 + s + PD) * 16;
++                    ra[d][0] = load_pair(x0 + k, r0 >= 0); ra[d][1] = load_pair(x1 + k, r1 >= 0);
++                    ra[d][2] = load_pair(x0 + k + 8, r0 >= 0); ra[d][3] = load_pair(x1 + k + 8, r1 >= 0);
++                }
++                __syncwarp();
++#pragma unroll
++                for (int i = 0; i < NT; ++i) words[i] = stage[i * 32 + lane];
++#pragma unroll
++                for (int i = 0; i < NT; ++i) {
++                    uint32_t b0[2], b1[2];
++                    decode_tile(words[i], lane, b0, b1);
++                    mma16816(acc[i][0], a, b0);
++                    mma16816(acc[i][1], a, b1);
++                }
++            }
++        }
++        __syncwarp();                                    // the staging area becomes red[warp] below
++    }
++
++#pragma unroll
++    for (int i = 0; i < NT; ++i)
++#pragma unroll
++        for (int h = 0; h < 2; ++h) {
++            const int col = i * 16 + h * 8 + 2 * t;
++            red[warp][g][col] = acc[i][h][0];
++            red[warp][g][col + 1] = acc[i][h][1];
++            red[warp][g + 8][col] = acc[i][h][2];
++            red[warp][g + 8][col + 1] = acc[i][h][3];
++        }
++    __syncthreads();
++
++    if constexpr (DOWN) {
++        // down_epilogue_kernel on this block's sums: v = 0 + (the warps' sums in warp order), rotated, times svh
++        for (int i = warp; i < cnt; i += W) {
++            const int p = rows_sh[i];
++            const int n = nt0 * 16 + 4 * lane;
++            float v[4];
++#pragma unroll
++            for (int j = 0; j < 4; ++j) {
++                float s = red[0][i][4 * lane + j];
++#pragma unroll
++                for (int w = 1; w < W; ++w) s += red[w][i][4 * lane + j];
++                float z = 0.f;
++                z += s;
++                v[j] = z;
++            }
++            fwht128(v, lane);
++            float* o = y + (size_t)p * N + n;
++#pragma unroll
++            for (int j = 0; j < 4; ++j) o[j] = v[j] * HAD_SCALE * __half2float(svh_d[(size_t)e * N + n + j]);
++        }
++        return;
++    } else {
++        constexpr int OUT = 16 * NT * 16 / (W * 32);
++#pragma unroll
++        for (int j = 0; j < OUT; ++j) {
++            const int idx = threadIdx.x + j * W * 32;
++            const int row = idx / (NT * 16), col = idx % (NT * 16);
++            const int r = rows_sh[row];
++            float s = red[0][row][col];
++#pragma unroll
++            for (int w = 1; w < W; ++w) s += red[w][row][col];
++            if (r >= 0) Z[(((size_t)mat * SK + split) * P + r) * N + nt0 * 16 + col] = s;
++        }
++    }
++}
++}  // namespace tf_glm_exl3_decode
++
++extern "C" __global__ void __launch_bounds__(128) tf_glm_exl3_decode_gateup(const half* x, const uint32_t* g,
++        const uint32_t* u, const int* items, const int* counts, const int* members, float* z, int pairs, int experts) {
++    tf_glm_exl3_decode::projection<false>(x, g, u, items, counts, members, z, pairs, experts, nullptr, nullptr);
++}
++extern "C" __global__ void __launch_bounds__(128) tf_glm_exl3_decode_down(const half* x, const uint32_t* d,
++        const int* items, const int* counts, const int* members, int pairs, int experts, const half* svh, float* out) {
++    tf_glm_exl3_decode::projection<true>(x, d, d, items, counts, members, nullptr, pairs, experts, svh, out);
++}
+--- a/zig/kernels/cuda/exl3_experts.cu
++++ b/zig/kernels/cuda/exl3_experts.cu
+@@ -382,3 +382,5 @@
+     prompt_down<6>(Xd, Td, svh_d, y, K, D, smem_raw, rows_sh, cb, e, cnt, warp, lane);
+ }
+ #undef TF_EXL3_PROMPT_DOWN_HEAD
++
++#include "glm_exl3_decode.cuh"
+--- a/zig/src/cuda/exl3_experts.zig
++++ b/zig/src/cuda/exl3_experts.zig
+@@ -114,6 +114,9 @@
+     grouped: [3]Function, // one per codebook
+     gateup: Function,
+     down_combine: Function,
++    glm_decode: bool = false,
++    glm_gateup: Function = undefined,
++    glm_down: Function = undefined,
+     prompt: prompt.Kernels = undefined,
+     plan_rotate: Function = undefined,
+     plan_finish: Function = undefined,
+@@ -131,6 +134,8 @@
+         };
+         errdefer e.mod.unload();
+         e.prompt = try prompt.Kernels.resolve(e.mod);
++        e.glm_gateup = try e.mod.function("tf_glm_exl3_decode_gateup");
++        e.glm_down = try e.mod.function("tf_glm_exl3_decode_down");
+         e.plan_rotate = try e.mod.function("tf_exl3_plan_rotate");
+         e.plan_finish = try e.mod.function("tf_exl3_plan_finish");
+         e.plan_finish_after = try e.mod.function("tf_exl3_plan_finish_after");
+--- a/zig/src/platform/environment.zig
++++ b/zig/src/platform/environment.zig
+@@ -110,6 +110,7 @@
+     .{ .name = "TF_GLM_VISION_HOST", .scope = .glm, .kind = .flag, .forms = "0 or 1" },
+     .{ .name = "TF_GLM_PROF", .scope = .glm, .kind = .flag, .forms = "0 or 1" },
+     .{ .name = "TF_GLM_LINK_WAIT", .scope = .glm, .kind = .flag, .forms = "0 or 1" },
++    .{ .name = "TF_GLM_EXL3_DECODE", .scope = .glm, .kind = .flag, .forms = "0 or 1" },
+     .{ .name = "TF_GLM_DECODE_MLA_WIDE", .scope = .glm, .kind = .flag, .forms = "0 or 1" },
+     .{ .name = "TF_GLM_DECODE_SCORE_TILE", .scope = .glm, .kind = .flag, .forms = "0 or 1" },
+     .{ .name = "TF_GLM_DFLASH_ONLY", .scope = .glm, .kind = .flag, .forms = "0 or 1" },
+--- a/zig/src/core/profile.zig
++++ b/zig/src/core/profile.zig
+@@ -10,6 +10,7 @@
+     TF_QWEN_KV_PAGES_ALL,
+     TF_QWEN_KV_SHARE,
+     TF_QWEN_REQUEST_STARTS,
++    TF_GLM_EXL3_DECODE,
+     TF_GLM_DECODE_MLA_WIDE,
+     TF_GLM_DECODE_SCORE_TILE,
+     TF_GLM_DFLASH_ONLY,
+@@ -150,6 +151,7 @@
+ pub const entries = [_]Entry{
+     .{ .id = .TF_CACHE_EVICT, .families = cuda_cache, .backend = "multiple", .scopes = &.{ .{ .backend = "cuda", .families = cuda_cache }, .{ .backend = "metal", .families = &.{ "nemotron_h", "qwen3_5", "qwen3_5_moe", "qwen4_exp", "glm5_next", "glm_moe_dsa", "minimax_m3_vl", "gemma4", "gemma4_unified", "spark2_5", "llama", "lfm2_moe", "lfm3", "lfm3_vl", "step5_vl", "kimi_k3", "kimi_k31" } }, .{ .backend = "xpu", .families = &.{ "nemotron_h", "lfm3", "qwen3_5", "gemma4" } } }, .class = .experimental, .syntax = .present, .report_values = &.{"decayed_resume"}, .effect = "Opt into bounded resume credit for RAM snapshot eviction", .evidence = "#3241; synthetic host rows gate; default main unchanged" },
+     .{ .id = .TF_QWEN_REQUEST_STARTS, .families = qwen, .class = .arithmetic, .syntax = .one, .effect = "Opt into CUDA message-start prompt cuts", .evidence = "#1334; default-off; GB10 six-turn: resumed equals fresh, one reply differs from unset" },
++    .{ .id = .TF_GLM_EXL3_DECODE, .families = &.{"glm5_next"}, .class = .identical, .syntax = .one, .effect = "Use the uniform four-bit routed experts for short GLM TP2 decode windows", .evidence = "GLM per-slot FP32 expert parity" },
+     .{ .id = .TF_GLM_DECODE_MLA_WIDE, .families = &.{"glm5_next"}, .class = .identical, .syntax = .one, .effect = "Share a paged FP8 latent tile across 32 attention heads in long decode windows", .evidence = "Paged GB10 partial and BF16 output equality" },
+     .{ .id = .TF_GLM_DECODE_SCORE_TILE, .families = &.{"glm5_next"}, .class = .identical, .syntax = .one, .effect = "Share pooled-key score tiles across long-context verification rows", .evidence = "GLM index launch and device score parity" },
+     .{ .id = .TF_GLM_DFLASH_ONLY, .families = &.{"glm5_next"}, .class = .identical, .syntax = .one, .effect = "Keep only the Q4 draft head alongside the external DFlash2 drafter", .evidence = "GLM DFlash2-only prompt and cache layout" },
+--- a/zig/glm_exl3_prompt_host.zig
++++ b/zig/glm_exl3_prompt_host.zig
+@@ -16,6 +16,10 @@
+     var outputs: [16]u64 = undefined;
+     var skip: [16]i32 = undefined;
+     var routes: usize = 0;
++    var fast_gu: usize = 0;
++    var fast_down: usize = 0;
++    var fast_out: u64 = 0;
++    var fast_banks: [3]u64 = undefined;
+ 
+     fn reset() void {
+         copies = 0;
+@@ -23,6 +27,9 @@
+         down = 0;
+         decode = 0;
+         routes = 0;
++        fast_gu = 0;
++        fast_down = 0;
++        fast_out = 0;
+     }
+     fn arg(comptime T: type, args: ?[*]?*anyopaque, index: usize) T {
+         return @as(*const T, @ptrCast(@alignCast(args.?[index].?))).*;
+@@ -48,6 +55,16 @@
+                 down += 1;
+             },
+             9 => decode += 1,
++            23 => {
++                fast_gu += 1;
++                fast_banks[0] = arg(u64, args, 1);
++                fast_banks[1] = arg(u64, args, 2);
++            },
++            24 => {
++                fast_down += 1;
++                fast_banks[2] = arg(u64, args, 1);
++                fast_out = arg(u64, args, 8);
++            },
+             else => {},
+         }
+         return 0;
+@@ -57,21 +74,30 @@
+     }
+ };
+ 
++const Geometry = struct { fast: bool = false, d: usize = 512, w: usize = 256, gu_bits: u32 = 8, down_bits: u32 = 8 };
++
+ fn run(rows: usize, prompt: bool, shared: bool, count: usize) !void {
++    return runCase(rows, prompt, shared, count, .{});
++}
++
++fn runCase(rows: usize, prompt: bool, shared: bool, count: usize, g: Geometry) !void {
+     Record.reset();
+     var d: cuda.Driver = undefined;
+     d.api.cuLaunchKernel = Record.launch;
+     d.api.cuMemcpy2DAsync_v2 = Record.copy;
+     var k: glm.exl3.Kernels = undefined;
+     inline for (.{ "group", "rot_in", "gateup", "down_combine" }, .{ 9, 5, 13, 14 }) |field, id| @field(k, field) = Record.function(&d, id);
++    k.glm_decode = g.fast;
++    k.glm_gateup = Record.function(&d, 23);
++    k.glm_down = Record.function(&d, 24);
+     k.grouped = .{ Record.function(&d, 10), Record.function(&d, 11), Record.function(&d, 12) };
+     k.prompt = .{ .rotate = Record.function(&d, 6), .gateup = Record.function(&d, 7), .down = Record.function(&d, 8), .gateup_k6 = Record.function(&d, 21), .down_k6 = Record.function(&d, 22) };
+     var ek: glm.experts.Kernels = undefined;
+     inline for (.{ "plan_small", "plan_rows", "plan_rank", "plan_offsets", "plan_scatter", "plan_rank_rows", "plan_scatter_rows" }, .{ 1, 18, 2, 3, 4, 19, 20 }) |field, id| @field(ek.router, field) = Record.function(&d, id);
+-    const w = glm.exl3.Experts{ .gt = 101, .ut = 102, .dt = 103, .k2 = 104, .suh_g = 105, .suh_u = 106, .svh_g = 107, .svh_u = 108, .suh_d = 109, .svh_d = 110, .shx = shared };
++    const w = glm.exl3.Experts{ .gt = 101, .ut = 102, .dt = 103, .k2 = 104, .suh_g = 105, .suh_u = 106, .svh_g = 107, .svh_u = 108, .suh_d = 109, .svh_d = 110, .shx = shared, .uniform_gu = g.gu_bits, .uniform_d = g.down_bits, .banks = .{ 301, 302, 303 } };
+     const sc = glm.exl3.Scratch{ .picks = 0x100000000, .xg = 0, .xu = 0, .z = 0 };
+     const plan = cuda.grouped.Plan{ .members = 201, .items = 202, .counts = 203, .rank = 204, .hist = 205 };
+-    try glm.exl3.run(&k, &ek, .{ .d = &d, .handle = null }, w, sc, plan, 0x200000000, 512, 0x300000000, 9, rows, count, 512, 256, 7, prompt, 0x400000000, 0);
++    try glm.exl3.run(&k, &ek, .{ .d = &d, .handle = null }, w, sc, plan, 0x200000000, g.d, 0x300000000, 9, rows, count, g.d, g.w, 7, prompt, 0x400000000, 0x500000000);
+ }
+ 
+ test "GLM EXL3 prompt: a whole pass makes one expert call and no 2D copies" {
+@@ -145,3 +171,33 @@
+     try t.expect(!guarded(bad, "tf_exl3_prompt_gu_k6(", "prompt_gu<"));
+     try t.expect(!guarded(bad, "#define TF_EXL3_PROMPT_DOWN_HEAD()", "members[first"));
+ }
++
++test "GLM EXL3 prompt: fast decode calls both specialized kernels on the loaded banks and writes routed slots directly" {
++    for (2..17) |rows| {
++        try runCase(rows, false, true, 256, .{ .d = 4096, .w = 1024, .fast = true });
++        try t.expectEqual(@as(usize, 0), Record.copies + Record.decode);
++        try t.expectEqual(@as(usize, 1), Record.fast_gu);
++        try t.expectEqual(@as(usize, 1), Record.fast_down);
++        try t.expectEqual([3]u64{ 301, 302, 303 }, Record.fast_banks);
++        try t.expectEqual(@as(u64, 0x400000000), Record.fast_out);
++        try t.expectEqual(@as(usize, 1), Record.routes);
++        try t.expectEqual(@as(i32, @intCast(rows * 9)), Record.pairs[0]);
++        const arena = glm.exl3.scratchBytes(rows, 4096, 1024, false, true)[0];
++        try t.expect(arena >= rows * (4096 * 2 + 8 * 9 * 1024 * 4));
++    }
++}
++
++test "GLM EXL3 prompt: unsupported decode shapes or switches use the compact path" {
++    const shape = Geometry{ .d = 4096, .w = 1024, .fast = true };
++    const Case = struct { rows: usize = 3, shared: bool = true, g: Geometry = shape };
++    for ([_]Case{
++        .{ .rows = 1 }, .{ .rows = 17 }, .{ .shared = false }, .{ .g = .{ .d = 4096, .w = 1024 } },
++        .{ .g = .{ .d = 4096, .w = 512, .fast = true } }, .{ .g = .{ .d = 1024, .w = 1024, .fast = true } },
++        .{ .g = .{ .d = 4096, .w = 1024, .fast = true, .gu_bits = 6 } }, .{ .g = .{ .d = 4096, .w = 1024, .fast = true, .down_bits = 6 } },
++    }) |c| {
++        try runCase(c.rows, false, c.shared, 256, c.g);
++        try t.expectEqual(@as(usize, 0), Record.fast_gu + Record.fast_down);
++        try t.expectEqual(@as(usize, 1), Record.decode);
++        try t.expectEqual(@as(usize, 2), Record.copies);
++    }
++}
+--- a/zig/src/families/glm/cuda_exl3.zig
++++ b/zig/src/families/glm/cuda_exl3.zig
+@@ -81,6 +81,7 @@
+ 
+ /// One layer's EXL3 experts on a rank: trellis words [E][K/16][N/16][8 * k2] and fp16 scales (suh [E][K], svh [E][N]).
+ pub const Experts = struct {
++    banks: [3]u64 = @splat(0), // uniform-width specializations address the original contiguous banks
+     gt: u64, // int64 [E]: each expert's gate trellis
+     ut: u64,
+     dt: u64,
+@@ -165,6 +166,7 @@
+             k2.* = @intCast(h);
+         }
+         const base = try L.put("layers.{d}.moe.exl3." ++ tw, .{i});
++        out.banks[pi] = base;
+         var ptr: u64 = base;
+         for (mine) |k2| { // each expert's trellis follows the one before, at its own width
+             try L.host.appendSlice(L.gpa, std.mem.asBytes(&ptr));
+@@ -278,10 +280,12 @@
+     try stream.d.check(stream.d.api.cuMemcpy2DAsync_v2(&m, stream.handle), what);
+ }
+ pub fn run(k: *const Kernels, ek: *const experts.Kernels, stream: cuda.Stream, w: Experts, sc: Scratch, plan_buf: cuda.grouped.Plan, x: u64, x_stride: usize, picks: u64, slots: usize, rows: usize, count: usize, dims: usize, width: usize, limit: f32, prompt: bool, ey: u64, xd: u64) !void {
+-    _ = xd;
+     if (slots != top_k + 1) return error.UnsupportedTopK;
+     if (dims % 256 != 0 or width % 128 != 0) return error.UnreadableExl3;
+     const l = layer(w, count, dims, width, limit);
++    if (eligibleDecode(w, rows, count, dims, width, prompt) and k.glm_decode) {
++        return runDecode(k, ek.router, stream, w, sc.picks, plan_buf, x, x_stride, picks, slots, rows, count, limit, ey, xd);
++    }
+     if (prompt and common.prompt.eligible(l)) {
+         const scratch = try common.prompt.scratch(sc.picks, l, @min(rows, prompt_rows), slots);
+         var at: usize = 0;
+@@ -292,6 +296,37 @@
+         return;
+     }
+     return compact(k, stream, w, sc, x, x_stride, picks, slots, rows, count, dims, width, limit, ey);
++}
++
++/// The TP2 four-bit specialization is enabled only on SM121 by cuda_engine. Other widths and
++/// inputs with expert-specific rotation stay with the generic compact path.
++fn eligibleDecode(w: Experts, rows: usize, count: usize, dims: usize, width: usize, prompt: bool) bool {
++    return !prompt and rows >= 2 and rows <= 16 and count > 0 and count < cuda.grouped.max_experts and
++        dims == 4096 and width == 1024 and w.uniform_gu == 8 and w.uniform_d == 8 and w.shx and
++        w.banks[0] != 0 and w.banks[1] != 0 and w.banks[2] != 0;
++}
++
++fn launchDecode(f: cuda.Function, stream: cuda.Stream, grid: [3]usize, threads: u32, values: anytype) !void {
++    var a: cuda.Args = .{};
++    inline for (values) |v| a.add(v);
++    try cuda.launch.launch(f, .{ .grid = .{ .x = @intCast(grid[0]), .y = @intCast(grid[1]), .z = @intCast(grid[2]) }, .block = .{ .x = threads } }, stream, &a);
++}
++
++/// Reuse the original nine-slot plan, the shared per-row rotation, and the established GLM gate/up epilogue.
++fn runDecode(k: *const Kernels, router: cuda.grouped.Router, stream: cuda.Stream, w: Experts, arena: u64, p: cuda.grouped.Plan, x: u64, stride: usize, picks: u64, slots: usize, rows: usize, count: usize, limit: f32, ey: u64, xd: u64) !void {
++    const d = 4096;
++    const width = 1024;
++    const pairs = rows * slots;
++    const np: i32 = @intCast(pairs);
++    const ne: i32 = @intCast(count);
++    const items = cuda.grouped.maxItems(pairs, count + 1, 16);
++    const rotated = arena; // fp16 [rows,4096], an aligned multiple of 8192 bytes
++    const z = rotated + rows * d * 2; // fp32 [2,4,pairs,1024]; the existing compact arena is larger
++    try router.route(stream, picks, pairs, count + 1, 16, p);
++    try launchDecode(k.prompt.rotate, stream, .{ rows, d / 128, 1 }, 32, .{ x, @as(i32, @intCast(stride)), w.suh_g, rotated, @as(i32, d) });
++    try launchDecode(k.glm_gateup, stream, .{ items, width / 128, 8 }, 128, .{ rotated, w.banks[0], w.banks[1], p.items, p.counts, p.members, z, np, ne });
++    try launchDecode(k.gateup, stream, .{ pairs, width / 128, 1 }, 32, .{ z, picks, w.svh_g, w.svh_u, w.suh_d, xd, np, @as(i32, width), @as(i32, 4), ne, limit, @as(i32, 0) });
++    try launchDecode(k.glm_down, stream, .{ items, d / 128, 1 }, 128, .{ xd, w.banks[2], p.items, p.counts, p.members, np, ne, w.svh_d, ey });
+ }
+ 
+ /// Compact routed picks and output for decode or prompt layers without the whole-pass kernel.
+--- a/zig/src/families/glm/cuda_engine.zig
++++ b/zig/src/families/glm/cuda_engine.zig
+@@ -202,6 +202,7 @@
+             gpa.free(e.packs.bits);
+         }
+         e.m.mm.prompt_fixed_k = o.settings.prompt_fixed_k;
++        e.m.exl3.glm_decode = o.settings.exl3_decode and world == 2 and (try ctx.capability()) == 121;
+         e.m.tiled = o.settings.tiled;
+         if (o.settings.tiled) e.m.packs = &e.packs;
+         if (o.settings.l2pf.want(try ctx.capability(), world)) e.l2pf = try l2pf_mod.L2pf.init(gpa, d, &e.w, o.settings.l2pf);
+--- a/zig/src/families/glm/cuda_lane_costs.zig
++++ b/zig/src/families/glm/cuda_lane_costs.zig
+@@ -150,6 +150,8 @@
+     const hex = std.fmt.bytesToHex(e.checkpoint_digest, .lower);
+     const draft_hex = std.fmt.bytesToHex(if (e.drafter) |dr| dr.checkpoint_digest else @as([32]u8, @splat(0)), .lower);
+     const tail: []const u8 = if (pin) |f| (if (f) " form factored" else " form classic") else "";
++    var suffix_buf: [40]u8 = undefined;
++    const suffix = if (set.exl3_decode) try std.fmt.bufPrint(&suffix_buf, " exl3dec{s}", .{tail}) else tail;
+     return std.fmt.bufPrint(shape, "sm{d} cuda{d} ranks{d} {s} drafter{d}/{d}/{s} layers{d} l2{d}/{d}/{d}/{d}/{d} warps{d} kda{d} mm{d} bits{d}/{d} kv8{d}/{d} ext{d} pages{d} host{d} roce{d} p2p{s}/{s}/{s} pad{d} pdl{d} dsel{d} wide{d}{s}", .{
+         sm,                                          driver,                                     e.share.world,             hex[0..],                     @intFromBool(e.drafter != null),
+         if (e.drafter) |dr| dr.bits else @as(u8, 0), draft_hex[0..],                             set.layers,                @intFromBool(set.l2pf.on),    @intFromBool(set.l2pf.named),
+@@ -157,7 +159,7 @@
+         @intFromBool(set.tiled),                     set.dense_bits,                             set.head_bits,             @intFromBool(set.kv8),        @intFromBool(set.kv_pow2),
+         @intFromBool(set.dflash_only),               @intFromBool(set.pages),                    set.kv_host,               @intFromBool(set.roce_multi), sys.getenv("NCCL_P2P_LEVEL") orelse "",
+         sys.getenv("NCCL_MIN_NCHANNELS") orelse "",  sys.getenv("NCCL_MAX_NCHANNELS") orelse "", @intFromBool(set.kda_pad), @intFromBool(e.m.mm.pdl),     @intFromBool(e.m.dsel),
+-        @intFromBool(set.roce_wide),                 tail,
++        @intFromBool(set.roce_wide),                 suffix,
+     });
+ }
+ 
+--- a/zig/src/families/glm/cuda_ranks.zig
++++ b/zig/src/families/glm/cuda_ranks.zig
+@@ -32,6 +32,7 @@
+     l2pf: l2pf.Options = .{}, // TF_GLM_L2PF and its knobs: a decode window's next weights read into L2 beside it
+     dflash_only: bool = false,
+     kv_pow2: bool = false,
++    exl3_decode: bool = false,
+     decode_mla_wide: bool = false,
+     decode_score_tile: bool = false,
+     absorb_mma: bool = false,
+@@ -51,6 +52,10 @@
+     /// `read` from a lookup with no blank text, so every name below and in l2pf's reader is unset when blank.
+     fn readSet(get: *const fn ([:0]const u8) ?[]const u8, problem: *[]const u8) !Settings {
+         var s: Settings = .{};
++        s.exl3_decode = @import("sys").environment.value(bool, "TF_GLM_EXL3_DECODE", get("TF_GLM_EXL3_DECODE"), false) catch {
++            problem.* = "TF_GLM_EXL3_DECODE: 0 or 1";
++            return error.BadSetting;
++        };
+         s.decode_mla_wide = @import("sys").environment.value(bool, "TF_GLM_DECODE_MLA_WIDE", get("TF_GLM_DECODE_MLA_WIDE"), false) catch {
+             problem.* = "TF_GLM_DECODE_MLA_WIDE: 0 or 1";
+             return error.BadSetting;
+@@ -242,13 +247,14 @@
+ 
+ /// What every rank must agree on, as bytes the communicator carries.
+ pub const Fingerprint = extern struct {
+-    layout: u32 = 27, // tiled and the two verification tile policies occupy one word
++    layout: u32 = 28, // tiled and three decode switches occupy one word
+     world: u32,
+     rank: u32,
+     kv8: u32 = 0,
+     pages: u32 = 0, // TF_KV_PAGES: the engine's own sequence is made on pages at init, so every rank pages alike
+     prompt_fixed_k: u32,
+-    tiled: u16,
++    tiled: u8,
++    exl3_decode: u8 = 0,
+     decode_score_tile: u8 = 0,
+     decode_mla_wide: u8 = 0,
+     split: u32, // TF_GLM_PREFILL_REDUCE: 0 gather, 1 split, 2 ring
+@@ -291,6 +297,7 @@
+         tiled,
+         decode_score_tile,
+         decode_mla_wide,
++        exl3_decode,
+         split,
+         kda_wide,
+         kda_pad,
+@@ -341,6 +348,7 @@
+             .tiled = @intFromBool(s.tiled),
+             .decode_score_tile = @intFromBool(s.decode_score_tile),
+             .decode_mla_wide = @intFromBool(s.decode_mla_wide),
++            .exl3_decode = @intFromBool(s.exl3_decode),
+             .split = if (!s.split) 0 else if (s.ring) 2 else 1,
+             .kda_wide = @intFromBool(s.kda_wide),
+             .kda_pad = @intFromBool(s.kda_pad),
+@@ -370,6 +378,12 @@
+     }
+ };
+ 
++test "fingerprints: specialized short-window experts require rank agreement" {
++    const h: [32]u8 = @splat(0);
++    const all = [_]Fingerprint{ Fingerprint.of(2, 0, .{}, 8192, true, h, h, h), Fingerprint.of(2, 1, .{ .exl3_decode = true }, 8192, true, h, h, h) };
++    try std.testing.expectEqual(Mismatch{ .field = .exl3_decode, .rank = 1 }, mismatch(&all).?);
++}
++
+ test "fingerprints: paged MLA decode tiling is a rank agreement" {
+     const h: [32]u8 = @splat(0);
+     const all = [_]Fingerprint{ Fingerprint.of(2, 0, .{}, 8192, true, h, h, h), Fingerprint.of(2, 1, .{ .decode_mla_wide = true }, 8192, true, h, h, h) };
+@@ -399,6 +413,7 @@
+             "tiled",
+             "decode_score_tile",
+             "decode_mla_wide",
++            "exl3_decode",
+             "split",
+             "kda_wide",
+             "kda_pad",
+@@ -528,6 +543,7 @@
+         .tiled => "TF_GLM_MM",
+         .decode_score_tile => "TF_GLM_DECODE_SCORE_TILE",
+         .decode_mla_wide => "TF_GLM_DECODE_MLA_WIDE",
++        .exl3_decode => "TF_GLM_EXL3_DECODE",
+         .split => "TF_GLM_PREFILL_REDUCE",
+         .kda_wide => "TF_GLM_KDA_DECODE_WIDE",
+         .absorb_mma => "TF_GLM_ABSORB_MMA",
+--- a/zig/src/families/glm/cuda_ranks_test.zig
++++ b/zig/src/families/glm/cuda_ranks_test.zig
+@@ -617,7 +617,7 @@
+     const f0 = Fingerprint.of(2, 0, .{}, 8192, true, h0, h0, hashBytes("/c"));
+     try std.testing.expectEqual(@as(u32, 0), f0.kv_shard);
+     try std.testing.expectEqual(@as(u32, 0), f0.kv_shard_check);
+-    try std.testing.expectEqual(@as(u32, 27), f0.layout);
++    try std.testing.expectEqual(@as(u32, 28), f0.layout);
+     var all = [_]Fingerprint{ f0, Fingerprint.of(2, 1, s, 8192, true, h0, h0, hashBytes("/c")) };
+     try std.testing.expectEqual(Mismatch{ .field = .kv_shard, .rank = 1 }, mismatch(&all).?); // on one rank only
+     all[0] = Fingerprint.of(2, 0, s, 8192, true, h0, h0, hashBytes("/c"));
+--- a/zig/src/families/glm/cuda_env_test.zig
++++ b/zig/src/families/glm/cuda_env_test.zig
+@@ -14,6 +14,7 @@
+     .{ .name = "TF_GLM_PROF" },
+     .{ .name = "TF_GLM_LINK_WAIT" },
+     .{ .name = "TF_GLM_DECODE_MLA_WIDE" },
++    .{ .name = "TF_GLM_EXL3_DECODE" },
+     .{ .name = "TF_GLM_DECODE_SCORE_TILE" },
+     .{ .name = "TF_GLM_DFLASH_ONLY" },
+     .{ .name = "TF_GLM_KV_POW2" },
+--- a/zig/src/families/glm/cuda_exl3_test.zig
++++ b/zig/src/families/glm/cuda_exl3_test.zig
+@@ -151,6 +151,7 @@
+         try testing.expectEqualSlices(u8, try expectedTiles(m, i, count, dims, inter, cut, p), words.bytes);
+         const ptrs = m.find(try std.fmt.bufPrint(&buf, "layers.{d}.moe.exl3.{s}_ptrs", .{ i, tw })).?;
+         try testing.expectEqual(ptrs.ptr, ptrs_at);
++        try testing.expectEqual(words.ptr, w.banks[p]);
+         const tiles = if (p < 2) dims / 16 * (cut.len() / 16) else cut.len() / 16 * (dims / 16);
+         var at = words.ptr;
+         for (ptrsOf(ptrs.bytes), 0..) |ptr, e| {

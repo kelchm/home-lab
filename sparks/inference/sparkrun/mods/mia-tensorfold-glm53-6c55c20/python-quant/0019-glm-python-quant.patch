@@ -1,0 +1,497 @@
+Subject: [PATCH] GLM CUDA: support Python affine Q4 and E4M3 verification weights
+
+diff --git a/zig/kernels/cuda/glm_mm.cu b/zig/kernels/cuda/glm_mm.cu
+--- a/zig/kernels/cuda/glm_mm.cu
++++ b/zig/kernels/cuda/glm_mm.cu
+@@ -6,6 +6,7 @@
+ 
+ #include "common/qmm_frag.cuh"
+ #include "glm_pdl.cuh"
++#include "glm_mm_python_quant.cuh"
+ 
+ namespace {
+ 
+@@ -100,11 +101,11 @@
+ template <int BITS, int BM, int WM, int STAGES>
+ struct Tile {
+     static constexpr int WN = 4, BN = 64, NT = 2, MT = BM / WM / 16, THREADS = WM * WN * 32;
+-    static constexpr int WPC = BITS / 2;
++    static constexpr int WPC = BITS > 16 ? (BITS - 16) / 2 : BITS / 2;
+     static constexpr int ROW = 128, CHUNKS = 8;               // a row's 64 inputs: 128 bytes, 8 chunks of 16
+     static constexpr int X = BM * ROW;
+     static constexpr int W = 8 * 32 * WPC * 4;                // 8 column tiles' chunks
+-    static constexpr int S = 8 * 8 * 2;                       // their scales (fp16)
++    static constexpr int S = 8 * 8 * (BITS > 16 ? 4 : 2);                       // their scales (fp16)
+     static constexpr int STAGE = X + W + S;
+     static constexpr int SMEM = STAGES * STAGE;
+ };
+@@ -142,9 +143,11 @@
+         }
+         if constexpr (BITS != 16) {
+             unsigned char* ps = pw + T::W;
+-            for (int tt = tid; tt < 8; tt += T::THREADS) {
++            constexpr int pieces = BITS > 16 ? 2 : 1;
++            for (int part = tid; part < 8 * pieces; part += T::THREADS) {
++                const int tt = part / pieces;
+                 if (t0 + tt >= N8) continue;
+-                cp16(ps + tt * 16, s + ((long long)(t0 + tt) * KG + g) * 8);
++                cp16(ps + part * 16, s + (((long long)(t0 + tt) * KG + g) * pieces + part % pieces) * 8);
+             }
+         }
+     };
+@@ -175,8 +178,9 @@
+             wsrc[j] = reinterpret_cast<const unsigned char*>(w) + (wok[j] ? ((long long)(t0 + tt) * KG + g0) * 32 * T::WPC * 4 + off * 16 : 0);
+         }
+         if constexpr (BITS != 16) {
+-            sok = tid < 8 && t0 + tid < N8;
+-            ssrc = reinterpret_cast<const unsigned char*>(s + (sok ? ((long long)(t0 + tid) * KG + g0) * 8 : 0));
++            constexpr int pieces = BITS > 16 ? 2 : 1;
++            sok = tid < 8 * pieces && t0 + tid / pieces < N8;
++            ssrc = reinterpret_cast<const unsigned char*>(s + (sok ? (((long long)(t0 + tid / pieces) * KG + g0) * pieces + tid % pieces) * 8 : 0));
+         }
+     }
+     auto loadPX = [&](int st, int g) {   // P2: loadX of group g into stage st
+@@ -193,7 +197,7 @@
+         for (int j = 0; j < WPT; ++j)
+             if (wok[j]) cp16(pw + (tid + j * T::THREADS) * 16, wsrc[j] + dg * (32 * T::WPC * 4));
+         if constexpr (BITS != 16)
+-            if (sok) cp16(pw + T::W + tid * 16, ssrc + dg * 16);
++            if (sok) cp16(pw + T::W + tid * 16, ssrc + dg * (BITS > 16 ? 32 : 16));
+     };
+     float acc[T::MT][T::NT][4];
+ #pragma unroll
+@@ -239,10 +243,20 @@
+         uint32_t b[T::NT][8];
+ #pragma unroll
+         for (int j = 0; j < T::NT; ++j) {
+-            if constexpr (P2 && BITS == 8) bpairs8_fast(pw + ((wn * T::NT + j) * 32 + lane) * T::WPC, b[j]);
++            if constexpr (BITS == 20) bpairs<4>(pw + ((wn * T::NT + j) * 32 + lane) * T::WPC, b[j]);
++            else if constexpr (BITS == 24) {
++                const auto* fp = reinterpret_cast<const __nv_fp8x2_storage_t*>(pw + ((wn * T::NT + j) * 32 + lane) * T::WPC);
++#pragma unroll
++                for (int u=0;u<8;++u) {
++                    const __half2 h = __nv_cvt_fp8x2_to_halfraw2(fp[u],__NV_E4M3);
++                    const __nv_bfloat162 pair=__floats2bfloat162_rn(__low2float(h),__high2float(h));
++                    b[j][u]=*reinterpret_cast<const uint32_t*>(&pair);
++                }
++            } else if constexpr (P2 && BITS == 8) bpairs8_fast(pw + ((wn * T::NT + j) * 32 + lane) * T::WPC, b[j]);
+             else bpairs<BITS>(pw + ((wn * T::NT + j) * 32 + lane) * T::WPC, b[j]);
+         }
+         float d[T::MT][T::NT][4];
++        float sums[T::MT][2] = {};
+ #pragma unroll
+         for (int kt = 0; kt < 4; ++kt) {
+             uint32_t a[T::MT][4];
+@@ -251,6 +265,13 @@
+                 const int r = wm * (BM / WM) + i * 16 + (lane & 7) + ((lane >> 3) & 1) * 8;
+                 const int ch = kt * 2 + (lane >> 4);
+                 ldmatrix4(a[i], p + r * T::ROW + swz<T::CHUNKS>(r, ch) * 16);
++                if constexpr (BITS == 20) {
++#pragma unroll
++                    for (int u=0;u<4;++u) {
++                        const float2 pair=__bfloat1622float2(*reinterpret_cast<const __nv_bfloat162*>(&a[i][u]));
++                        sums[i][u&1] += pair.x + pair.y;
++                    }
++                }
+             }
+ #pragma unroll
+             for (int j = 0; j < T::NT; ++j)
+@@ -262,8 +283,15 @@
+         }
+ #pragma unroll
+         for (int j = 0; j < T::NT; ++j) {
+-            float s0 = 1.0f, s1 = 1.0f;
+-            if constexpr (BITS != 16) {
++            float s0 = 1.0f, s1 = 1.0f, b0 = 0.0f, b1 = 0.0f;
++            if constexpr (BITS == 20) {
++                const auto* m = reinterpret_cast<const __nv_bfloat162*>(ps) + (wn*T::NT+j)*8 + (lane&3)*2;
++                const float2 a=__bfloat1622float2(m[0]), b=__bfloat1622float2(m[1]);
++                s0=a.x; s1=b.x; b0=fmaf(8.f,s0,a.y); b1=fmaf(8.f,s1,b.y);
++            } else if constexpr (BITS == 24) {
++                const auto* m = reinterpret_cast<const float*>(ps) + (wn*T::NT+j)*8 + (lane&3)*2;
++                s0=m[0]; s1=m[1];
++            } else if constexpr (BITS != 16) {
+                 const __half2 h = *reinterpret_cast<const __half2*>(ps + (wn * T::NT + j) * 8 + (lane & 3) * 2);
+                 s0 = __low2float(h);
+                 s1 = __high2float(h);
+@@ -271,7 +299,15 @@
+ #pragma unroll
+             for (int i = 0; i < T::MT; ++i)
+ #pragma unroll
+-                for (int e = 0; e < 4; ++e) acc[i][j][e] = __fmaf_rn(d[i][j][e], (e & 1) ? s1 : s0, acc[i][j][e]);
++                for (int e = 0; e < 4; ++e) {
++                    acc[i][j][e] = __fmaf_rn(d[i][j][e], (e & 1) ? s1 : s0, acc[i][j][e]);
++                    if constexpr (BITS == 20) {
++                        float sum=sums[i][e>>1];
++                        sum+=__shfl_xor_sync(0xffffffffu,sum,1);
++                        sum+=__shfl_xor_sync(0xffffffffu,sum,2);
++                        acc[i][j][e]=__fmaf_rn(sum,(e&1)?b1:b0,acc[i][j][e]);
++                    }
++                }
+         }
+     }
+     wait<0>();
+@@ -336,6 +372,8 @@
+ GLM_MM_ALL(4)
+ GLM_MM_ALL(6)
+ GLM_MM_ALL(8)
++GLM_MM_ALL(20)
++GLM_MM_ALL(24)
+ GLM_MM_ALL(16)
+ // Packed prompts: two stages, with the three-stage kernel's K-group order and sums.
+ #define GLM_MM_PROMPT2(B)                                                                                              \
+@@ -345,12 +383,15 @@
+ GLM_MM_PROMPT2(4)
+ GLM_MM_PROMPT2(6)
+ GLM_MM_PROMPT2(8)
++GLM_MM_PROMPT2(20)
++GLM_MM_PROMPT2(24)
+ 
+ // -- tiling at load: ops.cu's packed rows and fp16 scales [N][K / 64] -> the tiled chunks and scales ---------------
+ template <int BITS>
+ __device__ __forceinline__ void tile_packed(const uint32_t* __restrict__ src, const __half* __restrict__ ss,
+                                             uint32_t* __restrict__ dst, __half* __restrict__ ds, int N, int K) {
+-    constexpr int WPC = BITS / 2;
++    constexpr int width = BITS > 16 ? BITS - 16 : BITS;
++    constexpr int WPC = width / 2;
+     const int KG = K >> 6, N8 = N >> 3;
+     const long long c = (long long)blockIdx.x * blockDim.x + threadIdx.x;   // a destination chunk: (tile, group, lane)
+     if (c >= (long long)N8 * KG * 32) return;
+@@ -364,11 +405,14 @@
+     for (int v = 0; v < 16; ++v) {
+         const int k = g * 64 + frag_k(lane, v);
+         int sq[16];
+-        codes16<BITS>(row + (long long)(k >> 4) * WPC, sq);
++        codes16<width>(row + (long long)(k >> 4) * WPC, sq);
+         q[v] = sq[k & 15];
+     }
+-    pack16<BITS>(q, dst + c * WPC);
+-    if (lane < 8) ds[(tg * 8) + lane] = ss[(long long)(tt * 8 + lane) * KG + g];
++    pack16<width>(q, dst + c * WPC);
++    if (lane < 8) {
++        if constexpr (BITS > 16) reinterpret_cast<uint32_t*>(ds)[tg*8+lane] = reinterpret_cast<const uint32_t*>(ss)[(long long)(tt*8+lane)*KG+g];
++        else ds[tg*8+lane] = ss[(long long)(tt*8+lane)*KG+g];
++    }
+ }
+ 
+ extern "C" __global__ void glm_mm_tile4(const uint32_t* src, const __half* ss, uint32_t* dst, __half* ds, int N, int K) {
+@@ -382,6 +426,15 @@
+ extern "C" __global__ void glm_mm_tile8(const uint32_t* src, const __half* ss, uint32_t* dst, __half* ds, int N, int K) {
+     glm_pdl::enter_weights();
+     tile_packed<8>(src, ss, dst, ds, N, K);
++}
++
++extern "C" __global__ void glm_mm_tile20(const uint32_t* src, const __half* ss, uint32_t* dst, __half* ds, int N, int K) {
++    glm_pdl::enter_weights();
++    tile_packed<20>(src, ss, dst, ds, N, K);
++}
++extern "C" __global__ void glm_mm_tile24(const uint32_t* src, const __half* ss, uint32_t* dst, __half* ds, int N, int K) {
++    glm_pdl::enter_weights();
++    tile_packed<24>(src, ss, dst, ds, N, K);
+ }
+ 
+ // bf16 rows [N][K] -> the tiled chunks (16 bf16 a chunk, in pair order)
+diff --git a/zig/kernels/cuda/glm_mm_python_quant.cuh b/zig/kernels/cuda/glm_mm_python_quant.cuh
+new file mode 100644
+--- /dev/null
++++ b/zig/kernels/cuda/glm_mm_python_quant.cuh
+@@ -0,0 +1,70 @@
++// CUDA load-time encoding of the GLM Python family's qmm.quantize4_mse_raw and make_f8.
++// One warp owns a contiguous row group. Output is row-major for the tiler.
++#include <cuda_fp8.h>
++
++__device__ __forceinline__ float least_clipping_error(float x0, float x1, float s, float b) {
++    float q0 = fminf(15.f, fmaxf(0.f, rintf(__fdiv_rn(__fsub_rn(x0, b), s))));
++    float q1 = fminf(15.f, fmaxf(0.f, rintf(__fdiv_rn(__fsub_rn(x1, b), s))));
++    float e0 = __fsub_rn(__fadd_rn(__fmul_rn(q0,s), b), x0);
++    float e1 = __fsub_rn(__fadd_rn(__fmul_rn(q1,s), b), x1);
++    float err = __fadd_rn(__fmul_rn(e0,e0), __fmul_rn(e1,e1));
++#pragma unroll
++    for (int d=16; d; d>>=1) err = __fadd_rn(err,__shfl_down_sync(0xffffffffu,err,d));
++    return __shfl_sync(0xffffffffu,err,0);
++}
++
++extern "C" __global__ void glm_mm_quant20(const __nv_bfloat16* src, unsigned char* codes,
++                                           uint32_t* meta, long long groups) {
++    glm_pdl::enter_weights();
++    const long long g=(long long)blockIdx.x*(blockDim.x/32)+(threadIdx.x/32);
++    if (g>=groups) return;
++    const int l=threadIdx.x&31;
++    const float x0=__bfloat162float(src[g*64+l]), x1=__bfloat162float(src[g*64+l+32]);
++    float low=fminf(x0,x1), high=fmaxf(x0,x1);
++#pragma unroll
++    for (int d=16; d; d>>=1) {
++        low=fminf(low,__shfl_down_sync(0xffffffffu,low,d));
++        high=fmaxf(high,__shfl_down_sync(0xffffffffu,high,d));
++    }
++    low=__shfl_sync(0xffffffffu,low,0);
++    high=__shfl_sync(0xffffffffu,high,0);
++    float best=INFINITY, bs=0.0f, bb=0.0f;
++    // torch's Python scalar clipping sequence is computed in double and used in float.
++#pragma unroll 1
++    for(int i=0;i<16;++i){
++        const float a=(float)(1.0-0.45*(double)i/15.0);
++        const float lo=__fmul_rn(low,a), hi=__fmul_rn(high,a);
++        const float s=__bfloat162float(__float2bfloat16_rn(fmaxf(1.0e-8f,__fmul_rn(__fsub_rn(hi,lo),1.0f/15.0f))));
++        const float b=__bfloat162float(__float2bfloat16_rn(lo));
++        const float err=least_clipping_error(x0,x1,s,b);
++        if(err<best){best=err; bs=s; bb=b;}
++    }
++    const int q0=min(15,max(0,__float2int_rn(__fdiv_rn(__fsub_rn(x0,bb),bs))));
++    const int q1=min(15,max(0,__float2int_rn(__fdiv_rn(__fsub_rn(x1,bb),bs))));
++    const int hi0=__shfl_down_sync(0xffffffffu,q0,1);
++    const int hi1=__shfl_down_sync(0xffffffffu,q1,1);
++    if ((l&1)==0){
++        codes[g*32+l/2]=q0|(hi0<<4);
++        codes[g*32+16+l/2]=q1|(hi1<<4);
++    }
++    if(l==0) meta[g]=(uint32_t)__bfloat16_as_ushort(__float2bfloat16_rn(bs))|
++                      ((uint32_t)__bfloat16_as_ushort(__float2bfloat16_rn(bb))<<16);
++}
++
++extern "C" __global__ void glm_mm_quant24(const __nv_bfloat16* src, unsigned char* codes,
++                                           float* scales, long long groups) {
++    glm_pdl::enter_weights();
++    const long long g=(long long)blockIdx.x*(blockDim.x/32)+(threadIdx.x/32);
++    if(g>=groups) return;
++    const int l=threadIdx.x&31;
++    float x[4], hi=0.0f;
++#pragma unroll
++    for(int j=0;j<4;++j){x[j]=__bfloat162float(src[g*128+j*32+l]); hi=fmaxf(hi,fabsf(x[j]));}
++#pragma unroll
++    for(int d=16;d;d>>=1) hi=fmaxf(hi,__shfl_down_sync(0xffffffffu,hi,d));
++    const float scale=fmaxf(1.e-30f,__fmul_rn(__shfl_sync(0xffffffffu,hi,0),1.0f/448.0f));
++#pragma unroll
++    for(int j=0;j<4;++j) codes[g*128+j*32+l]=__nv_cvt_float_to_fp8(fminf(448.f,fmaxf(-448.f,__fdiv_rn(x[j],scale))),__NV_SATFINITE,__NV_E4M3);
++    // A 128-column scale repeated for the two 64-column tiles.
++    if(l==0){scales[g*2]=scale; scales[g*2+1]=scale;}
++}
+diff --git a/zig/src/families/glm/cuda_mm.zig b/zig/src/families/glm/cuda_mm.zig
+--- a/zig/src/families/glm/cuda_mm.zig
++++ b/zig/src/families/glm/cuda_mm.zig
+@@ -7,7 +7,13 @@
+ pub const Tiled = struct { w: u64, n: usize, k: usize, s: u64 = 0, bits: u8 = 16 };
+ 
+ /// The widths glm_mm packs to, by kernel set: bf16 first.
+-const widths = [_]u8{ 16, 4, 6, 8 };
++pub const affine4: u8 = 20; // Python MSE affine groups of 64
++pub const fp8_block128: u8 = 24; // Python E4M3 with an FP32 scale per 128
++const widths = [_]u8{ 16, 4, 6, 8, affine4, fp8_block128 };
++
++pub fn weightWidth(format: u8) u8 {
++    return if (format > 16) format - 16 else format;
++}
+ 
+ fn widthIndex(bits: u8) !usize {
+     return std.mem.indexOfScalar(u8, &widths, bits) orelse error.BadBits;
+@@ -15,7 +21,7 @@
+ 
+ /// Bytes a packed linear's codes take (its scales follow, 256-aligned): what fits in place of its bf16 tiles.
+ pub fn packedBytes(n: usize, k: usize, bits: u8) [2]usize {
+-    return .{ std.mem.alignForward(usize, n * k * bits / 8, 256), n * (k / 64) * 2 };
++    return .{ std.mem.alignForward(usize, n * k * weightWidth(bits) / 8, 256), n * (k / 64) * @as(usize, if (bits > 16) 4 else 2) };
+ }
+ 
+ /// The linears packed at load: each one's tiles pointer (sorted) and its bits; a linear not here is bf16.
+@@ -40,17 +46,18 @@
+ /// glm_mm's bf16 kernels by row bucket, the K-slice reduce and the tiling.
+ pub const Kernels = struct {
+     by_rows: [4]cuda.Function, // bf16: 16, 32, 64, 128 rows a block
+-    packed_rows: [3][4]cuda.Function, // 4, 6 and 8 bits, as by_rows
+-    packed_prompt: [3]cuda.Function, // glm_mm4/6/8_128s2: two stages, the same sums
++    packed_rows: [5][4]cuda.Function, // 4, 6 and 8 bits, as by_rows
++    packed_prompt: [5]cuda.Function, // glm_mm4/6/8_128s2: two stages, the same sums
+     prompt: cuda.Function, // 128-row blocks, row blocks fastest: a prompt's blocks share each weight tile in L2
+     reduce: cuda.Function,
+     tile: cuda.Function,
+-    tile_packed: [3]cuda.Function, // glm_mm_tile4/6/8: packed rows and their scales into the tiles
++    quant_python: [2]cuda.Function = undefined,
++    tile_packed: [5]cuda.Function, // glm_mm_tile4/6/8: packed rows and their scales into the tiles
+     prompt_fixed_k: bool = false, // opt-in prompt experiment; never selected from the number of batched rows
+     pdl: bool, // dependent launches: a matmul's weights stream in while the kernel before it finishes
+ 
+     pub fn load(m: cuda.Module) !Kernels {
+-        var k: Kernels = .{ .by_rows = undefined, .packed_rows = undefined, .packed_prompt = undefined, .tile_packed = undefined, .prompt = try m.function("glm_mm16_rows"), .reduce = try m.function("glm_mm_reduce"), .tile = try m.function("glm_mm_tile16"), .pdl = true };
++        var k: Kernels = .{ .by_rows = undefined, .packed_rows = undefined, .packed_prompt = undefined, .tile_packed = undefined, .quant_python = .{ try m.function("glm_mm_quant20"), try m.function("glm_mm_quant24") }, .prompt = try m.function("glm_mm16_rows"), .reduce = try m.function("glm_mm_reduce"), .tile = try m.function("glm_mm_tile16"), .pdl = true };
+         inline for (.{ "glm_mm16_16", "glm_mm16_32", "glm_mm16_64", "glm_mm16_128" }, 0..) |name, i| {
+             k.by_rows[i] = try m.function(name);
+             try k.by_rows[i].allowDynamicShared(smem(bucket(i)));
+@@ -86,8 +93,8 @@
+ }
+ 
+ pub fn sharedBytesStages(bits: u8, bm: usize, stages: usize) u32 {
+-    const wpc: usize = if (bits == 16) 8 else bits / 2;
+-    return @intCast(stages * (bm * 128 + 8 * 32 * wpc * 4 + 128));
++    const wpc: usize = weightWidth(bits) / 2;
++    return @intCast(stages * (bm * 128 + 8 * 32 * wpc * 4 + @as(usize, if (bits > 16) 256 else 128)));
+ }
+ 
+ /// K slices fixed by the shape: column tiles times slices reach the target, each slice at least 4 groups of 64.
+diff --git a/zig/src/families/glm/cuda_ranks.zig b/zig/src/families/glm/cuda_ranks.zig
+--- a/zig/src/families/glm/cuda_ranks.zig
++++ b/zig/src/families/glm/cuda_ranks.zig
+@@ -134,18 +134,22 @@
+             }
+         }
+         inline for (.{ .{ "TF_GLM_DENSE_BITS", "dense_bits" }, .{ "TF_GLM_HEAD_BITS", "head_bits" } }) |e| if (get(e[0])) |v| {
+-            const b = std.fmt.parseInt(u8, v, 10) catch {
+-                problem.* = e[0] ++ ": 4, 6, 8 or 16";
+-                return error.BadSetting;
+-            };
+-            @field(s, e[1]) = switch (b) {
+-                4, 6, 8, 16 => b,
+-                0 => 16, // the old family's spelling of bf16
+-                else => {
+-                    problem.* = e[0] ++ ": 4, 6, 8 or 16";
++            if (std.mem.eql(u8, v, "q4-mse") or std.mem.eql(u8, v, "fp8")) {
++                @field(s, e[1]) = if (std.mem.eql(u8, v, "q4-mse")) 20 else 24;
++            } else {
++                const b = std.fmt.parseInt(u8, v, 10) catch {
++                    problem.* = e[0] ++ ": 4, 6, 8, 16, q4-mse, or fp8";
+                     return error.BadSetting;
+-                },
+-            };
++                };
++                @field(s, e[1]) = switch (b) {
++                    4, 6, 8, 16 => b,
++                    0 => 16, // the old family's spelling of bf16
++                    else => {
++                        problem.* = e[0] ++ ": 4, 6, 8, 16, q4-mse, or fp8";
++                        return error.BadSetting;
++                    },
++                };
++            }
+         };
+         s.heat = heat.bandsFrom(get("TF_HEAT_HIGH"), get("TF_HEAT_LOW")) catch {
+             problem.* = "TF_HEAT_HIGH and TF_HEAT_LOW: both or neither, in degrees, with low at or under high";
+diff --git a/zig/src/families/glm/cuda_tile.zig b/zig/src/families/glm/cuda_tile.zig
+--- a/zig/src/families/glm/cuda_tile.zig
++++ b/zig/src/families/glm/cuda_tile.zig
+@@ -171,15 +171,27 @@
+             try d.check(d.api.cuMemcpyDtoDAsync_v2(ptr, tmp.ptr, n * k * 2, s.handle), "cuMemcpyDtoDAsync");
+             continue;
+         }
+-        try host.resize(gpa, n * k);
+-        try s.synchronize();
+-        try cuda.memory.download(d, ptr, std.mem.sliceAsBytes(host.items)[0 .. n * k * 2]);
+-        try words.resize(gpa, n * k * bits / 32);
+-        try scales.resize(gpa, n * (k / 64));
+-        qpack.quantize(bits, host.items, n, k, words.items, scales.items);
+-        const sizes = mm_mod.packedBytes(n, k, bits); // codes then scales, inside the bf16 tiles' bytes
+-        try tmp.upload(0, std.mem.sliceAsBytes(words.items));
+-        try tmp.upload(sizes[0], std.mem.sliceAsBytes(scales.items));
++        const sizes = mm_mod.packedBytes(n, k, bits);
++        if (bits == mm_mod.affine4 or bits == mm_mod.fp8_block128) {
++            const group: usize = if (bits == mm_mod.affine4) 64 else 128;
++            if (k % group != 0) return error.BadShape;
++            const groups = n * k / group;
++            var a: cuda.Args = .{};
++            a.add(ptr);
++            a.add(tmp.ptr);
++            a.add(tmp.ptr + sizes[0]);
++            a.add(@as(c_longlong, @intCast(groups)));
++            try cuda.launch.launch(mk.quant_python[@intFromBool(bits == mm_mod.fp8_block128)], .{ .grid = .{ .x = @intCast((groups + 7) / 8) }, .block = .{ .x = 256 } }, s, &a);
++        } else {
++            try host.resize(gpa, n * k);
++            try s.synchronize();
++            try cuda.memory.download(d, ptr, std.mem.sliceAsBytes(host.items)[0 .. n * k * 2]);
++            try words.resize(gpa, n * k * bits / 32);
++            try scales.resize(gpa, n * (k / 64));
++            qpack.quantize(bits, host.items, n, k, words.items, scales.items);
++            try tmp.upload(0, std.mem.sliceAsBytes(words.items));
++            try tmp.upload(sizes[0], std.mem.sliceAsBytes(scales.items));
++        }
+         try mm_mod.tilePacked(mk, s, bits, tmp.ptr, tmp.ptr + sizes[0], ptr, ptr + sizes[0], n, k);
+         try s.synchronize(); // tmp is the next linear's
+         freed += try compact(w, d, s, e.field, sizes[0] + sizes[1]); // its bf16 bytes back to the device
+diff --git a/zig/glm_mm_policy_host.zig b/zig/glm_mm_policy_host.zig
+--- a/zig/glm_mm_policy_host.zig
++++ b/zig/glm_mm_policy_host.zig
+@@ -3,6 +3,7 @@
+ const mm = @import("mm");
+ const kernels: mm.Kernels = .{
+     .by_rows = .{ .{ .id = 16 }, .{ .id = 32 }, .{ .id = 64 }, .{ .id = 128 } },
++    .packed_prompt = @splat(.{ .id = 128 }),
+     .packed_rows = @splat(.{ .{ .id = 16 }, .{ .id = 32 }, .{ .id = 64 }, .{ .id = 128 } }),
+     .prompt = .{ .id = 512 },
+     .reduce = .{ .id = 1024 },
+@@ -11,7 +12,7 @@
+     .pdl = false,
+ };
+ test "verify and draft windows keep shape-selected split K at every width" {
+-    for ([_]u8{ 16, 4, 6, 8 }) |bits| for ([_]usize{ 1, 2, 3, 4, 8, 16, 17, 31, 32 }) |rows| {
++    for ([_]u8{ 16, 4, 6, 8, mm.affine4, mm.fp8_block128 }) |bits| for ([_]usize{ 1, 2, 3, 4, 8, 16, 17, 31, 32 }) |rows| {
+         cuda.count = 0;
+         try mm.matmul(&kernels, .{}, 4096, 2048, .{ .w = 8192, .s = 12288, .n = 4096, .k = 2048, .bits = bits }, 16384, 32768, rows, false, false);
+         try std.testing.expectEqual(@as(usize, 2), cuda.count);
+@@ -20,7 +21,7 @@
+     };
+ }
+ test "prompt flag chooses one K slice even for one row, alone or many" {
+-    for ([_]u8{ 16, 4, 6, 8 }) |bits| for ([_]usize{ 1, 3, 16, 64, 127, 128, 129, 2048 }) |rows| {
++    for ([_]u8{ 16, 4, 6, 8, mm.affine4, mm.fp8_block128 }) |bits| for ([_]usize{ 1, 3, 16, 64, 127, 128, 129, 2048 }) |rows| {
+         cuda.count = 0;
+         try mm.matmul(&kernels, .{}, 4096, 2048, .{ .w = 8192, .s = 12288, .n = 4096, .k = 2048, .bits = bits }, 16384, 32768, rows, false, true);
+         try std.testing.expectEqual(@as(usize, 1), cuda.count);
+@@ -32,7 +33,7 @@
+ test "fixed K prompt experiment uses the same shape split across bucket, offset and tail boundaries" {
+     var k = kernels;
+     k.prompt_fixed_k = true;
+-    for ([_]u8{ 16, 4, 6, 8 }) |bits| for ([_]usize{ 1, 15, 16, 17, 31, 32, 33, 63, 64, 65, 127, 128, 129, 2048 }) |rows| {
++    for ([_]u8{ 16, 4, 6, 8, mm.affine4, mm.fp8_block128 }) |bits| for ([_]usize{ 1, 15, 16, 17, 31, 32, 33, 63, 64, 65, 127, 128, 129, 2048 }) |rows| {
+         cuda.count = 0;
+         try mm.matmul(&k, .{}, 4096 + 7 * 2048 * 2, 2048, .{ .w = 8192, .s = 12288, .n = 4096, .k = 2048, .bits = bits }, 16384, 32768, rows, false, true);
+         try std.testing.expectEqual(@as(usize, 2 * ((rows + 63) / 64)), cuda.count);
+@@ -44,3 +45,10 @@
+     };
+     try std.testing.expect(!kernels.prompt_fixed_k);
+ }
++
++test "Python target formats retain group metadata and size the tensor-core stages" {
++    try std.testing.expectEqual([2]usize{ 4096, 512 }, mm.packedBytes(64, 128, mm.affine4));
++    try std.testing.expectEqual([2]usize{ 8192, 512 }, mm.packedBytes(64, 128, mm.fp8_block128));
++    try std.testing.expectEqual(@as(u32, 3 * (16 * 128 + 8 * 32 * 2 * 4 + 256)), mm.sharedBytes(mm.affine4, 16));
++    try std.testing.expectEqual(@as(u32, 2 * (128 * 128 + 8 * 32 * 4 * 4 + 256)), mm.sharedBytesStages(mm.fp8_block128, 128, 2));
++}
+diff --git a/zig/src/families/glm/cuda_ranks_test.zig b/zig/src/families/glm/cuda_ranks_test.zig
+--- a/zig/src/families/glm/cuda_ranks_test.zig
++++ b/zig/src/families/glm/cuda_ranks_test.zig
+@@ -48,7 +48,7 @@
+     try std.testing.expectEqual(@as(u32, 2), Fingerprint.of(2, 0, r, 8192, true, @splat(0), @splat(0), hashBytes("/c")).split);
+ 
+     try std.testing.expectError(error.BadSetting, Settings.read(&typo, &problem)); // a typo is refused, not read as bf16
+-    try std.testing.expectEqualStrings("TF_GLM_DENSE_BITS: 4, 6, 8 or 16", problem);
++    try std.testing.expectEqualStrings("TF_GLM_DENSE_BITS: 4, 6, 8, 16, q4-mse, or fp8", problem);
+ }
+ 
+ test "fingerprints: agreeing ranks pass; the first differing field and rank are named" {
+@@ -631,3 +631,19 @@
+     all[1] = Fingerprint.of(2, 1, other, 8192, true, h0, h0, hashBytes("/c"));
+     try std.testing.expectEqual(Mismatch{ .field = .kv_shard, .rank = 1 }, mismatch(&all).?);
+ }
++
++fn pythonQuant(name: [:0]const u8) ?[]const u8 {
++    if (std.mem.eql(u8, name, "TF_GLM_DENSE_BITS")) return "q4-mse";
++    if (std.mem.eql(u8, name, "TF_GLM_HEAD_BITS")) return "fp8";
++    return null;
++}
++
++test "GLM ranks fingerprint the Python target weight formats separately from 4/8" {
++    var problem: []const u8 = "";
++    const s = try Settings.read(&pythonQuant, &problem);
++    try std.testing.expectEqual(@as(u8, 20), s.dense_bits);
++    try std.testing.expectEqual(@as(u8, 24), s.head_bits);
++    const hash: [32]u8 = @splat(0);
++    const fp = Fingerprint.of(2, 0, s, 8192, true, hash, hash, hashBytes("/c"));
++    try std.testing.expectEqual(@as(u32, (20 << 8) | 24), fp.bits);
++}
+diff --git a/zig/src/families/glm/env_defaults_test.zig b/zig/src/families/glm/env_defaults_test.zig
+--- a/zig/src/families/glm/env_defaults_test.zig
++++ b/zig/src/families/glm/env_defaults_test.zig
+@@ -25,5 +25,5 @@
+     try std.testing.expectEqual(@as(u8, 16), (try ranks.Settings.read(&absent, &problem)).dense_bits);
+     try std.testing.expectEqual(@as(u8, 16), (try ranks.Settings.read(&denseZero, &problem)).dense_bits);
+     try std.testing.expectError(error.BadSetting, ranks.Settings.read(&denseFive, &problem));
+-    try std.testing.expectEqualStrings("TF_GLM_DENSE_BITS: 4, 6, 8 or 16", problem);
++    try std.testing.expectEqualStrings("TF_GLM_DENSE_BITS: 4, 6, 8, 16, q4-mse, or fp8", problem);
+ }

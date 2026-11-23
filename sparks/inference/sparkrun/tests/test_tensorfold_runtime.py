@@ -394,10 +394,9 @@ def test_native_mod_transfer_is_self_contained(tmp_path, path):
         if "image" in lock:
             if "image_variant" in recipe.metadata:
                 variant = lock["derived_image"]
-                if recipe.metadata["image_variant"] != variant["name"]:
-                    variant = variant["mla_image"]
-                assert variant["name"] == recipe.metadata["image_variant"]
-                assert recipe.container == variant["image_id"]
+                choices = [variant, variant["mla_image"], *variant.get("decode_images", [])]
+                selected, = [image for image in choices if image["name"] == recipe.metadata["image_variant"]]
+                assert recipe.container == selected["image_id"]
             else:
                 assert recipe.container in (lock["image"], lock.get("image_id"))
         subprocess.run([sys.executable, str(bundle / "prepare.py"), "--check"], cwd=tmp_path, check=True)

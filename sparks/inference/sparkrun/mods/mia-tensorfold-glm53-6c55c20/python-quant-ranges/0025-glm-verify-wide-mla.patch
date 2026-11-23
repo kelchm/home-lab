@@ -1,0 +1,238 @@
+--- a/zig/src/core/profile.zig
++++ b/zig/src/core/profile.zig
+@@ -10,6 +10,7 @@
+     TF_QWEN_KV_PAGES_ALL,
+     TF_QWEN_KV_SHARE,
+     TF_QWEN_REQUEST_STARTS,
++    TF_GLM_DECODE_MLA_WIDE,
+     TF_GLM_DECODE_SCORE_TILE,
+     TF_GLM_DFLASH_ONLY,
+     TF_GLM_KV_POW2,
+@@ -149,6 +150,7 @@
+ pub const entries = [_]Entry{
+     .{ .id = .TF_CACHE_EVICT, .families = cuda_cache, .backend = "multiple", .scopes = &.{ .{ .backend = "cuda", .families = cuda_cache }, .{ .backend = "metal", .families = &.{ "nemotron_h", "qwen3_5", "qwen3_5_moe", "qwen4_exp", "glm5_next", "glm_moe_dsa", "minimax_m3_vl", "gemma4", "gemma4_unified", "spark2_5", "llama", "lfm2_moe", "lfm3", "lfm3_vl", "step5_vl", "kimi_k3", "kimi_k31" } }, .{ .backend = "xpu", .families = &.{ "nemotron_h", "lfm3", "qwen3_5", "gemma4" } } }, .class = .experimental, .syntax = .present, .report_values = &.{"decayed_resume"}, .effect = "Opt into bounded resume credit for RAM snapshot eviction", .evidence = "#3241; synthetic host rows gate; default main unchanged" },
+     .{ .id = .TF_QWEN_REQUEST_STARTS, .families = qwen, .class = .arithmetic, .syntax = .one, .effect = "Opt into CUDA message-start prompt cuts", .evidence = "#1334; default-off; GB10 six-turn: resumed equals fresh, one reply differs from unset" },
++    .{ .id = .TF_GLM_DECODE_MLA_WIDE, .families = &.{"glm5_next"}, .class = .identical, .syntax = .one, .effect = "Share a paged FP8 latent tile across 32 attention heads in long decode windows", .evidence = "Paged GB10 partial and BF16 output equality" },
+     .{ .id = .TF_GLM_DECODE_SCORE_TILE, .families = &.{"glm5_next"}, .class = .identical, .syntax = .one, .effect = "Share pooled-key score tiles across long-context verification rows", .evidence = "GLM index launch and device score parity" },
+     .{ .id = .TF_GLM_DFLASH_ONLY, .families = &.{"glm5_next"}, .class = .identical, .syntax = .one, .effect = "Keep only the Q4 draft head alongside the external DFlash2 drafter", .evidence = "GLM DFlash2-only prompt and cache layout" },
+     .{ .id = .TF_GLM_KV_POW2, .families = &.{"glm5_next"}, .class = .arithmetic, .syntax = .one, .effect = "Store latent and pooled index keys as power-of-two scaled E4M3", .evidence = "GLM Python kv8.store_row" },
+--- a/zig/src/families/glm/cuda_engine.zig
++++ b/zig/src/families/glm/cuda_engine.zig
+@@ -86,6 +86,7 @@
+     bm: fw.Buffers, // the MTP head's rows
+     bs: ?fw.Buffers = null, // shared verify windows (with the MTP head, as the lane core shares only then)
+     pairs: cuda.DeviceBuffer, // every rank's (value, id) of a greedy draw
++    decode_mla_wide: bool = false, // measured SM121 TP2 paged FP8 decode geometry
+     smp: sampler.Sampler,
+     seqs: std.ArrayList(?*Seq) = .empty, // every stream's sequence by slot (the lane backend's), slot 0 made at init
+     cur: *Seq = undefined, // the bound slot's: every step below runs on it
+@@ -212,6 +213,8 @@
+         }
+         e.bp = try fw.Buffers.init(d, &e.w, prompt_solo.bufferRows(o.settings.solo), true, o.capacity);
+         errdefer e.bp.deinit();
++        e.decode_mla_wide = o.settings.decode_mla_wide and world == 2 and !o.settings.kv_shard.on and o.settings.kv_pow2 and (try ctx.capability()) == 121;
++        if (e.decode_mla_wide and rank == 0) std.log.info("glm: wide latent head tiles for long-context single-stream FP8 verification", .{});
+         if (o.settings.decode_score_tile and rank == 0) std.log.info("glm: tiled pooled-key scores for long-context single-stream verification", .{});
+         if (o.settings.absorb_mma and rank == 0) std.log.info("glm: prompt MLA absorb and expand use tensor cores for aligned passes of 64 or more rows", .{});
+         if (o.settings.solo and rank == 0) std.log.info("glm: prompt passes of {d} rows, {d} while another stream decodes", .{ fw.solo_rows, fw.prefill_rows });
+@@ -512,6 +515,7 @@
+         var one: [1]fw.Rank = undefined;
+         var f = e.view(&e.bd, &one);
+         const at = e.cur.st.pos;
++        f.decode_mla_wide = e.decode_mla_wide and at >= 40960;
+         f.decode_score_tile = e.settings.decode_score_tile; // target verification of one stream only
+         f.prof = e.profs[ids.len - 1];
+         if (f.prof) |p| try p.begin(e.stream, verifyLabel(ids.len));
+--- a/zig/src/families/glm/cuda_env_test.zig
++++ b/zig/src/families/glm/cuda_env_test.zig
+@@ -13,6 +13,7 @@
+     .{ .name = "TF_GLM_VISION_HOST" },
+     .{ .name = "TF_GLM_PROF" },
+     .{ .name = "TF_GLM_LINK_WAIT" },
++    .{ .name = "TF_GLM_DECODE_MLA_WIDE" },
+     .{ .name = "TF_GLM_DECODE_SCORE_TILE" },
+     .{ .name = "TF_GLM_DFLASH_ONLY" },
+     .{ .name = "TF_GLM_KV_POW2" },
+--- a/zig/src/families/glm/cuda_forward.zig
++++ b/zig/src/families/glm/cuda_forward.zig
+@@ -151,6 +151,7 @@
+     ranks: []const Rank, // every rank of a local check, or this process's one
+     exchange: Exchange,
+     kv_pow2: bool = false,
++    decode_mla_wide: bool = false,
+     decode_score_tile: bool = false,
+     absorb_mma: bool = false,
+     kda_wide: bool = true, // TF_GLM_KDA_DECODE_WIDE (the Python family's default): decode windows on KDA's three-kernel chain
+@@ -170,7 +171,7 @@
+     }
+ 
+     pub fn set(f: *const Forward) glue.Set {
+-        return .{ .glue = &f.m.glue, .index = if (f.m.index) |*x| x else null, .mm = if (f.m.tiled) &f.m.mm else null, .packs = f.m.packs, .prompt = f.ranks[0].b.prefill, .kv_pow2 = f.kv_pow2, .absorb_mma = f.absorb_mma, .decode_score_tile = f.decode_score_tile, .linear = .{ .lane = &f.m.lane }, .copy_rows = f.m.copy_rows, .dsel = f.m.dsel };
++        return .{ .glue = &f.m.glue, .index = if (f.m.index) |*x| x else null, .mm = if (f.m.tiled) &f.m.mm else null, .packs = f.m.packs, .prompt = f.ranks[0].b.prefill, .kv_pow2 = f.kv_pow2, .absorb_mma = f.absorb_mma, .decode_score_tile = f.decode_score_tile, .decode_mla_wide = f.decode_mla_wide, .linear = .{ .lane = &f.m.lane }, .copy_rows = f.m.copy_rows, .dsel = f.m.dsel };
+     }
+ 
+     /// The layer sums' boundary (cuda_boundary.zig): every rank's fp32 partial into every gathered buffer.
+--- a/zig/src/families/glm/cuda_glue.zig
++++ b/zig/src/families/glm/cuda_glue.zig
+@@ -14,6 +14,7 @@
+     packs: ?*const mm_mod.Packed = null,
+     prompt: bool = false,
+     kv_pow2: bool = false,
++    decode_mla_wide: bool = false,
+     decode_score_tile: bool = false,
+     absorb_mma: bool = false,
+     linear: cuda.qlinear.Linear = .{},
+--- a/zig/src/families/glm/cuda_kv8_test.zig
++++ b/zig/src/families/glm/cuda_kv8_test.zig
+@@ -240,6 +240,23 @@
+         try t.expectEqual(@as(u32, 256), Rec.blocks[0]);
+         try t.expectEqual(if (hb == 16) glue.chunksSmem(16) else glue.chunksSmem(32), Rec.shared[0]);
+         try t.expectEqual(kid(ks.merge), Rec.ids[1]);
++    }
++    // A long single-stream verification requests the 32-head tile only at its tested window sizes.
++    for ([_]usize{ 1, 5, 6, 7, 8, 12, 16, 17, 32 }) |rows| {
++        for ([_]bool{ false, true }) |enabled| {
++            for ([_]bool{ false, true }) |prefill| {
++                var mode = set;
++                mode.decode_mla_wide = enabled;
++                mode.prompt = prefill;
++                Rec.n = 0;
++                try latent.sparseAttentionFormat(mode, stream, 100, 200, 200 + 262_144, paged, 500, 600, 2051, p, 700, rows, 32, 512, scale);
++                const hb: u32 = if (enabled and !prefill and rows >= 8 and rows <= 16) 32 else 16;
++                try t.expectEqual(kid(if (hb == 32) ks.chunks_32_fp8_paged else ks.chunks_16_fp8_paged), Rec.ids[0]);
++                try t.expectEqual([3]u32{ @intCast(rows), 32 / hb, 5 }, Rec.grid[0]);
++                try t.expectEqual(if (hb == 16) glue.chunksSmem(16) else glue.chunksSmem(32), Rec.shared[0]);
++                try t.expectEqual(kid(ks.merge), Rec.ids[1]);
++            }
++        }
+     }
+     // sparse: logical lists of 2,051 tokens (5 chunks), rows 3 (hb 16) and 64 (hb 32)
+     for ([_]usize{ 3, 64 }) |rows| {
+--- a/zig/src/families/glm/cuda_latent.zig
++++ b/zig/src/families/glm/cuda_latent.zig
+@@ -144,7 +144,10 @@
+ 
+ pub fn sparseAttentionFormat(set: glue.Set, stream: cuda.Stream, qa: u64, cache: u64, scales: u64, t: Table, tokens: u64, counts: u64, w: usize, p: Partials, out: u64, rows: usize, heads: usize, lw: usize, scale: f32) !void {
+     const nch = chunksFor(w);
+-    try chunks(set, stream, qa, cache, scales, t, 0, tokens, counts, p, rows, heads, lw, nch, w, scale, headBlock(rows), true);
++    // A tested single-stream verify window can share the same 32 keys across both head tiles.
++    const wide = set.decode_mla_wide and !set.prompt and scales != 0 and t.pt != 0 and t.logical and heads == 32 and w == 2051 and rows >= 8 and rows <= 16;
++    const hb = if (wide) heads_tile_wide else headBlock(rows);
++    try chunks(set, stream, qa, cache, scales, t, 0, tokens, counts, p, rows, heads, lw, nch, w, scale, hb, true);
+     try merge(set, stream, p, out, counts, rows, heads, lw, nch, true);
+ }
+ 
+--- a/zig/src/families/glm/cuda_ranks.zig
++++ b/zig/src/families/glm/cuda_ranks.zig
+@@ -32,6 +32,7 @@
+     l2pf: l2pf.Options = .{}, // TF_GLM_L2PF and its knobs: a decode window's next weights read into L2 beside it
+     dflash_only: bool = false,
+     kv_pow2: bool = false,
++    decode_mla_wide: bool = false,
+     decode_score_tile: bool = false,
+     absorb_mma: bool = false,
+     kv_live_half: bool = false, // TF_GLM_KV_LIVE_HALF=1: a keep carries the live KDA half alone (cuda_snapshot_layout.zig)
+@@ -50,6 +51,10 @@
+     /// `read` from a lookup with no blank text, so every name below and in l2pf's reader is unset when blank.
+     fn readSet(get: *const fn ([:0]const u8) ?[]const u8, problem: *[]const u8) !Settings {
+         var s: Settings = .{};
++        s.decode_mla_wide = @import("sys").environment.value(bool, "TF_GLM_DECODE_MLA_WIDE", get("TF_GLM_DECODE_MLA_WIDE"), false) catch {
++            problem.* = "TF_GLM_DECODE_MLA_WIDE: 0 or 1";
++            return error.BadSetting;
++        };
+         s.decode_score_tile = @import("sys").environment.value(bool, "TF_GLM_DECODE_SCORE_TILE", get("TF_GLM_DECODE_SCORE_TILE"), false) catch {
+             problem.* = "TF_GLM_DECODE_SCORE_TILE: 0 or 1";
+             return error.BadSetting;
+@@ -237,14 +242,15 @@
+ 
+ /// What every rank must agree on, as bytes the communicator carries.
+ pub const Fingerprint = extern struct {
+-    layout: u32 = 26, // tiled and decode_score_tile occupy one 32-bit word
++    layout: u32 = 27, // tiled and the two verification tile policies occupy one word
+     world: u32,
+     rank: u32,
+     kv8: u32 = 0,
+     pages: u32 = 0, // TF_KV_PAGES: the engine's own sequence is made on pages at init, so every rank pages alike
+     prompt_fixed_k: u32,
+     tiled: u16,
+-    decode_score_tile: u16 = 0,
++    decode_score_tile: u8 = 0,
++    decode_mla_wide: u8 = 0,
+     split: u32, // TF_GLM_PREFILL_REDUCE: 0 gather, 1 split, 2 ring
+     kda_wide: u32,
+     kda_pad: u32 = 0, // TF_GLM_KDA_PAD: every rank's KDA input rows carry one width
+@@ -284,6 +290,7 @@
+         prompt_fixed_k,
+         tiled,
+         decode_score_tile,
++        decode_mla_wide,
+         split,
+         kda_wide,
+         kda_pad,
+@@ -333,6 +340,7 @@
+             .prompt_fixed_k = @intFromBool(s.prompt_fixed_k),
+             .tiled = @intFromBool(s.tiled),
+             .decode_score_tile = @intFromBool(s.decode_score_tile),
++            .decode_mla_wide = @intFromBool(s.decode_mla_wide),
+             .split = if (!s.split) 0 else if (s.ring) 2 else 1,
+             .kda_wide = @intFromBool(s.kda_wide),
+             .kda_pad = @intFromBool(s.kda_pad),
+@@ -362,6 +370,12 @@
+     }
+ };
+ 
++test "fingerprints: paged MLA decode tiling is a rank agreement" {
++    const h: [32]u8 = @splat(0);
++    const all = [_]Fingerprint{ Fingerprint.of(2, 0, .{}, 8192, true, h, h, h), Fingerprint.of(2, 1, .{ .decode_mla_wide = true }, 8192, true, h, h, h) };
++    try std.testing.expectEqual(Mismatch{ .field = .decode_mla_wide, .rank = 1 }, mismatch(&all).?);
++}
++
+ test "fingerprints: agreeing ranks require the same verification scorer" {
+     const h: [32]u8 = @splat(0);
+     const all = [_]Fingerprint{ Fingerprint.of(2, 0, .{}, 8192, true, h, h, h), Fingerprint.of(2, 1, .{ .decode_score_tile = true }, 8192, true, h, h, h) };
+@@ -384,6 +398,7 @@
+             "world",
+             "tiled",
+             "decode_score_tile",
++            "decode_mla_wide",
+             "split",
+             "kda_wide",
+             "kda_pad",
+@@ -512,6 +527,7 @@
+         .prompt_fixed_k => "TF_GLM_PROMPT_K",
+         .tiled => "TF_GLM_MM",
+         .decode_score_tile => "TF_GLM_DECODE_SCORE_TILE",
++        .decode_mla_wide => "TF_GLM_DECODE_MLA_WIDE",
+         .split => "TF_GLM_PREFILL_REDUCE",
+         .kda_wide => "TF_GLM_KDA_DECODE_WIDE",
+         .absorb_mma => "TF_GLM_ABSORB_MMA",
+--- a/zig/src/families/glm/cuda_ranks_test.zig
++++ b/zig/src/families/glm/cuda_ranks_test.zig
+@@ -194,7 +194,7 @@
+ test "every scheduling and identity field that differs stops the ranks" {
+     const zero = Fingerprint.of(2, 0, .{}, 8192, true, @splat(0), @splat(0), hashBytes("/same"));
+     const one = Fingerprint.of(2, 1, .{}, 8192, true, @splat(0), @splat(0), hashBytes("/same"));
+-    inline for (.{ "layout", "world", "rank", "pages", "split", "kda_wide", "kda_pad", "kv_live_half", "pieces", "solo", "pair", "layers", "mtp", "vision", "video_tokens", "max_images", "max_videos", "max_frames", "roce_multi", "roce_wide", "kv_host", "capacity", "heat_high", "heat_low", "kv_host_gib" }) |name| {
++    inline for (.{ "layout", "world", "rank", "pages", "decode_mla_wide", "split", "kda_wide", "kda_pad", "kv_live_half", "pieces", "solo", "pair", "layers", "mtp", "vision", "video_tokens", "max_images", "max_videos", "max_frames", "roce_multi", "roce_wide", "kv_host", "capacity", "heat_high", "heat_low", "kv_host_gib" }) |name| {
+         var all = [_]Fingerprint{ zero, one };
+         @field(all[1], name) += 1;
+         try std.testing.expectEqual(@field(Fingerprint.Field, name), mismatch(&all).?.field);
+@@ -617,7 +617,7 @@
+     const f0 = Fingerprint.of(2, 0, .{}, 8192, true, h0, h0, hashBytes("/c"));
+     try std.testing.expectEqual(@as(u32, 0), f0.kv_shard);
+     try std.testing.expectEqual(@as(u32, 0), f0.kv_shard_check);
+-    try std.testing.expectEqual(@as(u32, 26), f0.layout);
++    try std.testing.expectEqual(@as(u32, 27), f0.layout);
+     var all = [_]Fingerprint{ f0, Fingerprint.of(2, 1, s, 8192, true, h0, h0, hashBytes("/c")) };
+     try std.testing.expectEqual(Mismatch{ .field = .kv_shard, .rank = 1 }, mismatch(&all).?); // on one rank only
+     all[0] = Fingerprint.of(2, 0, s, 8192, true, h0, h0, hashBytes("/c"));
+--- a/zig/src/platform/environment.zig
++++ b/zig/src/platform/environment.zig
+@@ -110,6 +110,7 @@
+     .{ .name = "TF_GLM_VISION_HOST", .scope = .glm, .kind = .flag, .forms = "0 or 1" },
+     .{ .name = "TF_GLM_PROF", .scope = .glm, .kind = .flag, .forms = "0 or 1" },
+     .{ .name = "TF_GLM_LINK_WAIT", .scope = .glm, .kind = .flag, .forms = "0 or 1" },
++    .{ .name = "TF_GLM_DECODE_MLA_WIDE", .scope = .glm, .kind = .flag, .forms = "0 or 1" },
+     .{ .name = "TF_GLM_DECODE_SCORE_TILE", .scope = .glm, .kind = .flag, .forms = "0 or 1" },
+     .{ .name = "TF_GLM_DFLASH_ONLY", .scope = .glm, .kind = .flag, .forms = "0 or 1" },
+     .{ .name = "TF_GLM_KV_POW2", .scope = .glm, .kind = .flag, .forms = "0 or 1" },

@@ -1,0 +1,15 @@
+{
+  "image": "glm53-tf:1104-6c55c20-shared-mma-python-quant-afac9a6ed96a",
+  "image_id": "sha256:95e52f41cb92188b40169cfbf81377558a4a18f273f6077663b78dbfbd45e39c",
+  "manifest_digest": "sha256:d399168e749f6e6e62db6568ee37662653b31b331bca7737988bff1d1da6257a",
+  "parent_image_id": "sha256:e8fb5242a387db04ac35ce10c7e44790e7c03c56a6dddf2b34c96b46aba0fd34",
+  "patches": {
+    "0019-glm-python-quant.patch": "74ff58666ef29407e9b92d7f416991dac3cc33dfbe3d5b50f061f2703a836f3d",
+    "0020-glm-python-kv.patch": "bd797d92cd830fac4ed0b4378325b83d6f4a9910880f57766b06228e2de27162",
+    "0021-glm-dflash-calibration.patch": "13ea81c487feb394c4c6afc75ee6bb9c41677d11be77bfc1a0d77685bff4f70a"
+  },
+  "controls_sha256": "b114ebd82c0ec7b095092b5fbaec4c04d78de418ec2359c5679f2fef80afda6b",
+  "native_binary_sha256": "f15844edd38ab468772c3972dc70f191e31b399bce3943071a08b890c228df7b",
+  "mm_fatbin_sha256": "e471499dff22aab7b92d6492f49e2a62a54736fb5544fbc57eaec58b44a8048a",
+  "oci_record_sha256": "4f3f7dbc97c6d5bde19bd7e62e12d4af9f9ce615082b4ad34f30a5732d62ed49"
+}

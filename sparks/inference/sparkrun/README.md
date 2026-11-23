@@ -130,6 +130,8 @@ The [two-stage kernel profile](mia-tensorfold-glm53-native-tp2/glm53-mia-1104-6c
 
 The current Python profile served the same 18 frozen requests using a new isolated 64 GiB spill directory and returned all 18 expected tags. Initial requests took 106.29 s in total and follow-ups took 27.61 s. It was the fastest measured profile on this sequence and supports restart recovery. After the final trial, both original Python ranks passed readiness with the 2,582,528-position pool and the original 64 GiB spill tier. The 111,952-token replay restored 111,936 tokens in one disk load, returned the expected marker and produced its first token in 0.50 s. The native profiles remain staged alternatives for in-memory serving.
 
+The [matched-precision coding comparison](benchmarks/glm53-coding.md) measures the same workloads with Python’s target weight and KV formats, including separate client streaming rates and GPU kernel timings.
+
 #### November 23 follow-up on the shared-page profile
 
 All arms kept the 32 shared-state slots, q4 dense weights, q8 head, DFlash2, four streams and 1M context. Each boot served the 18-request workspace sequence directly after readiness, followed by three independent cold 27K prompts, one cold 112K prompt and a 29,281-token natural-text likelihood check. The prior durable Python reference took 133.90 s on the same workspace sequence.

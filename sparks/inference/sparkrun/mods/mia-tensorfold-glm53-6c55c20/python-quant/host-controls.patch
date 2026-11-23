@@ -1,0 +1,44 @@
+--- a/zig/src/families/glm/cuda_ranks_test.zig
++++ b/zig/src/families/glm/cuda_ranks_test.zig
+@@ -617,7 +617,7 @@
+     const f0 = Fingerprint.of(2, 0, .{}, 8192, true, h0, h0, hashBytes("/c"));
+     try std.testing.expectEqual(@as(u32, 0), f0.kv_shard);
+     try std.testing.expectEqual(@as(u32, 0), f0.kv_shard_check);
+-    try std.testing.expectEqual(@as(u32, 22), f0.layout);
++    try std.testing.expectEqual(@as(u32, 24), f0.layout);
+     var all = [_]Fingerprint{ f0, Fingerprint.of(2, 1, s, 8192, true, h0, h0, hashBytes("/c")) };
+     try std.testing.expectEqual(Mismatch{ .field = .kv_shard, .rank = 1 }, mismatch(&all).?); // on one rank only
+     all[0] = Fingerprint.of(2, 0, s, 8192, true, h0, h0, hashBytes("/c"));
+--- a/zig/build/glm_family_host.zig
++++ b/zig/build/glm_family_host.zig
+@@ -4,6 +4,11 @@
+ pub fn steps(b: *std.Build, cuda: *std.Build.Module, glm: *std.Build.Module, mods: anytype, step: *std.Build.Step) void {
+     // GLM CUDA's startup watcher (named phases, a warning while NCCL init or a load blocks), from cuda.zig's room
+     b.step("test-startup-watch-host", "Blocked startup phase warnings without a driver or communicator").dependOn(&b.addRunArtifact(b.addTest(.{ .root_module = cuda, .filters = &.{"startup watcher:"} })).step);
++    const quant_ranks = b.addTest(.{
++        .root_module = glm,
++        .filters = &.{ "GLM ranks fingerprint the Python", "settings from the environment", "fingerprints: agreeing ranks", "TF_GLM_KV_SHARD: read" },
++    });
++    b.step("test-glm-quant-ranks-host", "GLM Python-compatible formats and rank fingerprint agreement").dependOn(&b.addRunArtifact(quant_ranks).step);
+     const host = b.graph.host;
+     const exl3 = b.createModule(.{ .root_source_file = b.path("zig/glm_exl3_prompt_host.zig"), .target = host, .optimize = .debug, .link_libc = true, .imports = &.{ .{ .name = "glm", .module = glm }, .{ .name = "cuda", .module = cuda } } });
+     const exl3_run = b.addRunArtifact(b.addTest(.{ .root_module = exl3, .filters = &.{"GLM EXL3 prompt:"} }));
+--- a/zig/glm_prompt_host.zig
++++ b/zig/glm_prompt_host.zig
+@@ -29,6 +29,7 @@
+         split: bool,
+         kda_wide: bool,
+         absorb_mma: bool,
++        kv_pow2: bool,
+         ring: bool = false,
+         taps: ?Taps = null,
+         pub fn run(f: *Forward, ids: []const i32) !void {
+@@ -70,7 +71,7 @@
+         seqs: [32]Seq = @splat(.{}),
+         bp: fw.Buffers,
+         share: struct { vocab: Vocab = .{} } = .{},
+-        settings: struct { split: bool = true, ring: bool = true, kda_wide: bool = true, absorb_mma: bool = false } = .{},
++        settings: struct { split: bool = true, ring: bool = true, kda_wide: bool = true, absorb_mma: bool = false, kv_pow2: bool = false } = .{},
+         d: u8 = 0,
+         m: u8 = 0,
+         stream: u8 = 0,

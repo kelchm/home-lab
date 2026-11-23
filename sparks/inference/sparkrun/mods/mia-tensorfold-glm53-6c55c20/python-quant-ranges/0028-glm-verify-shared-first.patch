@@ -1,0 +1,277 @@
+--- a/zig/src/core/profile.zig
++++ b/zig/src/core/profile.zig
+@@ -12,6 +12,7 @@
+     TF_QWEN_REQUEST_STARTS,
+     TF_GLM_EXL3_DECODE,
+     TF_GLM_DECODE_MLA_WIDE,
++    TF_GLM_L2PF_SHARED_FIRST,
+     TF_GLM_DECODE_SCORE_TILE,
+     TF_GLM_DFLASH_Q4_DOWN,
+     TF_GLM_DFLASH_ONLY,
+@@ -154,6 +155,7 @@
+     .{ .id = .TF_QWEN_REQUEST_STARTS, .families = qwen, .class = .arithmetic, .syntax = .one, .effect = "Opt into CUDA message-start prompt cuts", .evidence = "#1334; default-off; GB10 six-turn: resumed equals fresh, one reply differs from unset" },
+     .{ .id = .TF_GLM_EXL3_DECODE, .families = &.{"glm5_next"}, .class = .identical, .syntax = .one, .effect = "Use the uniform four-bit routed experts for short GLM TP2 decode windows", .evidence = "GLM per-slot FP32 expert parity" },
+     .{ .id = .TF_GLM_DECODE_MLA_WIDE, .families = &.{"glm5_next"}, .class = .identical, .syntax = .one, .effect = "Share a paged FP8 latent tile across 32 attention heads in long decode windows", .evidence = "Paged GB10 partial and BF16 output equality" },
++    .{ .id = .TF_GLM_L2PF_SHARED_FIRST, .families = &.{"glm5_next"}, .class = .identical, .syntax = .one, .effect = "Consume the shared expert weights before the routed expert scan during single-stream verify", .evidence = "GB10 single-stream decode site test" },
+     .{ .id = .TF_GLM_DECODE_SCORE_TILE, .families = &.{"glm5_next"}, .class = .identical, .syntax = .one, .effect = "Share pooled-key score tiles across long-context verification rows", .evidence = "GLM index launch and device score parity" },
+     .{ .id = .TF_GLM_DFLASH_Q4_DOWN, .families = &.{"glm5_next"}, .class = .identical, .syntax = .one, .effect = "Use Python-compatible Q4 DFlash2 MLP down projections with FP32 rank partials", .evidence = "GLM DFlash2 target-verified proposal equivalence" },
+     .{ .id = .TF_GLM_DFLASH_ONLY, .families = &.{"glm5_next"}, .class = .identical, .syntax = .one, .effect = "Keep only the Q4 draft head alongside the external DFlash2 drafter", .evidence = "GLM DFlash2-only prompt and cache layout" },
+--- a/zig/src/platform/environment.zig
++++ b/zig/src/platform/environment.zig
+@@ -112,6 +112,7 @@
+     .{ .name = "TF_GLM_LINK_WAIT", .scope = .glm, .kind = .flag, .forms = "0 or 1" },
+     .{ .name = "TF_GLM_EXL3_DECODE", .scope = .glm, .kind = .flag, .forms = "0 or 1" },
+     .{ .name = "TF_GLM_DECODE_MLA_WIDE", .scope = .glm, .kind = .flag, .forms = "0 or 1" },
++    .{ .name = "TF_GLM_L2PF_SHARED_FIRST", .scope = .glm, .kind = .flag, .forms = "0 or 1" },
+     .{ .name = "TF_GLM_DECODE_SCORE_TILE", .scope = .glm, .kind = .flag, .forms = "0 or 1" },
+     .{ .name = "TF_GLM_DFLASH_Q4_DOWN", .scope = .glm, .kind = .flag, .forms = "0 or 1" },
+     .{ .name = "TF_GLM_DFLASH_ONLY", .scope = .glm, .kind = .flag, .forms = "0 or 1" },
+--- a/zig/src/families/glm/cuda_forward.zig
++++ b/zig/src/families/glm/cuda_forward.zig
+@@ -151,6 +151,7 @@
+     ranks: []const Rank, // every rank of a local check, or this process's one
+     exchange: Exchange,
+     kv_pow2: bool = false,
++    scheduled_l2: bool = false,
+     decode_mla_wide: bool = false,
+     decode_score_tile: bool = false,
+     absorb_mma: bool = false,
+@@ -252,8 +253,11 @@
+                 if (out) |o| try mlp.fill(f.mlpKernels(), f.stream, m, b.dense, 0, rows, b.prefill, o);
+             },
+             .moe => |m| {
+-                try moe.body(f.moeKernels(), f.stream, m, b.moe, b.normed, c.hidden, rows, b.prefill);
+-                if (out) |o| try moe.fill(f.moeKernels(), f.stream, m, b.moe, b.normed, c.hidden, 0, rows, b.prefill, o);
++                const pf = f.prefetch();
++                var kernels = f.moeKernels();
++                kernels.early_shared = f.scheduled_l2 and pf != null and pf.?.o.front(rows) and out != null and m.exl3 != null;
++                try moe.body(kernels, f.stream, m, b.moe, b.normed, c.hidden, rows, b.prefill);
++                if (out) |o| try moe.fill(kernels, f.stream, m, b.moe, b.normed, c.hidden, 0, rows, b.prefill, o);
+             },
+         }
+     }
+@@ -408,7 +412,7 @@
+                 if (r.segs.len > 0) try shared.mixer(f, r, l, li, di, R, slot(r, R)) else try f.mixer(r, l, li, di, R, @min(latent.chunksFor(r.st.pos + R), r.b.nch), slot(r, R));
+             }
+             if (f.prof) |p| p.mark(f.stream, if (f.ranks[0].w.layers[j].mixer == .kda) .kda else .mla);
+-            if (pf) |p| try p.fork(f.stream, j, .f);
++            if (pf) |p| try p.fork(f.stream, j, if (f.scheduled_l2 and p.o.front(R)) .f_first else .f);
+             try f.resolve(R);
+             if (f.prof) |p| p.mark(f.stream, .gather_a);
+             prof_mod.context(f.prof, j, null, .ffn);
+--- a/zig/src/families/glm/cuda_moe.zig
++++ b/zig/src/families/glm/cuda_moe.zig
+@@ -42,7 +42,7 @@
+ };
+ 
+ /// The kernels the block runs: the captured Triton set, the grouped NVFP4 experts, the plan, and glm_ops.
+-pub const Kernels = struct { set: glue.Set, experts: *const experts.Kernels, exl3: *const exl3.Kernels, put_slot: cuda.Function, prof: ?*prof_mod.Prof = null };
++pub const Kernels = struct { set: glue.Set, experts: *const experts.Kernels, exl3: *const exl3.Kernels, put_slot: cuda.Function, prof: ?*prof_mod.Prof = null, early_shared: bool = false };
+ 
+ /// forward.moe_block: out [rows][dims] fp32 partial; `prompt`: 64-pair items, the prompt kernels, bf16 slot rows.
+ pub fn block(k: Kernels, stream: cuda.Stream, l: Layer, s: Scratch, x: u64, x_stride: usize, rows: usize, prompt: bool, out: u64) !void {
+@@ -59,6 +59,9 @@
+     try glue.router(k.set, stream, x, x_stride, l.router, s.mlog, s.router_part, rows, d, l.count);
+     try glue.select(k.set, stream, s.mlog, l.bias, s.pick, s.wts, rows, l.top_k, l.count, l.scale, l.norm);
+     stamp.end();
++    // This is a whole single-stream verify site when the L2 schedule requests it. The routed experts
++    // have their own scratch; only fill reads the preserved shared output in s.sy.
++    if (k.early_shared) try sharedRows(k, stream, l, s, x, x_stride, 0, rows);
+     stamp = prof_mod.span(k.prof, stream, .experts);
+     defer stamp.end();
+     if (k.prof) |p| p.mark(stream, .router);
+@@ -70,6 +73,14 @@
+     try experts.run(k.experts, stream, if (prompt) .down else .down_f32, l.routed, plan, s.eact, l.routed.width, rows, s.ey, shared_id);
+ }
+ 
++fn sharedRows(k: Kernels, stream: cuda.Stream, l: Layer, s: Scratch, x: u64, x_stride: usize, lo: usize, hi: usize) !void {
++    const n = hi - lo;
++    const d = l.routed.dims;
++    try projection.matmul(k.set, stream, l.shared_gu, x + lo * x_stride * 2, x_stride, s.sgu + lo * 2 * l.shared * 2, s.mm_part, n, 2 * l.shared, d, false);
++    try glue.swiglu(k.set, stream, s.sgu + lo * 2 * l.shared * 2, s.sact + lo * l.shared * 2, s.sxs + lo * (l.shared / 64) * 4, l.routed.limit, n, l.shared);
++    try projection.matmul(k.set, stream, l.shared_down, s.sact + lo * l.shared * 2, l.shared, s.sy + lo * d * 4, s.mm_part, n, d, l.shared, true);
++}
++
+ /// moe_block's fill of rows lo..hi: shared expert into the last slot, slot sum into out fp32 (any range, same bits).
+ pub fn fill(k: Kernels, stream: cuda.Stream, l: Layer, s: Scratch, x: u64, x_stride: usize, lo: usize, hi: usize, prompt: bool, out: u64) !void {
+     const stamp = prof_mod.span(k.prof, stream, .shared_expert);
+@@ -79,9 +90,7 @@
+     const n = hi - lo;
+     const bf16_slots = prompt and l.exl3 == null; // the slot rows: bf16 in an NVFP4 prompt chunk, else fp32
+     const eb: usize = if (bf16_slots) 2 else 4;
+-    try projection.matmul(k.set, stream, l.shared_gu, x + lo * x_stride * 2, x_stride, s.sgu + lo * 2 * l.shared * 2, s.mm_part, n, 2 * l.shared, d, false);
+-    try glue.swiglu(k.set, stream, s.sgu + lo * 2 * l.shared * 2, s.sact + lo * l.shared * 2, s.sxs + lo * (l.shared / 64) * 4, l.routed.limit, n, l.shared);
+-    try projection.matmul(k.set, stream, l.shared_down, s.sact + lo * l.shared * 2, l.shared, s.sy + lo * d * 4, s.mm_part, n, d, l.shared, true);
++    if (!k.early_shared) try sharedRows(k, stream, l, s, x, x_stride, lo, hi);
+     var a: cuda.Args = .{};
+     a.add(s.sy + lo * d * 4);
+     a.add(s.ey + lo * slots * d * eb);
+--- a/zig/src/families/glm/cuda_ranks.zig
++++ b/zig/src/families/glm/cuda_ranks.zig
+@@ -574,7 +574,7 @@
+         .kv_host => "TF_GLM_KV_HOST or TF_GLM_KV_HOST_SHARED",
+         .kv_host_gib => "TF_GLM_KV_HOST_GIB",
+         .solo => "TF_GLM_CHUNK_SOLO",
+-        .l2pf => "TF_GLM_L2PF, _MB, _CTAS or _PACE_GBPS",
++        .l2pf => "TF_GLM_L2PF, _SHARED_FIRST, _MB, _CTAS or _PACE_GBPS",
+         .bits => "TF_GLM_DENSE_BITS or TF_GLM_HEAD_BITS",
+         .kv_shard => "TF_GLM_KV_SHARD, TF_GLM_KV_SHARD_CARRY or TF_GLM_KV_SHARD_TWINS",
+         .kv_shard_check => "TF_GLM_KV_SHARD_CHECK",
+--- a/zig/src/families/glm/cuda_engine.zig
++++ b/zig/src/families/glm/cuda_engine.zig
+@@ -86,6 +86,7 @@
+     bm: fw.Buffers, // the MTP head's rows
+     bs: ?fw.Buffers = null, // shared verify windows (with the MTP head, as the lane core shares only then)
+     pairs: cuda.DeviceBuffer, // every rank's (value, id) of a greedy draw
++    scheduled_l2: bool = false,
+     decode_mla_wide: bool = false, // measured SM121 TP2 paged FP8 decode geometry
+     smp: sampler.Sampler,
+     seqs: std.ArrayList(?*Seq) = .empty, // every stream's sequence by slot (the lane backend's), slot 0 made at init
+@@ -214,6 +215,7 @@
+         }
+         e.bp = try fw.Buffers.init(d, &e.w, prompt_solo.bufferRows(o.settings.solo), true, o.capacity);
+         errdefer e.bp.deinit();
++        e.scheduled_l2 = e.l2pf != null and world == 2 and !o.settings.kv_shard.on and o.settings.kv_pow2 and (try ctx.capability()) == 121;
+         e.decode_mla_wide = o.settings.decode_mla_wide and world == 2 and !o.settings.kv_shard.on and o.settings.kv_pow2 and (try ctx.capability()) == 121;
+         if (e.decode_mla_wide and rank == 0) std.log.info("glm: wide latent head tiles for long-context single-stream FP8 verification", .{});
+         if (o.settings.decode_score_tile and rank == 0) std.log.info("glm: tiled pooled-key scores for long-context single-stream verification", .{});
+@@ -516,6 +518,7 @@
+         var one: [1]fw.Rank = undefined;
+         var f = e.view(&e.bd, &one);
+         const at = e.cur.st.pos;
++        f.scheduled_l2 = e.scheduled_l2;
+         f.decode_mla_wide = e.decode_mla_wide and at >= 40960;
+         f.decode_score_tile = e.settings.decode_score_tile; // target verification of one stream only
+         f.prof = e.profs[ids.len - 1];
+--- a/zig/src/families/glm/cuda_l2pf.zig
++++ b/zig/src/families/glm/cuda_l2pf.zig
+@@ -8,6 +8,7 @@
+ /// TF_GLM_L2PF and its knobs at DeepSeek V4.1's defaults (TF_DSV41_L2PF's): on unless 0, the knobs read unless 0.
+ pub const Options = struct {
+     on: bool = true,
++    shared_first: bool = false,
+     named: bool = false, // TF_GLM_L2PF=1: on whatever the GPU, where unset is a GB10's alone (`want`)
+     mb: u32 = 12, // TF_GLM_L2PF_MB: a site's budget in MiB
+     ctas: u32 = 2, // TF_GLM_L2PF_CTAS: the CTAs a site's prefetch spreads over
+@@ -23,6 +24,10 @@
+             }
+             o.named = true;
+         }
++        o.shared_first = @import("sys").environment.value(bool, "TF_GLM_L2PF_SHARED_FIRST", get("TF_GLM_L2PF_SHARED_FIRST"), false) catch {
++            problem.* = "TF_GLM_L2PF_SHARED_FIRST: 0 or 1";
++            return error.BadSetting;
++        };
+         const knobs = .{
+             .{ "TF_GLM_L2PF_MB", "mb", 1, "TF_GLM_L2PF_MB: a site's budget in MiB, 1 or more" },
+             .{ "TF_GLM_L2PF_CTAS", "ctas", 1, "TF_GLM_L2PF_CTAS: 1 or more" },
+@@ -39,9 +44,17 @@
+         return o;
+     }
+ 
++    fn siteCount(o: Options) usize {
++        return if (o.shared_first) 4 else 3;
++    }
++
++    pub fn front(o: Options, rows: usize) bool {
++        return o.shared_first and ((rows >= 2 and rows <= 4) or rows == 6);
++    }
++
+     /// What the ranks agree on: zeros when off, so knobs nobody reads never differ.
+     pub fn words(o: Options) [4]u32 {
+-        return if (o.on) .{ 1, o.mb, o.ctas, o.pace_gbps } else @splat(0);
++        return if (o.on) .{ 1 | @as(u32, @intFromBool(o.shared_first)) << 1, o.mb, o.ctas, o.pace_gbps } else @splat(0);
+     }
+ 
+     /// Whether `cap` prefetches at `world` ranks: named on any GPU, unset on a GB10 (sm_121) at two ranks or more.
+@@ -51,7 +64,7 @@
+ };
+ 
+ /// A layer's sites: n before gather_b (the next mixer's input), f before gather_a (the ffn's head), o (KDA's chain).
+-pub const Site = enum(u2) { n, f, o };
++pub const Site = enum(u2) { n, f, o, f_first };
+ 
+ /// One site's rows of the table and their bytes.
+ pub const Span = struct { at: u32 = 0, rows: u32 = 0, bytes: u64 = 0 };
+@@ -99,10 +112,11 @@
+                 s.proj(a.q_b);
+             },
+         },
+-        .f => switch (l.ffn) {
++        .f, .f_first => switch (l.ffn) {
+             .moe => |m| {
+                 s.add(m.router);
+-                s.proj(m.shared_gu); // read after the routed experts, which no table holds (the router picks them)
++                s.proj(m.shared_gu);
++                if (site == .f_first and m.exl3 != null) s.proj(m.shared_down);
+             },
+             .dense => |m| switch (m.w) {
+                 .nvfp4 => |x| {
+@@ -132,9 +146,14 @@
+ 
+ /// Every site's rows of (address, bytes) from `bufs`, the weights' allocations; false when a source starts none.
+ pub fn table(gpa: std.mem.Allocator, bufs: []const cuda.DeviceBuffer, layers: []const weights.Layer, budget: u64, rows: *std.ArrayList([2]i64), spans: []Span) !bool {
+-    std.debug.assert(spans.len == layers.len * 3);
+-    for (layers, 0..) |_, j| for ([_]Site{ .n, .f, .o }) |site| {
+-        const sp = &spans[j * 3 + @backingInt(site)];
++    return tableOptions(gpa, bufs, layers, budget, rows, spans, .{});
++}
++
++fn tableOptions(gpa: std.mem.Allocator, bufs: []const cuda.DeviceBuffer, layers: []const weights.Layer, budget: u64, rows: *std.ArrayList([2]i64), spans: []Span, options: Options) !bool {
++    std.debug.assert(spans.len == layers.len * options.siteCount());
++    const sites = [_]Site{ .n, .f, .o, .f_first };
++    for (layers, 0..) |_, j| for (sites[0..options.siteCount()]) |site| {
++        const sp = &spans[j * options.siteCount() + @backingInt(site)];
+         sp.* = .{ .at = @intCast(rows.items.len) };
+         if (site == .n and j + 1 == layers.len) continue; // the last layer's next is the head
+         const src = sources(layers[if (site == .n) j + 1 else j], site);
+@@ -174,11 +193,11 @@
+ 
+     /// Built after the weights load and tile (tiling moves packed linears); null when a source is not a buffer.
+     pub fn init(gpa: std.mem.Allocator, d: *const cuda.Driver, w: *const weights.Weights, o: Options) !?L2pf {
+-        const spans = try gpa.alloc(Span, w.layers.len * 3);
++        const spans = try gpa.alloc(Span, w.layers.len * o.siteCount());
+         errdefer gpa.free(spans);
+         var host: std.ArrayList([2]i64) = .empty;
+         defer host.deinit(gpa);
+-        if (!try table(gpa, w.buffers.items, w.layers, @as(u64, o.mb) << 20, &host, spans)) {
++        if (!try tableOptions(gpa, w.buffers.items, w.layers, @as(u64, o.mb) << 20, &host, spans, o)) {
+             gpa.free(spans);
+             return null;
+         }
+@@ -216,8 +235,9 @@
+ 
+     /// Site `site` of layer `j` read into L2 on the side stream from this point of `main` on.
+     pub fn fork(p: *const L2pf, main: cuda.Stream, j: usize, site: Site) !void {
+-        if (j * 3 >= p.spans.len) return;
+-        const sp = p.spans[j * 3 + @backingInt(site)];
++        const sites = p.o.siteCount();
++        if (@backingInt(site) >= sites or j >= p.spans.len / sites) return;
++        const sp = p.spans[j * sites + @backingInt(site)];
+         if (sp.rows == 0) return;
+         try p.fork_ev.record(main);
+         try p.side.wait(p.fork_ev);
+@@ -356,3 +376,24 @@
+     rows.clearRetainingCapacity();
+     try t.expect(!try table(t.allocator, bufs[1..], &.{ d, e }, 12 * MiB, &rows, &spans));
+ }
++
++test "shared weights stay on the original schedule outside the eligible verify rows" {
++    const t = std.testing;
++    var problem: []const u8 = "";
++    const on = try Options.read(Env(.{.{ "TF_GLM_L2PF_SHARED_FIRST", "1" }}).get, &problem);
++    try t.expectEqual([4]u32{ 3, 12, 2, 150 }, on.words());
++    try t.expect(!on.front(1) and on.front(2) and on.front(3) and on.front(4) and !on.front(5) and on.front(6) and !on.front(7) and !on.front(8) and !on.front(16));
++    try t.expectError(error.BadSetting, Options.read(Env(.{.{ "TF_GLM_L2PF_SHARED_FIRST", "true" }}).get, &problem));
++    var l: weights.Layer = undefined;
++    l.ffn = .{ .moe = undefined };
++    l.ffn.moe.exl3 = @as(@import("cuda_exl3.zig").Experts, undefined);
++    l.ffn.moe.router = 0x100;
++    l.ffn.moe.shared_gu = .{ .bf16 = 0x200 };
++    l.ffn.moe.shared_down = .{ .bf16 = 0x300 };
++    const usual = sources(l, .f);
++    const early = sources(l, .f_first);
++    try t.expectEqualSlices(u64, &.{ 0x100, 0x200 }, usual.ptrs[0..usual.len]);
++    try t.expectEqualSlices(u64, &.{ 0x100, 0x200, 0x300 }, early.ptrs[0..early.len]);
++    l.ffn.moe.exl3 = null;
++    try t.expectEqual(@as(usize, 2), sources(l, .f_first).len);
++}

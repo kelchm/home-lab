@@ -1,0 +1,696 @@
+diff --git a/tools/glm_index_emulate/emulate.cpp b/tools/glm_index_emulate/emulate.cpp
+index 36ab0fa..d1838c2 100644
+--- a/tools/glm_index_emulate/emulate.cpp
++++ b/tools/glm_index_emulate/emulate.cpp
+@@ -8,6 +8,21 @@
+ #include "cuda_bf16.h"
+ #include "cuda_runtime.h"
+ 
++namespace glm_packed_key {
++inline float decode(unsigned char c) {
++  const int exp = (c >> 3) & 15, man = c & 7;
++  const float x = exp ? std::ldexp(float(8 + man), exp - 10) : std::ldexp(float(man), -9);
++  return c & 128 ? -x : x;
++}
++inline void stage(__nv_bfloat16* dst, float* scale, const __nv_bfloat16* base, int u, bool ok) {
++  const auto* row = reinterpret_cast<const unsigned char*>(base);
++  for (int i = 0; i < 8; ++i) dst[i] = __float2bfloat16_rn(ok ? decode(row[8 * u + i]) : 0.0f);
++  if (u == 0) {
++    *scale = 1.0f;
++    if (ok) std::memcpy(scale, row + 128, 4);
++  }
++}
++}
+ namespace glm_index {
+ inline void cp16(void* d, const void* s, bool ok) { ok ? (void)std::memcpy(d, s, 16) : (void)std::memset(d, 0, 16); }
+ inline void cp_commit() {}
+@@ -72,7 +87,7 @@ static int fails = 0;
+ static uint32_t bits(float f) { uint32_t u; std::memcpy(&u, &f, 4); return u; }
+ static float bf(__nv_bfloat16 v) { return __bfloat162float(v); }
+ 
+-struct Case { int64_t pos, rows, np; int loop, heads; bool paged; };
++struct Case { int64_t pos, rows, np; int loop, heads; bool paged; bool packed = false; };
+ 
+ // tf_glm_scores' result for one (row, pool), the model of the mma: a chain of double sums per k16 step, then its rules
+ static float model_score(const std::vector<__nv_bfloat16>& q, const std::vector<__nv_bfloat16>& w, int64_t w_stride,
+@@ -122,7 +137,20 @@ static void scores_case(std::mt19937_64& g, const Case& c) {
+     pt[p / 128] = order[p / 128];
+     std::memcpy(&store[(int64_t)order[p / 128] * page_elems + (p % 128) * D], &keys[p * D], D * 2);
+   }
+-  const __nv_bfloat16* pk = c.paged ? store.data() : keys.data();
++  std::vector<__nv_bfloat16> plain = keys;
++  if (c.packed) {
++    for (int64_t p = 0; p < (int64_t)(keys.size() / D); ++p) {
++      const float ks = std::ldexp(1.0f, int(g() % 21) - 10);
++      auto* bytes = reinterpret_cast<unsigned char*>(plain.data() + p * D);
++      for (int i = 0; i < D; ++i) {
++        bytes[i] = static_cast<unsigned char>(g() % 127) | ((g() & 1) << 7);
++        keys[p * D + i] = __float2bfloat16_rn(glm_packed_key::decode(bytes[i]) * ks);
++      }
++      std::memcpy(bytes + D, &ks, 4);
++      std::memcpy(&store[(int64_t)order[p / 128] * page_elems + (p % 128) * D], bytes, D * 2);
++    }
++  }
++  const __nv_bfloat16* pk = c.paged ? store.data() : plain.data();
+   const float scale = 0.0883883461f, wscale = 0.176776692f;
+   const int pos = (int)c.pos;
+   std::vector<float> out(c.rows * c.np);
+@@ -130,7 +158,7 @@ static void scores_case(std::mt19937_64& g, const Case& c) {
+   std::memcpy(out.data(), raw.data(), out.size() * 4);
+   run_grid((c.rows + 7) / 8, (nb + c.loop - 1) / c.loop, 256, [&] {
+     tf_glm_index_scores(q.data(), w.data(), W, pk, out.data(), &pos, c.rows, c.np, nb, scale, wscale, c.heads, c.loop,
+-                        c.paged ? pt.data() : nullptr, c.paged ? page_elems * 2 : 0);
++                        c.paged ? pt.data() : nullptr, c.paged ? page_elems * 2 : 0, c.packed);
+   });
+   int64_t bad = 0, unread = 0;
+   for (int64_t r = 0; r < c.rows; r++)
+@@ -187,6 +215,7 @@ static void fill(std::mt19937_64& g, float* row, int np, int limit, Kind kind) {
+ int main() {
+   std::mt19937_64 g(0x101);
+   for (const Case& c : {Case{0, 1, 1024, 2, 32, false}, Case{1000, 19, 1024, 4, 32, false}, Case{3000, 24, 1024, 16, 32, true},
++                        Case{1000, 9, 512, 4, 32, false, true}, Case{600, 10, 512, 2, 20, true, true},
+                         Case{3900, 17, 1000, 3, 32, false}, Case{5000, 9, 2048, 5, 20, true},
+                         Case{6000, 24, 2048, 8, 32, false}, Case{12000, 8, 4096, 3, 32, true}})
+     scores_case(g, c);
+diff --git a/zig/kernels/cuda/glm_glue_attn.cuh b/zig/kernels/cuda/glm_glue_attn.cuh
+index 1ea4683..d9f2005 100644
+--- a/zig/kernels/cuda/glm_glue_attn.cuh
++++ b/zig/kernels/cuda/glm_glue_attn.cuh
+@@ -6,6 +6,7 @@
+ #include "glm_glue_router.cuh"
+ #include <cuda_fp8.h>
+ #include "common/mla.cuh"
++#include "glm_packed_key.cuh"
+ 
+ // The 16-head form (decode windows) and 32-head form (prompt chunks), each in glm_attn::wide_smem<HB>() bytes of smem.
+ extern "C" __global__ void __launch_bounds__(256)
+@@ -93,9 +94,10 @@ extern "C" __global__ void __launch_bounds__(128)
+ extern "C" __global__ void __launch_bounds__(128)
+     tf_glm_scores(const __nv_bfloat16* qi, const __nv_bfloat16* wts, int64_t w_stride, const __nv_bfloat16* pk,
+                   float* out, const int* pos, int64_t np, int64_t nb, float scale, float wscale, int64_t heads,
+-                  int loop, const int* pt, int64_t ps) {
++                  int loop, const int* pt, int64_t ps, int packed) {
+   glm_pdl::enter();
+   constexpr int D = 128, HP = 32, BP = 64;
++  __shared__ float key_scales[4][2][16];
+   __shared__ __align__(16) __nv_bfloat16 sm[4 * 2 * 16 * D];  // q's 32 rows, then each warp's two 16-pool buffers
+   auto at = [](int row, int u) { return row * D + ((u ^ (row & 7)) << 3); };
+   const int lane = threadIdx.x & 31, warp = threadIdx.x >> 5, g = lane >> 2, q = lane & 3;
+@@ -119,7 +121,10 @@ extern "C" __global__ void __launch_bounds__(128)
+       const int idx = lane + t * 32, row = idx / (D / 8), u = idx % (D / 8);
+       const int64_t p = p0 + row;
+       const bool ok = p < npool;
+-      glm_attn::cp16(sm + (warp * 2 + buf) * 16 * D + at(row, u), src + (ok ? row : 0) * D + u * 8, ok);
++      __nv_bfloat16* dst = sm + (warp * 2 + buf) * 16 * D + at(row, u);
++      const __nv_bfloat16* base = src + (ok ? row : 0) * D;
++      if (packed) glm_packed_key::stage(dst, &key_scales[warp][buf][row], base, u, ok);
++      else glm_attn::cp16(dst, base + u * 8, ok);
+     }
+   };
+   const int64_t first = (int64_t)blockIdx.y * loop;
+@@ -160,10 +165,11 @@ extern "C" __global__ void __launch_bounds__(128)
+     __syncwarp();
+     for (int nt = 0; nt < 2; ++nt)
+       for (int e = 0; e < 2; ++e) {
+-        const float v0 = fmaxf(__fmul_rn(acc[0][nt][e], scale), 0.0f),
+-                    v1 = fmaxf(__fmul_rn(acc[0][nt][e + 2], scale), 0.0f);
+-        const float v2 = fmaxf(__fmul_rn(acc[1][nt][e], scale), 0.0f),
+-                    v3 = fmaxf(__fmul_rn(acc[1][nt][e + 2], scale), 0.0f);
++        const float ks = packed ? key_scales[warp][j & 1][nt * 8 + 2 * q + e] : 1.0f;
++        const float v0 = fmaxf(__fmul_rn(__fmul_rn(acc[0][nt][e], ks), scale), 0.0f),
++                    v1 = fmaxf(__fmul_rn(__fmul_rn(acc[0][nt][e + 2], ks), scale), 0.0f);
++        const float v2 = fmaxf(__fmul_rn(__fmul_rn(acc[1][nt][e], ks), scale), 0.0f),
++                    v3 = fmaxf(__fmul_rn(__fmul_rn(acc[1][nt][e + 2], ks), scale), 0.0f);
+         float s = glm_triton::fmul(wv[1], v1);
+         s = __fmaf_rn(wv[0], v0, s);
+         s = __fmaf_rn(wv[2], v2, s);
+diff --git a/zig/kernels/cuda/glm_glue_index.cuh b/zig/kernels/cuda/glm_glue_index.cuh
+index 5f5cdb7..97a7a46 100644
+--- a/zig/kernels/cuda/glm_glue_index.cuh
++++ b/zig/kernels/cuda/glm_glue_index.cuh
+@@ -4,6 +4,7 @@
+ #include "glm_pdl.cuh"
+ 
+ #include "glm_triton.cuh"
++#include "kv_fp8.cuh"
+ 
+ using namespace glm_triton;
+ 
+@@ -40,12 +41,13 @@ extern "C" __global__ void __launch_bounds__(32)
+ // sparse._pool_keys, a warp a completed pool: softmax of its 4 gate rows (+ ape) times bf16 keys, summed in order.
+ extern "C" __global__ void __launch_bounds__(32)
+     tf_glm_pool_keys(const __nv_bfloat16* ik, const __nv_bfloat16* ig, const __nv_bfloat16* ape, __nv_bfloat16* pk,
+-                     const int* pos, int64_t rows, const int* pt, int64_t ps) {
++                     const int* pos, int64_t rows, const int* pt, int64_t ps, int packed) {
+   glm_pdl::enter();
+   constexpr int D = 128;
+   const int64_t P = pos[0], p = P / 4 + blockIdx.x;
+   if (4 * p + 3 > P + rows - 1) return;
+   __nv_bfloat16* out = pk + glm_pages::at<128>(pt, ps / 2, p, D);  // a page holds 512 rows' 128 pools
++  float vals[4];
+   for (int j = 0; j < 4; ++j) {
+     const int d = threadIdx.x * 4 + j;
+     float l[4], e[4];
+@@ -58,8 +60,24 @@ extern "C" __global__ void __launch_bounds__(32)
+       const float tq = rbf(__fmul_rn(rbf(div_full(e[q], s)), bf(ik[(4 * p + q) * D + d])));
+       t = q == 0 ? tq : t + tq;
+     }
+-    out[d] = __float2bfloat16_rn(t);
++    if (packed) vals[j] = rbf(t);
++    else out[d] = __float2bfloat16_rn(t);
+   }
++  if (!packed) return;
++  float amax = 0.0f;
++  for (int j = 0; j < 4; ++j) amax = fmaxf(amax, fabsf(vals[j]));
++  for (int o = 16; o > 0; o >>= 1) amax = fmaxf(amax, __shfl_xor_sync(0xffffffffu, amax, o));
++  float scale, inv;
++  tf_kv_fp8::power_scale(amax, scale, inv);
++  uint32_t word = 0;
++  for (int j = 0; j < 4; ++j) {
++    const uint32_t code = __nv_cvt_float_to_fp8(__fmul_rn(vals[j], inv), __NV_SATFINITE, __NV_E4M3);
++    word |= code << (8 * j);
++  }
++  // Keep the native snapshot's 256-byte pooled-row pitch. Only codes and the scale contain data.
++  uint32_t* row = reinterpret_cast<uint32_t*>(out);
++  row[threadIdx.x] = word;
++  row[D / 4 + threadIdx.x] = threadIdx.x == 0 ? __float_as_uint(scale) : 0;
+ }
+ 
+ namespace glm_index {
+diff --git a/zig/kernels/cuda/glm_glue_latent.cuh b/zig/kernels/cuda/glm_glue_latent.cuh
+index f9ebbaf..9ca58c1 100644
+--- a/zig/kernels/cuda/glm_glue_latent.cuh
++++ b/zig/kernels/cuda/glm_glue_latent.cuh
+@@ -92,23 +92,23 @@ extern "C" __global__ void tf_glm_lat_write(const __nv_bfloat16* lat, int64_t la
+ 
+ // One 512-wide latent row as E4M3 and its FP32 scale, with the same row-wise rounding as other FP8 caches.
+ extern "C" __global__ void __launch_bounds__(512)
+-    tf_glm_lat_write_fp8(const __nv_bfloat16* lat, int64_t stride, unsigned char* cache, float* scales, const int* pos) {
++    tf_glm_lat_write_fp8(const __nv_bfloat16* lat, int64_t stride, unsigned char* cache, float* scales, const int* pos, int pow2) {
+   glm_pdl::enter();
+   const int64_t r = blockIdx.x, at = (int64_t)pos[0] + r;
+   const int d = threadIdx.x;
+   __shared__ float red[16];
+-  tf_kv_fp8::quant_row<512, true>(__bfloat162float(lat[r * stride + d]), d, cache + at * 512, scales + at, red);
++  tf_kv_fp8::quant_row<512, true>(__bfloat162float(lat[r * stride + d]), d, cache + at * 512, scales + at, red, pow2);
+ }
+ 
+ // The same row on KV pages: page pt[at / 512] holds its codes at row at % 512 of this cache's part (from `cache`) and its
+ // scale at that row of the part's scales (from `scales`), the pages `ps` bytes apart; the rounding is the window's.
+ extern "C" __global__ void __launch_bounds__(512)
+     tf_glm_lat_write_fp8_paged(const __nv_bfloat16* lat, int64_t stride, unsigned char* cache, float* scales,
+-                               const int* pos, const int* pt, int64_t ps) {
++                               const int* pos, const int* pt, int64_t ps, int pow2) {
+   const int64_t r = blockIdx.x, at = (int64_t)pos[0] + r;
+   const int64_t page = (int64_t)pt[at / 512] * ps, row = at % 512;
+   const int d = threadIdx.x;
+   __shared__ float red[16];
+   float* s = reinterpret_cast<float*>(reinterpret_cast<unsigned char*>(scales) + page) + row;
+-  tf_kv_fp8::quant_row<512, true>(__bfloat162float(lat[r * stride + d]), d, cache + page + row * 512, s, red);
++  tf_kv_fp8::quant_row<512, true>(__bfloat162float(lat[r * stride + d]), d, cache + page + row * 512, s, red, pow2);
+ }
+diff --git a/zig/kernels/cuda/glm_index_scores.cuh b/zig/kernels/cuda/glm_index_scores.cuh
+index 50bea13..045a57a 100644
+--- a/zig/kernels/cuda/glm_index_scores.cuh
++++ b/zig/kernels/cuda/glm_index_scores.cuh
+@@ -9,6 +9,7 @@
+ #include "common/cp_async.cuh"
+ #ifndef GLM_INDEX_HOST
+ #include "common/qmm_frag.cuh"
++#include "glm_packed_key.cuh"
+ #endif
+ 
+ namespace glm_index {
+@@ -45,9 +46,10 @@ __device__ __forceinline__ int tile_at(int row, int u) { return row * D + ((u ^
+ extern "C" __global__ void __launch_bounds__(glm_index::RB * 32)
+     tf_glm_index_scores(const __nv_bfloat16* qi, const __nv_bfloat16* wts, int64_t w_stride, const __nv_bfloat16* pk,
+                         float* out, const int* pos, int64_t rows, int64_t np, int64_t nb, float scale, float wscale,
+-                        int64_t heads, int loop, const int* pt, int64_t ps) {
++                        int64_t heads, int loop, const int* pt, int64_t ps, int packed) {
+   glm_pdl::enter();
+   using namespace glm_index;
++  __shared__ float key_scales[2][64];
+   __shared__ __align__(16) __nv_bfloat16 tile[2][BP * D];  // two key tiles
+   const int lane = threadIdx.x & 31, warp = threadIdx.x >> 5, g = lane >> 2, q = lane & 3;
+   const int64_t r = (int64_t)blockIdx.x * RB + warp, P = pos[0];
+@@ -80,7 +82,10 @@ extern "C" __global__ void __launch_bounds__(glm_index::RB * 32)
+       const int row = idx / (D / 8), u = idx % (D / 8);
+       const int64_t p = pb * BP + row;
+       const bool ok = p < nmax;
+-      cp16(&tile[buf][tile_at(row, u)], pk + key_at(pt, ps / 2, ok ? p : 0) + u * 8, ok);
++      __nv_bfloat16* dst = &tile[buf][tile_at(row, u)];
++      const __nv_bfloat16* base = pk + key_at(pt, ps / 2, ok ? p : 0);
++      if (packed) glm_packed_key::stage(dst, &key_scales[buf][row], base, u, ok);
++      else cp16(dst, base + u * 8, ok);
+     }
+   };
+   const int64_t first = (int64_t)blockIdx.y * loop;
+@@ -112,10 +117,11 @@ extern "C" __global__ void __launch_bounds__(glm_index::RB * 32)
+       }
+       for (int nt = 0; nt < 2; ++nt)
+         for (int e = 0; e < 2; ++e) {
+-          const float v0 = fmaxf(__fmul_rn(acc[0][nt][e], scale), 0.0f),
+-                      v1 = fmaxf(__fmul_rn(acc[0][nt][e + 2], scale), 0.0f);
+-          const float v2 = fmaxf(__fmul_rn(acc[1][nt][e], scale), 0.0f),
+-                      v3 = fmaxf(__fmul_rn(acc[1][nt][e + 2], scale), 0.0f);
++          const float ks = packed ? key_scales[j & 1][gi * 16 + nt * 8 + 2 * q + e] : 1.0f;
++          const float v0 = fmaxf(__fmul_rn(__fmul_rn(acc[0][nt][e], ks), scale), 0.0f),
++                      v1 = fmaxf(__fmul_rn(__fmul_rn(acc[0][nt][e + 2], ks), scale), 0.0f);
++          const float v2 = fmaxf(__fmul_rn(__fmul_rn(acc[1][nt][e], ks), scale), 0.0f),
++                      v3 = fmaxf(__fmul_rn(__fmul_rn(acc[1][nt][e + 2], ks), scale), 0.0f);
+           float s = __fmul_rn(wv[1], v1);
+           s = __fmaf_rn(wv[0], v0, s);
+           s = __fmaf_rn(wv[2], v2, s);
+diff --git a/zig/kernels/cuda/glm_packed_key.cuh b/zig/kernels/cuda/glm_packed_key.cuh
+new file mode 100644
+index 0000000..83ea3f1
+--- /dev/null
++++ b/zig/kernels/cuda/glm_packed_key.cuh
+@@ -0,0 +1,12 @@
++// Load eight packed E4M3 key codes into the BF16 shared tile. The row's exact scale is applied after MMA.
++#pragma once
++#include "common/fp_pairs.cuh"
++namespace glm_packed_key {
++__device__ __forceinline__ void stage(__nv_bfloat16* dst, float* scale, const __nv_bfloat16* base, int u, bool ok) {
++  const unsigned char* row = reinterpret_cast<const unsigned char*>(base);
++  const uint2 words = ok ? __ldcg(reinterpret_cast<const uint2*>(row) + u) : make_uint2(0, 0);
++  if (u == 0) *scale = ok ? __ldcg(reinterpret_cast<const float*>(row + 128)) : 1.0f;
++  *reinterpret_cast<uint4*>(dst) = make_uint4(tf_common::fp8pair(words.x), tf_common::fp8pair(words.x >> 16),
++                                             tf_common::fp8pair(words.y), tf_common::fp8pair(words.y >> 16));
++}
++}
+diff --git a/zig/kernels/cuda/kv_fp8.cuh b/zig/kernels/cuda/kv_fp8.cuh
+index 49e65bb..b413a2b 100644
+--- a/zig/kernels/cuda/kv_fp8.cuh
++++ b/zig/kernels/cuda/kv_fp8.cuh
+@@ -3,8 +3,17 @@
+ #include <cuda_fp8.h>
+ 
+ namespace tf_kv_fp8 {
++// Python GLM kv8.scale_of: ceil(log2(amax)) - 8, clamped to normal FP32 scale exponents.
++__device__ __forceinline__ void power_scale(float amax, float& scale, float& inv) {
++    const unsigned int bits = __float_as_uint(amax);
++    const int ceil_exp = int((bits >> 23) & 255u) + int((bits & 0x7fffffu) != 0);
++    const int e = min(254, max(1, ceil_exp - 8));
++    scale = __int_as_float(e << 23);
++    inv = __int_as_float((254 - e) << 23);
++}
++
+ template <int WIDTH, bool FINITE_SCALE = false>
+-__device__ __forceinline__ void quant_row(float x, int d, unsigned char* q, float* s, float* red) {
++__device__ __forceinline__ void quant_row(float x, int d, unsigned char* q, float* s, float* red, bool pow2 = false) {
+     static_assert(WIDTH % 32 == 0 && WIDTH <= 1024, "one whole-warp block owns a row");
+     float amax = fabsf(x);
+ #pragma unroll
+@@ -15,11 +24,15 @@ __device__ __forceinline__ void quant_row(float x, int d, unsigned char* q, floa
+ #pragma unroll
+     for (int w = 1; w < WIDTH / 32; w++) amax = fmaxf(amax, red[w]);
+     __syncthreads();
+-    float inv = amax > 0.0f ? __fdiv_rn(448.0f, amax) : 1.0f;
+-    float scale = 1.0f;
+-    if constexpr (FINITE_SCALE) {
+-        scale = amax > 0.0f ? __fdiv_rn(amax, 448.0f) : 1.0f;
+-        if (scale < 0x1p-126f) { scale = 0x1p-126f; inv = __fdiv_rn(1.0f, scale); }
++    float inv, scale = 1.0f;
++    if (FINITE_SCALE && pow2) {
++        power_scale(amax, scale, inv);
++    } else {
++        inv = amax > 0.0f ? __fdiv_rn(448.0f, amax) : 1.0f;
++        if constexpr (FINITE_SCALE) {
++            scale = amax > 0.0f ? __fdiv_rn(amax, 448.0f) : 1.0f;
++            if (scale < 0x1p-126f) { scale = 0x1p-126f; inv = __fdiv_rn(1.0f, scale); }
++        }
+     }
+     q[d] = __nv_cvt_float_to_fp8(__fmul_rn(x, inv), __NV_SATFINITE, __NV_E4M3);
+     if (d == 0) {
+diff --git a/zig/src/core/profile.zig b/zig/src/core/profile.zig
+index 963a62e..c513406 100644
+--- a/zig/src/core/profile.zig
++++ b/zig/src/core/profile.zig
+@@ -10,6 +10,7 @@ pub const Switch = enum {
+     TF_QWEN_KV_PAGES_ALL,
+     TF_QWEN_KV_SHARE,
+     TF_QWEN_REQUEST_STARTS,
++    TF_GLM_KV_POW2,
+     TF_GLM_ABSORB_MMA,
+     TF_GLM_REQUEST_STARTS,
+     TF_KV_SHARE,
+@@ -144,6 +145,7 @@ pub const cuda_cache: []const []const u8 = &.{ "nemotron_h", "nemotron_h_omni",
+ pub const entries = [_]Entry{
+     .{ .id = .TF_CACHE_EVICT, .families = cuda_cache, .backend = "multiple", .scopes = &.{ .{ .backend = "cuda", .families = cuda_cache }, .{ .backend = "metal", .families = &.{ "nemotron_h", "qwen3_5", "qwen3_5_moe", "qwen4_exp", "glm5_next", "glm_moe_dsa", "minimax_m3_vl", "gemma4", "gemma4_unified", "spark2_5", "llama", "lfm2_moe", "lfm3", "lfm3_vl", "step5_vl", "kimi_k3", "kimi_k31" } }, .{ .backend = "xpu", .families = &.{ "nemotron_h", "lfm3", "qwen3_5", "gemma4" } } }, .class = .experimental, .syntax = .present, .report_values = &.{"decayed_resume"}, .effect = "Opt into bounded resume credit for RAM snapshot eviction", .evidence = "#3241; synthetic host rows gate; default main unchanged" },
+     .{ .id = .TF_QWEN_REQUEST_STARTS, .families = qwen, .class = .arithmetic, .syntax = .one, .effect = "Opt into CUDA message-start prompt cuts", .evidence = "#1334; default-off; GB10 six-turn: resumed equals fresh, one reply differs from unset" },
++    .{ .id = .TF_GLM_KV_POW2, .families = &.{"glm5_next"}, .class = .arithmetic, .syntax = .one, .effect = "Store latent and pooled index keys as power-of-two scaled E4M3", .evidence = "GLM Python kv8.store_row" },
+     .{ .id = .TF_GLM_ABSORB_MMA, .families = &.{"glm5_next"}, .class = .arithmetic, .syntax = .one, .effect = "Use tensor-core MMA for prompt MLA absorb and expand", .evidence = "Local GLM prompt port f88a7cb2a" },
+     .{ .id = .TF_GLM_REQUEST_STARTS, .families = &.{"glm5_next"}, .class = .arithmetic, .syntax = .one, .effect = "Opt into CUDA message-start prompt cuts", .evidence = "#2396; default-off; GB10 TP=2 receipts in #2404" },
+     .{ .id = .TF_QWEN_KV_PAGES, .families = qwen, .class = .identical, .effect = "KV pool page size; memory and workload tradeoffs", .evidence = "#1357" },
+diff --git a/zig/src/families/glm/cuda_engine.zig b/zig/src/families/glm/cuda_engine.zig
+index 894c84c..77fbf25 100644
+--- a/zig/src/families/glm/cuda_engine.zig
++++ b/zig/src/families/glm/cuda_engine.zig
+@@ -295,7 +295,7 @@ pub const Engine = struct {
+     pub fn view(e: *Engine, b: *fw.Buffers, out: *[1]fw.Rank) fw.Forward {
+         out.* = .{.{ .w = &e.w, .st = &e.cur.st, .b = b }};
+         const im: ?fw.ImageRows = if (e.images) |v| .{ .v = v, .slot = e.slot } else null;
+-        return .{ .d = e.d, .m = &e.m, .stream = e.stream, .ranks = out, .exchange = e.exchange(), .pieces = prompt_pair.piecesOf(e, b), .split = e.settings.split, .ring = e.settings.ring, .kda_wide = e.settings.kda_wide, .absorb_mma = e.settings.absorb_mma, .images = im, .taps = if (e.drafter) |dr| dr.taps(b == &e.bp) else null, .l2pf = if (e.l2pf) |*p| p else null, .kv = e.kvCtx() };
++        return .{ .d = e.d, .m = &e.m, .stream = e.stream, .ranks = out, .exchange = e.exchange(), .pieces = prompt_pair.piecesOf(e, b), .split = e.settings.split, .ring = e.settings.ring, .kda_wide = e.settings.kda_wide, .kv_pow2 = e.settings.kv_pow2, .absorb_mma = e.settings.absorb_mma, .images = im, .taps = if (e.drafter) |dr| dr.taps(b == &e.bp) else null, .l2pf = if (e.l2pf) |*p| p else null, .kv = e.kvCtx() };
+     }
+ 
+     /// TF_GLM_KV_SHARD: the exchange room for owner-computed attention (a prompt chunk's rows of this rank's heads,
+@@ -533,7 +533,7 @@ pub const Engine = struct {
+             rows += p.ids.len;
+         }
+         var one: [1]fw.Rank = .{.{ .w = &e.w, .st = segs[0].st, .b = b, .segs = segs[0..parts.len] }};
+-        const f: fw.Forward = .{ .d = e.d, .m = &e.m, .stream = e.stream, .ranks = &one, .exchange = e.exchange(), .pieces = null, .split = e.settings.split, .ring = e.settings.ring, .kda_wide = e.settings.kda_wide, .absorb_mma = e.settings.absorb_mma, .taps = if (e.drafter) |dr| dr.taps(false) else null, .l2pf = if (e.l2pf) |*p| p else null, .kv = e.kvCtx() };
++        const f: fw.Forward = .{ .d = e.d, .m = &e.m, .stream = e.stream, .ranks = &one, .exchange = e.exchange(), .pieces = null, .split = e.settings.split, .ring = e.settings.ring, .kda_wide = e.settings.kda_wide, .kv_pow2 = e.settings.kv_pow2, .absorb_mma = e.settings.absorb_mma, .taps = if (e.drafter) |dr| dr.taps(false) else null, .l2pf = if (e.l2pf) |*p| p else null, .kv = e.kvCtx() };
+         try f.run(@ptrCast(ids[0..rows]));
+         if (e.drafter) |dr| for (parts, segs[0..parts.len], 0..) |p, g, i| try dr.noteVerify(p.slot, g.row0, g.rows, g.st.pos, i == 0);
+         for (parts, segs[0..parts.len]) |p, g| {
+diff --git a/zig/src/families/glm/cuda_env_test.zig b/zig/src/families/glm/cuda_env_test.zig
+index 4a8692f..fc4b9be 100644
+--- a/zig/src/families/glm/cuda_env_test.zig
++++ b/zig/src/families/glm/cuda_env_test.zig
+@@ -15,6 +15,7 @@ const switches = [_]Name{
+     .{ .name = "TF_GLM_VISION_HOST" },
+     .{ .name = "TF_GLM_PROF" },
+     .{ .name = "TF_GLM_LINK_WAIT" },
++    .{ .name = "TF_GLM_KV_POW2" },
+     .{ .name = "TF_GLM_PDL", .default = true },
+     .{ .name = "TF_GLM_PROMPT_STEPS", .default = true },
+     .{ .name = "TF_GLM_SHARED", .default = true },
+diff --git a/zig/src/families/glm/cuda_forward.zig b/zig/src/families/glm/cuda_forward.zig
+index 2a1c07c..03e01f3 100644
+--- a/zig/src/families/glm/cuda_forward.zig
++++ b/zig/src/families/glm/cuda_forward.zig
+@@ -150,6 +150,7 @@ pub const Forward = struct {
+     stream: cuda.Stream,
+     ranks: []const Rank, // every rank of a local check, or this process's one
+     exchange: Exchange,
++    kv_pow2: bool = false,
+     absorb_mma: bool = false,
+     kda_wide: bool = true, // TF_GLM_KDA_DECODE_WIDE (the Python family's default): decode windows on KDA's three-kernel chain
+     pieces: ?*const Pieces = null, // a prompt chunk's exchanges in row pieces on a second stream (null: whole)
+@@ -168,7 +169,7 @@ pub const Forward = struct {
+     }
+ 
+     pub fn set(f: *const Forward) glue.Set {
+-        return .{ .glue = &f.m.glue, .index = if (f.m.index) |*x| x else null, .mm = if (f.m.tiled) &f.m.mm else null, .packs = f.m.packs, .prompt = f.ranks[0].b.prefill, .absorb_mma = f.absorb_mma, .linear = .{ .lane = &f.m.lane }, .copy_rows = f.m.copy_rows, .dsel = f.m.dsel };
++        return .{ .glue = &f.m.glue, .index = if (f.m.index) |*x| x else null, .mm = if (f.m.tiled) &f.m.mm else null, .packs = f.m.packs, .prompt = f.ranks[0].b.prefill, .kv_pow2 = f.kv_pow2, .absorb_mma = f.absorb_mma, .linear = .{ .lane = &f.m.lane }, .copy_rows = f.m.copy_rows, .dsel = f.m.dsel };
+     }
+ 
+     /// The layer sums' boundary (cuda_boundary.zig): every rank's fp32 partial into every gathered buffer.
+diff --git a/zig/src/families/glm/cuda_glue.zig b/zig/src/families/glm/cuda_glue.zig
+index ff692b0..2760371 100644
+--- a/zig/src/families/glm/cuda_glue.zig
++++ b/zig/src/families/glm/cuda_glue.zig
+@@ -13,6 +13,7 @@ pub const Set = struct {
+     mm: ?*const mm_mod.Kernels = null,
+     packs: ?*const mm_mod.Packed = null,
+     prompt: bool = false,
++    kv_pow2: bool = false,
+     absorb_mma: bool = false,
+     linear: cuda.qlinear.Linear = .{},
+     copy_rows: ?cuda.Function = null,
+diff --git a/zig/src/families/glm/cuda_index.zig b/zig/src/families/glm/cuda_index.zig
+index 70f986c..7f2c202 100644
+--- a/zig/src/families/glm/cuda_index.zig
++++ b/zig/src/families/glm/cuda_index.zig
+@@ -78,10 +78,10 @@ pub const Kernels = struct {
+     }
+ 
+     /// tf_glm_scores' launch for `rows` rows at `at` into out [rows][np]; the first `nb` 64-pool blocks are written.
+-    pub fn scores(k: *const Kernels, s: cuda.Stream, qi: u64, wts: u64, w_stride: usize, pk: u64, out: u64, at: u64, rows: usize, np: usize, nb: usize, scale: f32, wscale: f32, heads: usize, pt: u64, ps: u64) !void {
++    pub fn scores(k: *const Kernels, s: cuda.Stream, qi: u64, wts: u64, w_stride: usize, pk: u64, out: u64, at: u64, rows: usize, np: usize, nb: usize, scale: f32, wscale: f32, heads: usize, pt: u64, ps: u64, kv_pow2: bool) !void {
+         const g = scoresGrid(rows, nb);
+         var a: cuda.Args = .{};
+-        inline for (.{ qi, wts, @as(i64, @intCast(w_stride)), pk, out, at, @as(i64, @intCast(rows)), @as(i64, @intCast(np)), @as(i64, @intCast(nb)), scale, wscale, @as(i64, @intCast(heads)), @as(c_int, score_tiles), pt, @as(i64, @intCast(ps)) }) |v| a.add(v);
++        inline for (.{ qi, wts, @as(i64, @intCast(w_stride)), pk, out, at, @as(i64, @intCast(rows)), @as(i64, @intCast(np)), @as(i64, @intCast(nb)), scale, wscale, @as(i64, @intCast(heads)), @as(c_int, score_tiles), pt, @as(i64, @intCast(ps)), @as(c_int, @intFromBool(kv_pow2)) }) |v| a.add(v);
+         try cuda_pdl.launch(k.scores_fn, .{ .grid = .{ .x = g[0], .y = g[1] }, .block = .{ .x = threads } }, s, &a);
+     }
+ 
+diff --git a/zig/src/families/glm/cuda_kv8_ref.zig b/zig/src/families/glm/cuda_kv8_ref.zig
+index acc99a2..0278a51 100644
+--- a/zig/src/families/glm/cuda_kv8_ref.zig
++++ b/zig/src/families/glm/cuda_kv8_ref.zig
+@@ -17,6 +17,9 @@ pub fn decoded(bits: u8, scale: f32) u16 {
+     return bfBits(value * scale);
+ }
+ pub fn pack(row: []const u16, out: []u8) !f32 {
++    return packFormat(row, out, false);
++}
++pub fn packFormat(row: []const u16, out: []u8, pow2: bool) !f32 {
+     if (row.len == 0 or row.len != out.len) return error.BadRow;
+     var amax: f32 = 0;
+     for (row) |x| {
+@@ -26,7 +29,12 @@ pub fn pack(row: []const u16, out: []u8) !f32 {
+     }
+     var inv: f32 = if (amax > 0) 448 / amax else 1;
+     var scale: f32 = if (amax > 0) amax / 448 else 1;
+-    if (scale < 0x1p-126) {
++    if (pow2) {
++        const b: u32 = @bitCast(amax);
++        const e = std.math.clamp(((b >> 23) + @intFromBool((b & 0x7fffff) != 0)) -| 8, 1, 254);
++        scale = @bitCast(e << 23);
++        inv = @bitCast((254 - e) << 23);
++    } else if (scale < 0x1p-126) {
+         scale = 0x1p-126;
+         inv = 1 / scale;
+     }
+@@ -50,6 +58,18 @@ test "GLM FP8 KV: reference handles every finite BF16 magnitude and round-even t
+     try std.testing.expectError(error.NonFiniteRow, pack(&.{0x7fc0}, &q));
+ }
+ 
++test "GLM FP8 KV: Python row scales handle zero, signed zero, the BF16 floor, and a power boundary" {
++    var codes: [2]u8 = undefined;
++    try std.testing.expectEqual(@as(f32, 0x1p-126), try packFormat(&.{ 0, 0x8000 }, &codes, true));
++    try std.testing.expectEqualSlices(u8, &.{ 0, 0x80 }, &codes);
++    try std.testing.expectEqual(@as(f32, 0x1p-126), try packFormat(&.{ 1, 0x8001 }, &codes, true));
++    try std.testing.expectEqualSlices(u8, &.{ 4, 0x84 }, &codes);
++    try std.testing.expectEqual(@as(f32, 0x1p-8), try packFormat(&.{ 0x3f80, 0xbf80 }, &codes, true));
++    try std.testing.expectEqualSlices(u8, &.{ 0x78, 0xf8 }, &codes);
++    try std.testing.expectEqual(@as(f32, 0x1p-7), try packFormat(&.{ 0x3f81, 0x3f00 }, &codes, true));
++    try std.testing.expectEqualSlices(u8, &.{ 0x70, 0x68 }, &codes);
++}
++
+ test "GLM FP8 KV: bfBits is core's bits(), 0xffffffff gives a NaN, other words the plain + copy's bits" {
+     try std.testing.expect(std.math.isNan(bf(bfBits(@bitCast(@as(u32, 0xffff_ffff))))));
+     var prng = std.Random.DefaultPrng.init(1863);
+diff --git a/zig/src/families/glm/cuda_kv8_test.zig b/zig/src/families/glm/cuda_kv8_test.zig
+index 5cf5b2e..301c23f 100644
+--- a/zig/src/families/glm/cuda_kv8_test.zig
++++ b/zig/src/families/glm/cuda_kv8_test.zig
+@@ -65,6 +65,8 @@ test "GLM FP8 KV: the mode is explicit on native options and all ranks agree bef
+     try t.expectEqual(ranks.Fingerprint.Field.kv8, different.field);
+     all[0] = ranks.Fingerprint.of(2, 0, .{ .kv8 = true }, 8192, true, h, h, h);
+     try t.expect(ranks.mismatch(&all) == null);
++    all[1] = ranks.Fingerprint.of(2, 1, .{ .kv8 = true, .kv_pow2 = true }, 8192, true, h, h, h);
++    try t.expectEqual(ranks.Fingerprint.Field.kv8, ranks.mismatch(&all).?.field);
+ }
+ 
+ test "GLM FP8 KV: byte counts reject overflow and unsupported latent widths" {
+@@ -181,9 +183,9 @@ test "GLM FP8 KV: on pages an FP8 cache's write takes lat_write_fp8_paged, the w
+     var d: cuda.Driver = undefined;
+     var ks: glue.Kernels = undefined;
+     recording(&d, &ks);
+-    Rec.arity[kid(ks.lat_write_fp8)] = 5;
+-    Rec.arity[kid(ks.lat_write_fp8_paged)] = 7;
+-    const set: glue.Set = .{ .glue = &ks };
++    Rec.arity[kid(ks.lat_write_fp8)] = 6;
++    Rec.arity[kid(ks.lat_write_fp8_paged)] = 8;
++    const set: glue.Set = .{ .glue = &ks, .kv_pow2 = true };
+     const stream: cuda.Stream = .{ .d = &d, .handle = null };
+     // 11 DSA parts of 296,960 bytes a page; this cache's codes in page 0, its scales 262,144 bytes on
+     const paged: latent.Table = .{ .pt = 900, .ps = 11 * 296_960, .page_rows = 11 * 296_960 / 1024, .logical = true };
+@@ -193,6 +195,8 @@ test "GLM FP8 KV: on pages an FP8 cache's write takes lat_write_fp8_paged, the w
+     try t.expectEqualSlices(usize, &.{ kid(ks.lat_write_fp8_paged), kid(ks.lat_write_fp8) }, Rec.ids[0..2]);
+     try t.expectEqualSlices(u64, &.{ 100, 576, 200, 200 + 262_144, 300, 900, 11 * 296_960 }, Rec.args[0][0..7]);
+     try t.expectEqualSlices(u64, &.{ 100, 576, 200, 200 + 262_144, 300 }, Rec.args[1][0..5]);
++    try t.expectEqual(@as(u32, 1), Rec.word(0, 7));
++    try t.expectEqual(@as(u32, 1), Rec.word(1, 5));
+     for (0..2) |i| {
+         try t.expectEqual([3]u32{ 7, 1, 1 }, Rec.grid[i]);
+         try t.expectEqual(@as(u32, 512), Rec.blocks[i]);
+diff --git a/zig/src/families/glm/cuda_latent.zig b/zig/src/families/glm/cuda_latent.zig
+index b60af06..906f9aa 100644
+--- a/zig/src/families/glm/cuda_latent.zig
++++ b/zig/src/families/glm/cuda_latent.zig
+@@ -86,6 +86,7 @@ pub fn latentWriteFormat(set: glue.Set, stream: cuda.Stream, lat: u64, lat_strid
+         a.add(t.pt);
+         a.add(@as(i64, @intCast(t.ps)));
+     }
++    a.add(@as(c_int, @intFromBool(set.kv_pow2)));
+     const f = if (t.pt != 0) set.glue.lat_write_fp8_paged else set.glue.lat_write_fp8;
+     try cuda_pdl.launch(f, .{ .grid = .{ .x = @intCast(rows) }, .block = .{ .x = 512 } }, stream, &a);
+ }
+diff --git a/zig/src/families/glm/cuda_native.zig b/zig/src/families/glm/cuda_native.zig
+index b8eada9..3d41133 100644
+--- a/zig/src/families/glm/cuda_native.zig
++++ b/zig/src/families/glm/cuda_native.zig
+@@ -212,6 +212,10 @@ pub fn open(gpa: std.mem.Allocator, io: std.Io, ctx: *const cuda.Context, dir: [
+     };
+     try @import("cuda_roce_multi.zig").validate(p.world, p.rank, set.roce_multi);
+     set.kv8 = o.kv8;
++    if (set.kv_pow2 and !set.kv8) {
++        std.log.err("TF_GLM_KV_POW2=1 requires --kv-cache fp8", .{});
++        return error.BadSetting;
++    }
+     if (share_mod.moved((@import("sys").environment.Process{}).get("TF_GLM_KV_SHARE") orelse "")) return error.GlmKvShareMoved; // before any rank opens
+     const share_snaps = try kp.sharing();
+     if (share_mod.tooMany(share_snaps)) {
+diff --git a/zig/src/families/glm/cuda_prompts.zig b/zig/src/families/glm/cuda_prompts.zig
+index 2be6b5e..dd8477a 100644
+--- a/zig/src/families/glm/cuda_prompts.zig
++++ b/zig/src/families/glm/cuda_prompts.zig
+@@ -38,7 +38,7 @@ pub fn pass(e: anytype, parts: []const engine.Prompt, firsts: []u32, comptime Fo
+     }
+     try e.gate(null);
+     var one: [1]Rank = .{.{ .w = &e.w, .st = segs[0].st, .b = &e.bp, .segs = segs[0..parts.len] }};
+-    var f: Forward = .{ .d = e.d, .m = &e.m, .stream = e.stream, .ranks = &one, .exchange = e.exchange(), .pieces = &e.pieces, .split = e.settings.split, .ring = e.settings.ring, .kda_wide = e.settings.kda_wide, .absorb_mma = e.settings.absorb_mma, .taps = if (e.drafter) |dr| dr.taps(true) else null };
++    var f: Forward = .{ .d = e.d, .m = &e.m, .stream = e.stream, .ranks = &one, .exchange = e.exchange(), .pieces = &e.pieces, .split = e.settings.split, .ring = e.settings.ring, .kda_wide = e.settings.kda_wide, .kv_pow2 = e.settings.kv_pow2, .absorb_mma = e.settings.absorb_mma, .taps = if (e.drafter) |dr| dr.taps(true) else null };
+     // TF_GLM_KV_SHARD: a prompt one rank holds alone attends owner-computed, unpieced (an engine without it: none)
+     if (comptime @hasField(@TypeOf(e.settings), "kv_shard") and @hasDecl(@TypeOf(e.*), "kvCtx")) if (e.settings.kv_shard.on) {
+         f.kv = e.kvCtx();
+diff --git a/zig/src/families/glm/cuda_ranks.zig b/zig/src/families/glm/cuda_ranks.zig
+index 6ff5f50..662da3b 100644
+--- a/zig/src/families/glm/cuda_ranks.zig
++++ b/zig/src/families/glm/cuda_ranks.zig
+@@ -30,6 +30,7 @@ pub const Settings = struct {
+     kv_host: u8 = 0, // TF_GLM_KV_HOST=1: KV pages in host memory (1); with TF_GLM_KV_HOST_SHARED=1, one copy a host (2)
+     kv_host_gib: f64 = 0, // TF_GLM_KV_HOST_GIB: the host pages' GiB (0: one full window)
+     l2pf: l2pf.Options = .{}, // TF_GLM_L2PF and its knobs: a decode window's next weights read into L2 beside it
++    kv_pow2: bool = false,
+     absorb_mma: bool = false,
+     kv_live_half: bool = false, // TF_GLM_KV_LIVE_HALF=1: a keep carries the live KDA half alone (cuda_snapshot_layout.zig)
+     kv_shard: kv_shard.Switches = .{}, // TF_GLM_KV_SHARD and its knobs: each stream's latent rows on one rank
+@@ -47,6 +48,10 @@ pub const Settings = struct {
+     /// `read` from a lookup with no blank text, so every name below and in l2pf's reader is unset when blank.
+     fn readSet(get: *const fn ([:0]const u8) ?[]const u8, problem: *[]const u8) !Settings {
+         var s: Settings = .{};
++        s.kv_pow2 = @import("sys").environment.value(bool, "TF_GLM_KV_POW2", get("TF_GLM_KV_POW2"), false) catch {
++            problem.* = "TF_GLM_KV_POW2: 0 or 1";
++            return error.BadSetting;
++        };
+         s.absorb_mma = @import("sys").environment.value(bool, "TF_GLM_ABSORB_MMA", get("TF_GLM_ABSORB_MMA"), false) catch {
+             problem.* = "TF_GLM_ABSORB_MMA: 0 or 1";
+             return error.BadSetting;
+@@ -218,7 +223,7 @@ fn wireOpens(get: *const fn ([:0]const u8) ?[]const u8) bool {
+ 
+ /// What every rank must agree on, as bytes the communicator carries.
+ pub const Fingerprint = extern struct {
+-    layout: u32 = 23, // version 22 left the word before capacity unused
++    layout: u32 = 24, // kv8 now distinguishes the two E4M3 cache formats
+     world: u32,
+     rank: u32,
+     kv8: u32 = 0,
+@@ -305,7 +310,7 @@ pub const Fingerprint = extern struct {
+         checkpoint_digest: [32]u8,
+     ) Fingerprint {
+         const f: Fingerprint = .{
+-            .kv8 = @intFromBool(s.kv8),
++            .kv8 = if (s.kv_pow2) 2 else @intFromBool(s.kv8),
+             .pages = @intFromBool(s.pages),
+             .world = @intCast(world),
+             .rank = @intCast(rank),
+@@ -476,7 +481,7 @@ fn explain(f: Fingerprint.Field) []const u8 {
+         .layout => "a different build of this check",
+         .rank => "a rank number given twice or out of order",
+         .world => "the ranks were started with different world sizes",
+-        .kv8 => "--kv-cache fp8",
++        .kv8 => "--kv-cache and TF_GLM_KV_POW2",
+         .pages => "TF_KV_PAGES (unset or auto pages from two ranks)",
+         .prompt_fixed_k => "TF_GLM_PROMPT_K",
+         .tiled => "TF_GLM_MM",
+diff --git a/zig/src/families/glm/cuda_sparse.zig b/zig/src/families/glm/cuda_sparse.zig
+index fc96633..31b3743 100644
+--- a/zig/src/families/glm/cuda_sparse.zig
++++ b/zig/src/families/glm/cuda_sparse.zig
+@@ -80,7 +80,7 @@ pub fn indexUpdate(set: glue.Set, stream: cuda.Stream, k_raw: u64, k_stride: usi
+     inline for (.{ k_raw, @as(i64, @intCast(k_stride)), gate, ln_w, ln_b, ik, ig, pos, @as(f32, 1e-6) }) |v| a.add(v);
+     try cuda_pdl.launch(set.glue.index_write, .{ .grid = .{ .x = @intCast(rows) }, .block = .{ .x = 32 } }, stream, &a);
+     var b: cuda.Args = .{};
+-    inline for (.{ ik, ig, ape, pk, pos, @as(i64, @intCast(rows)), t.pt, @as(i64, @intCast(t.ps)) }) |v| b.add(v);
++    inline for (.{ ik, ig, ape, pk, pos, @as(i64, @intCast(rows)), t.pt, @as(i64, @intCast(t.ps)), @as(c_int, @intFromBool(set.kv_pow2)) }) |v| b.add(v);
+     try cuda_pdl.launch(set.glue.pool_keys, .{ .grid = .{ .x = @intCast(rows / 4 + 2) }, .block = .{ .x = 32 } }, stream, &b);
+ }
+ 
+@@ -151,11 +151,11 @@ pub fn selectTokensProfile(set: glue.Set, ops: cuda.Module, stream: cuda.Stream,
+         const nb = cdiv(scoreColumns(host_pos + a, n, np_max), 64);
+         const scale: f32 = @floatCast(std.math.pow(f64, @floatFromInt(d), -0.5));
+         var sa: cuda.Args = .{};
+-        inline for (.{ qi + a * heads * d * 2, wts + a * w_stride * 2, @as(i64, @intCast(w_stride)), pk, s.scores, at, @as(i64, @intCast(np_max)), @as(i64, @intCast(nb)), scale, headScale(heads), @as(i64, @intCast(heads)), @as(c_int, @intCast(loop)), t.pt, @as(i64, @intCast(t.ps)) }) |v| sa.add(v);
++        inline for (.{ qi + a * heads * d * 2, wts + a * w_stride * 2, @as(i64, @intCast(w_stride)), pk, s.scores, at, @as(i64, @intCast(np_max)), @as(i64, @intCast(nb)), scale, headScale(heads), @as(i64, @intCast(heads)), @as(c_int, @intCast(loop)), t.pt, @as(i64, @intCast(t.ps)), @as(c_int, @intFromBool(set.kv_pow2)) }) |v| sa.add(v);
+         if (d != 128 or heads > 32) return error.IndexShape;
+         const quick = if (set.index) |k| if (k.takes(rows, np_max, pk, t.ps)) k else null else null;
+         var stamp = prof.span(profile, stream, .index_score);
+-        if (quick) |k| try k.scores(stream, qi + a * heads * d * 2, wts + a * w_stride * 2, w_stride, pk, s.scores, at, n, np_max, nb, scale, headScale(heads), heads, t.pt, t.ps) else try cuda_pdl.launch(set.glue.scores, .{ .grid = .{ .x = @intCast(n), .y = @intCast(cdiv(nb, loop)) }, .block = .{ .x = 128 } }, stream, &sa);
++        if (quick) |k| try k.scores(stream, qi + a * heads * d * 2, wts + a * w_stride * 2, w_stride, pk, s.scores, at, n, np_max, nb, scale, headScale(heads), heads, t.pt, t.ps, set.kv_pow2) else try cuda_pdl.launch(set.glue.scores, .{ .grid = .{ .x = @intCast(n), .y = @intCast(cdiv(nb, loop)) }, .block = .{ .x = 128 } }, stream, &sa);
+         stamp.end();
+         stamp = prof.span(profile, stream, .index_select);
+         if (quick) |k| if (k.select) {
+diff --git a/zig/src/platform/environment.zig b/zig/src/platform/environment.zig
+index ef86ffe..57e9e51 100644
+--- a/zig/src/platform/environment.zig
++++ b/zig/src/platform/environment.zig
+@@ -112,6 +112,7 @@ pub const rules = [_]Rule{
+     .{ .name = "TF_GLM_VISION_HOST", .scope = .glm, .kind = .flag, .forms = "0 or 1" },
+     .{ .name = "TF_GLM_PROF", .scope = .glm, .kind = .flag, .forms = "0 or 1" },
+     .{ .name = "TF_GLM_LINK_WAIT", .scope = .glm, .kind = .flag, .forms = "0 or 1" },
++    .{ .name = "TF_GLM_KV_POW2", .scope = .glm, .kind = .flag, .forms = "0 or 1" },
+     .{ .name = "TF_GLM_PDL", .scope = .glm, .kind = .flag, .forms = "0 or 1" },
+     .{ .name = "TF_GLM_PROMPT_STEPS", .scope = .glm, .kind = .flag, .forms = "0 or 1" },
+     .{ .name = "TF_GLM_SHARED", .scope = .glm, .kind = .flag, .forms = "0 or 1" },
+diff --git a/zig/tests/cuda/contract_glm_pages.zig b/zig/tests/cuda/contract_glm_pages.zig
+index 5c9a4b4..ba710c6 100644
+--- a/zig/tests/cuda/contract_glm_pages.zig
++++ b/zig/tests/cuda/contract_glm_pages.zig
+@@ -284,7 +284,7 @@ pub const PoolKeys = struct {
+     pub fn run(self: *PoolKeys) !void {
+         var a: cuda.Args = .{};
+         const pk = self.arena + part_bytes + rows_a_page * lw * 2; // the cache's pooled keys in page 0
+-        inline for (.{ self.in[0], self.in[1], self.in[2], pk, self.pos, @as(i64, @intCast(self.shape.rows)), self.pt, @as(i64, page_bytes) }) |v| a.add(v);
++        inline for (.{ self.in[0], self.in[1], self.in[2], pk, self.pos, @as(i64, @intCast(self.shape.rows)), self.pt, @as(i64, page_bytes), @as(c_int, 0) }) |v| a.add(v);
+         try cuda.launch.launch(self.f, .{ .grid = .{ .x = @intCast(self.shape.rows / 4 + 2) }, .block = .{ .x = 32 } }, self.rig.s, &a);
+         var i: usize = 0;
+         while (i < self.pools) { // the pools back from their pages, a page's run at a time
+diff --git a/zig/tests/cuda/glm_index_check.zig b/zig/tests/cuda/glm_index_check.zig
+index db1e473..d4031f3 100644
+--- a/zig/tests/cuda/glm_index_check.zig
++++ b/zig/tests/cuda/glm_index_check.zig
+@@ -325,10 +325,10 @@ fn blocks(gpu: check.Gpu, bufs: *Bufs, set: glm.glue.Set, idx: *const glm.index.
+         try gpu.d.synchronize(); // the memsets run on the default stream, not on s
+         step(c, np, "block: tf_glm_scores");
+         var sa: cuda.Args = .{};
+-        inline for (.{ dq + a * c.heads * d * 2, dw + a * c.heads * 2, @as(i64, @intCast(c.heads)), dk, out_a, at, @as(i64, @intCast(np)), @as(i64, @intCast(nb)), scale, sp.headScale(c.heads), @as(i64, @intCast(c.heads)), @as(c_int, @intCast(loop)), t.pt, @as(i64, @intCast(t.ps)) }) |v| sa.add(v);
++        inline for (.{ dq + a * c.heads * d * 2, dw + a * c.heads * 2, @as(i64, @intCast(c.heads)), dk, out_a, at, @as(i64, @intCast(np)), @as(i64, @intCast(nb)), scale, sp.headScale(c.heads), @as(i64, @intCast(c.heads)), @as(c_int, @intCast(loop)), t.pt, @as(i64, @intCast(t.ps)), @as(c_int, @intFromBool(set.kv_pow2)) }) |v| sa.add(v);
+         try cuda.launch.launch(set.glue.scores, .{ .grid = .{ .x = @intCast(n), .y = @intCast((nb + loop - 1) / loop) }, .block = .{ .x = 128 } }, s, &sa);
+         step(c, np, "block: tf_glm_index_scores");
+-        try idx.scores(s, dq + a * c.heads * d * 2, dw + a * c.heads * 2, c.heads, dk, out_b, at, n, np, nb, scale, sp.headScale(c.heads), c.heads, t.pt, t.ps);
++        try idx.scores(s, dq + a * c.heads * d * 2, dw + a * c.heads * 2, c.heads, dk, out_b, at, n, np, nb, scale, sp.headScale(c.heads), c.heads, t.pt, t.ps, set.kv_pow2);
+         try s.synchronize();
+         step(c, np, "block: compare");
+         fails += try same(gpu, "block scores", out_a, out_b, n * np * 4, np, c);
+diff --git a/zig/tests/cuda/glm_ref_fp8.zig b/zig/tests/cuda/glm_ref_fp8.zig
+index afd982c..31a7aa1 100644
+--- a/zig/tests/cuda/glm_ref_fp8.zig
++++ b/zig/tests/cuda/glm_ref_fp8.zig
+@@ -17,6 +17,12 @@ fn position(r: *Rig, value: usize) !u64 {
+     return r.dev(std.mem.asBytes(&p));
+ }
+ pub fn run(r: *Rig, set: glm.glue.Set) !void {
++    try runFormat(r, set);
++    var power = set;
++    power.kv_pow2 = true;
++    try runFormat(r, power);
++}
++fn runFormat(r: *Rig, set: glm.glue.Set) !void {
+     for ([_]usize{ 3, 513 }) |keys| {
+         const capacity = keys + 17;
+         const stride = lw + 8;
+@@ -34,7 +40,7 @@ pub fn run(r: *Rig, set: glm.glue.Set) !void {
+         const cd = try r.a.alloc(f64, keys * lw);
+         for (0..keys) |row| {
+             const codes = want_codes[row * lw ..][0..lw];
+-            want_scales[row] = try codec.pack(x[row * stride ..][0..lw], codes);
++            want_scales[row] = try codec.packFormat(x[row * stride ..][0..lw], codes, set.kv_pow2);
+             for (codes, 0..) |code, col| {
+                 const at = row * lw + col;
+                 decoded[at] = codec.decoded(code, want_scales[row]);

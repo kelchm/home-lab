@@ -395,3 +395,29 @@ def test_mla_recipe_requires_its_qualified_s2_child(source):
     manifest.write_text(json.dumps(lock))
     with pytest.raises(validator.InvalidManifest, match="mla_image.parent_image_id"):
         validator.validate_repository(source)
+
+
+def test_decode_profile_cannot_reuse_a_parent_config(source):
+    mod = source / "mods/mia-tensorfold-glm53-6c55c20"
+    lock = json.loads((mod / "upstream.lock.json").read_text())
+    entry = lock["derived_image"]["decode_images"][0]
+    entry["image_id"] = lock["image_id"]
+    with pytest.raises(validator.InvalidManifest, match="decode image config.*distinct"):
+        validator.validate_lock(lock, mod)
+
+
+def test_decode_build_inputs_match_the_named_image(source):
+    mod = source / "mods/mia-tensorfold-glm53-6c55c20"
+    lock = json.loads((mod / "upstream.lock.json").read_text())
+    path = mod / "python-quant/variant.json"
+    release = json.loads(path.read_text())
+    filename = next(iter(release["patches"]))
+    edited = mod / "python-quant" / filename
+    edited.write_bytes(edited.read_bytes() + b"\n")
+    checksum = hashlib.sha256(edited.read_bytes()).hexdigest()
+    lock["mod_files"][edited.relative_to(mod).as_posix()] = checksum
+    release["patches"][filename] = checksum
+    path.write_text(json.dumps(release))
+    lock["mod_files"]["python-quant/variant.json"] = hashlib.sha256(path.read_bytes()).hexdigest()
+    with pytest.raises(validator.InvalidManifest, match="tag disagrees with its engine patches"):
+        validator.validate_lock(lock, mod)

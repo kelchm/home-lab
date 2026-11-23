@@ -1,0 +1,339 @@
+--- a/zig/src/core/profile.zig
++++ b/zig/src/core/profile.zig
+@@ -13,6 +13,7 @@
+     TF_GLM_EXL3_DECODE,
+     TF_GLM_DECODE_MLA_WIDE,
+     TF_GLM_L2PF_SHARED_FIRST,
++    TF_GLM_DECODE_TILE_RANGES,
+     TF_GLM_DECODE_SCORE_TILE,
+     TF_GLM_DFLASH_Q4_DOWN,
+     TF_GLM_DFLASH_ONLY,
+@@ -156,6 +157,7 @@
+     .{ .id = .TF_GLM_EXL3_DECODE, .families = &.{"glm5_next"}, .class = .identical, .syntax = .one, .effect = "Use the uniform four-bit routed experts for short GLM TP2 decode windows", .evidence = "GLM per-slot FP32 expert parity" },
+     .{ .id = .TF_GLM_DECODE_MLA_WIDE, .families = &.{"glm5_next"}, .class = .identical, .syntax = .one, .effect = "Share a paged FP8 latent tile across 32 attention heads in long decode windows", .evidence = "Paged GB10 partial and BF16 output equality" },
+     .{ .id = .TF_GLM_L2PF_SHARED_FIRST, .families = &.{"glm5_next"}, .class = .identical, .syntax = .one, .effect = "Consume the shared expert weights before the routed expert scan during single-stream verify", .evidence = "GB10 single-stream decode site test" },
++    .{ .id = .TF_GLM_DECODE_TILE_RANGES, .families = &.{"glm5_next"}, .class = .identical, .syntax = .one, .effect = "Extend the tiled paged index and sparse MLA decode ranges on SM121 TP2", .evidence = "GB10 input-stride and sparse attention geometry sweeps" },
+     .{ .id = .TF_GLM_DECODE_SCORE_TILE, .families = &.{"glm5_next"}, .class = .identical, .syntax = .one, .effect = "Share pooled-key score tiles across long-context verification rows", .evidence = "GLM index launch and device score parity" },
+     .{ .id = .TF_GLM_DFLASH_Q4_DOWN, .families = &.{"glm5_next"}, .class = .identical, .syntax = .one, .effect = "Use Python-compatible Q4 DFlash2 MLP down projections with FP32 rank partials", .evidence = "GLM DFlash2 target-verified proposal equivalence" },
+     .{ .id = .TF_GLM_DFLASH_ONLY, .families = &.{"glm5_next"}, .class = .identical, .syntax = .one, .effect = "Keep only the Q4 draft head alongside the external DFlash2 drafter", .evidence = "GLM DFlash2-only prompt and cache layout" },
+--- a/zig/src/families/glm/cuda_engine.zig
++++ b/zig/src/families/glm/cuda_engine.zig
+@@ -87,6 +87,7 @@
+     bs: ?fw.Buffers = null, // shared verify windows (with the MTP head, as the lane core shares only then)
+     pairs: cuda.DeviceBuffer, // every rank's (value, id) of a greedy draw
+     scheduled_l2: bool = false,
++    decode_tile_ranges: bool = false,
+     decode_mla_wide: bool = false, // measured SM121 TP2 paged FP8 decode geometry
+     smp: sampler.Sampler,
+     seqs: std.ArrayList(?*Seq) = .empty, // every stream's sequence by slot (the lane backend's), slot 0 made at init
+@@ -216,6 +217,8 @@
+         e.bp = try fw.Buffers.init(d, &e.w, prompt_solo.bufferRows(o.settings.solo), true, o.capacity);
+         errdefer e.bp.deinit();
+         e.scheduled_l2 = e.l2pf != null and world == 2 and !o.settings.kv_shard.on and o.settings.kv_pow2 and (try ctx.capability()) == 121;
++        e.decode_tile_ranges = o.settings.decode_tile_ranges and world == 2 and !o.settings.kv_shard.on and o.settings.kv_pow2 and (try ctx.capability()) == 121;
++        if (e.decode_tile_ranges and rank == 0) std.log.info("glm: extended single-stream FP8 verification tile ranges", .{});
+         e.decode_mla_wide = o.settings.decode_mla_wide and world == 2 and !o.settings.kv_shard.on and o.settings.kv_pow2 and (try ctx.capability()) == 121;
+         if (e.decode_mla_wide and rank == 0) std.log.info("glm: wide latent head tiles for long-context single-stream FP8 verification", .{});
+         if (o.settings.decode_score_tile and rank == 0) std.log.info("glm: tiled pooled-key scores for long-context single-stream verification", .{});
+@@ -519,7 +522,8 @@
+         var f = e.view(&e.bd, &one);
+         const at = e.cur.st.pos;
+         f.scheduled_l2 = e.scheduled_l2;
+-        f.decode_mla_wide = e.decode_mla_wide and at >= 40960;
++        f.decode_tile_ranges = e.decode_tile_ranges;
++        f.decode_mla_wide = e.decode_mla_wide and @import("cuda_latent.zig").wideVerifyRange(at, ids.len, e.decode_tile_ranges);
+         f.decode_score_tile = e.settings.decode_score_tile; // target verification of one stream only
+         f.prof = e.profs[ids.len - 1];
+         if (f.prof) |p| try p.begin(e.stream, verifyLabel(ids.len));
+--- a/zig/src/families/glm/cuda_env_test.zig
++++ b/zig/src/families/glm/cuda_env_test.zig
+@@ -15,6 +15,7 @@
+     .{ .name = "TF_GLM_LINK_WAIT" },
+     .{ .name = "TF_GLM_DECODE_MLA_WIDE" },
+     .{ .name = "TF_GLM_EXL3_DECODE" },
++    .{ .name = "TF_GLM_DECODE_TILE_RANGES" },
+     .{ .name = "TF_GLM_DECODE_SCORE_TILE" },
+     .{ .name = "TF_GLM_DFLASH_Q4_DOWN" },
+     .{ .name = "TF_GLM_DFLASH_ONLY" },
+--- a/zig/src/families/glm/cuda_forward.zig
++++ b/zig/src/families/glm/cuda_forward.zig
+@@ -153,6 +153,7 @@
+     kv_pow2: bool = false,
+     scheduled_l2: bool = false,
+     decode_mla_wide: bool = false,
++    decode_tile_ranges: bool = false,
+     decode_score_tile: bool = false,
+     absorb_mma: bool = false,
+     kda_wide: bool = true, // TF_GLM_KDA_DECODE_WIDE (the Python family's default): decode windows on KDA's three-kernel chain
+@@ -172,7 +173,7 @@
+     }
+ 
+     pub fn set(f: *const Forward) glue.Set {
+-        return .{ .glue = &f.m.glue, .index = if (f.m.index) |*x| x else null, .mm = if (f.m.tiled) &f.m.mm else null, .packs = f.m.packs, .prompt = f.ranks[0].b.prefill, .kv_pow2 = f.kv_pow2, .absorb_mma = f.absorb_mma, .decode_score_tile = f.decode_score_tile, .decode_mla_wide = f.decode_mla_wide, .linear = .{ .lane = &f.m.lane }, .copy_rows = f.m.copy_rows, .dsel = f.m.dsel };
++        return .{ .glue = &f.m.glue, .index = if (f.m.index) |*x| x else null, .mm = if (f.m.tiled) &f.m.mm else null, .packs = f.m.packs, .prompt = f.ranks[0].b.prefill, .kv_pow2 = f.kv_pow2, .absorb_mma = f.absorb_mma, .decode_score_tile = f.decode_score_tile, .decode_tile_ranges = f.decode_tile_ranges, .decode_mla_wide = f.decode_mla_wide, .linear = .{ .lane = &f.m.lane }, .copy_rows = f.m.copy_rows, .dsel = f.m.dsel };
+     }
+ 
+     /// The layer sums' boundary (cuda_boundary.zig): every rank's fp32 partial into every gathered buffer.
+--- a/zig/src/families/glm/cuda_glue.zig
++++ b/zig/src/families/glm/cuda_glue.zig
+@@ -15,6 +15,7 @@
+     prompt: bool = false,
+     kv_pow2: bool = false,
+     decode_mla_wide: bool = false,
++    decode_tile_ranges: bool = false,
+     decode_score_tile: bool = false,
+     absorb_mma: bool = false,
+     linear: cuda.qlinear.Linear = .{},
+--- a/zig/src/families/glm/cuda_index.zig
++++ b/zig/src/families/glm/cuda_index.zig
+@@ -47,9 +47,25 @@
+     return .{ @intCast(cdiv(rows, score_rows)), @intCast(@max(1, cdiv(nb, tiles))) };
+ }
+ 
++/// The score launch uses the visible key count with the production power-of-two destination pitch.
++fn scoreVerifyRange(pos: usize, rows: usize, extended: bool) bool {
++    if (rows < 2 or rows > 16) return false;
++    if (pos >= 40960) return true;
++    if (!extended) return false;
++    // Each width retains its existing path below its measured crossover on GB10.
++    const floor: usize = switch (rows) {
++        2 => 16384,
++        3, 4, 5, 6 => 8192,
++        8 => 4096,
++        12, 16 => 2048,
++        else => return false,
++    };
++    return pos >= floor;
++}
++
+ /// Measured SM121 single-stream verification geometry for the packed, paged 32-head GLM index.
+-pub fn decodeTiles(pos: usize, rows: usize, nb: usize, heads: usize, pk: u64, pt: u64, ps: u64, kv_pow2: bool) ?usize {
+-    if (pos < 40960 or rows < 2 or rows > 16 or heads != 32 or !kv_pow2 or pt == 0 or pk % 16 != 0 or ps % 16 != 0) return null;
++pub fn decodeTiles(pos: usize, rows: usize, nb: usize, heads: usize, pk: u64, pt: u64, ps: u64, kv_pow2: bool, extended: bool) ?usize {
++    if (!scoreVerifyRange(pos, rows, extended) or heads != 32 or !kv_pow2 or pt == 0 or pk % 16 != 0 or ps % 16 != 0) return null;
+     // Limit each CTA’s run to keep roughly 376 independent pool-tile CTAs per group of verify rows.
+     return @min(score_tiles, @max(1, nb / (47 * 8)));
+ }
+@@ -146,19 +162,28 @@
+ }
+ 
+ test "GLM index: verify tiling gates the measured packed page shape and grids visible blocks at the output pitch" {
+-    try std.testing.expectEqual(@as(?usize, 2), decodeTiles(262144, 4, 1025, 32, 0x1000, 0x2000, 32768, true));
+-    try std.testing.expectEqual(@as(?usize, 2), decodeTiles(262144, 16, 1025, 32, 0x1000, 0x2000, 32768, true));
+-    try std.testing.expectEqual(@as(?usize, 1), decodeTiles(40960, 2, 161, 32, 0x1000, 0x2000, 32768, true));
+-    try std.testing.expectEqual(@as(?usize, 1), decodeTiles(131072, 3, 513, 32, 0x1000, 0x2000, 32768, true));
++    try std.testing.expectEqual(@as(?usize, 2), decodeTiles(262144, 4, 1025, 32, 0x1000, 0x2000, 32768, true, false));
++    try std.testing.expectEqual(@as(?usize, 2), decodeTiles(262144, 16, 1025, 32, 0x1000, 0x2000, 32768, true, false));
++    try std.testing.expectEqual(@as(?usize, 1), decodeTiles(40960, 2, 161, 32, 0x1000, 0x2000, 32768, true, false));
++    try std.testing.expectEqual(@as(?usize, 1), decodeTiles(131072, 3, 513, 32, 0x1000, 0x2000, 32768, true, false));
++    for ([_][2]usize{ .{ 2, 16384 }, .{ 3, 8192 }, .{ 4, 8192 }, .{ 5, 8192 }, .{ 6, 8192 }, .{ 8, 4096 }, .{ 12, 2048 }, .{ 16, 2048 } }) |pair| {
++        try std.testing.expect(!scoreVerifyRange(pair[1] - 1, pair[0], true));
++        try std.testing.expect(scoreVerifyRange(pair[1], pair[0], true));
++    }
++    for ([_]usize{ 7, 9, 10, 11, 13, 14, 15 }) |rows| try std.testing.expect(!scoreVerifyRange(40959, rows, true));
++    try std.testing.expect(!scoreVerifyRange(32768, 4, false));
++    try std.testing.expect(scoreVerifyRange(32768, 4, true));
++    try std.testing.expect(!scoreVerifyRange(40960, 1, true));
++    try std.testing.expect(!scoreVerifyRange(262144, 17, true));
+     try std.testing.expectEqual([2]u32{ 1, 513 }, scoresGridWithTiles(4, 1025, 2));
+     try std.testing.expectEqual([2]u32{ 2, 513 }, scoresGridWithTiles(16, 1025, 2));
+-    for ([_]usize{ 1, 17 }) |rows| try std.testing.expectEqual(null, decodeTiles(262144, rows, 1025, 32, 0x1000, 0x2000, 32768, true));
+-    try std.testing.expectEqual(null, decodeTiles(40959, 4, 1025, 32, 0x1000, 0x2000, 32768, true));
+-    try std.testing.expectEqual(null, decodeTiles(262144, 4, 1025, 16, 0x1000, 0x2000, 32768, true));
+-    try std.testing.expectEqual(null, decodeTiles(262144, 4, 1025, 32, 0x1008, 0x2000, 32768, true));
+-    try std.testing.expectEqual(null, decodeTiles(262144, 4, 1025, 32, 0x1000, 0, 32768, true));
+-    try std.testing.expectEqual(null, decodeTiles(262144, 4, 1025, 32, 0x1000, 0x2000, 32776, true));
+-    try std.testing.expectEqual(null, decodeTiles(262144, 4, 1025, 32, 0x1000, 0x2000, 32768, false));
++    for ([_]usize{ 1, 17 }) |rows| try std.testing.expectEqual(null, decodeTiles(262144, rows, 1025, 32, 0x1000, 0x2000, 32768, true, false));
++    try std.testing.expectEqual(null, decodeTiles(40959, 4, 1025, 32, 0x1000, 0x2000, 32768, true, false));
++    try std.testing.expectEqual(null, decodeTiles(262144, 4, 1025, 16, 0x1000, 0x2000, 32768, true, false));
++    try std.testing.expectEqual(null, decodeTiles(262144, 4, 1025, 32, 0x1008, 0x2000, 32768, true, false));
++    try std.testing.expectEqual(null, decodeTiles(262144, 4, 1025, 32, 0x1000, 0, 32768, true, false));
++    try std.testing.expectEqual(null, decodeTiles(262144, 4, 1025, 32, 0x1000, 0x2000, 32776, true, false));
++    try std.testing.expectEqual(null, decodeTiles(262144, 4, 1025, 32, 0x1000, 0x2000, 32768, false, false));
+ }
+ 
+ /// A driver that records each launched function's handle, in order (selectTokens below, without a device).
+@@ -210,6 +235,15 @@
+                 try std.testing.expectEqualSlices(usize, expected, Recorded.ids[0..Recorded.n]);
+             }
+         }
++        for ([_]bool{ false, true }) |extended| {
++            var active = set;
++            active.kv_pow2 = true;
++            active.decode_score_tile = true;
++            active.decode_tile_ranges = extended;
++            Recorded.n = 0;
++            try sparse.selectTokens(active, ops, stream, 0x5000, 0x6000, 160, 0x1000, table, 0x7000, 32768, 4, 32, 128, 1 << 20, s, 0x8000, 0x9000);
++            try std.testing.expectEqual(if (extended) @as(usize, 30) else 20, Recorded.ids[0]);
++        }
+         const prompt: []const usize = if (mode == .both) &.{ 30, 31, 41 } else &.{ 30, 21, 41 };
+         for ([_]Case{
+             .{ .rows = 512, .pk = 0x1000, .cap = 1 << 20, .want = prompt }, // a prompt chunk of 512 rows at 65,536
+--- a/zig/src/families/glm/cuda_kv8_test.zig
++++ b/zig/src/families/glm/cuda_kv8_test.zig
+@@ -240,6 +240,15 @@
+         try t.expectEqual(@as(u32, 256), Rec.blocks[0]);
+         try t.expectEqual(if (hb == 16) glue.chunksSmem(16) else glue.chunksSmem(32), Rec.shared[0]);
+         try t.expectEqual(kid(ks.merge), Rec.ids[1]);
++    }
++    for ([_]usize{ 5, 6, 7, 8, 9, 16 }) |rows| {
++        var mode = set;
++        mode.decode_tile_ranges = true;
++        mode.decode_mla_wide = latent.wideVerifyRange(32768, rows, true);
++        Rec.n = 0;
++        try latent.sparseAttentionFormat(mode, stream, 100, 200, 200 + 262_144, paged, 500, 600, 2051, p, 700, rows, 32, 512, scale);
++        const wide = rows >= 6 and rows <= 16;
++        try t.expectEqual(kid(if (wide) ks.chunks_32_fp8_paged else ks.chunks_16_fp8_paged), Rec.ids[0]);
+     }
+     // A long single-stream verification requests the 32-head tile only at its tested window sizes.
+     for ([_]usize{ 1, 5, 6, 7, 8, 12, 16, 17, 32 }) |rows| {
+--- a/zig/src/families/glm/cuda_lane_costs.zig
++++ b/zig/src/families/glm/cuda_lane_costs.zig
+@@ -150,8 +150,12 @@
+     const hex = std.fmt.bytesToHex(e.checkpoint_digest, .lower);
+     const draft_hex = std.fmt.bytesToHex(if (e.drafter) |dr| dr.checkpoint_digest else @as([32]u8, @splat(0)), .lower);
+     const tail: []const u8 = if (pin) |f| (if (f) " form factored" else " form classic") else "";
+-    var suffix_buf: [40]u8 = undefined;
+-    const suffix = if (set.exl3_decode) try std.fmt.bufPrint(&suffix_buf, " exl3dec{s}", .{tail}) else tail;
++    var suffix_buf: [64]u8 = undefined;
++    const suffix = try std.fmt.bufPrint(&suffix_buf, "{s}{s}{s}", .{
++        if (set.exl3_decode) " exl3dec" else "",
++        if (set.decode_tile_ranges) " tileranges" else "",
++        tail,
++    });
+     return std.fmt.bufPrint(shape, "sm{d} cuda{d} ranks{d} {s} drafter{d}/{d}/{s} layers{d} l2{d}/{d}/{d}/{d}/{d} warps{d} kda{d} mm{d} bits{d}/{d} kv8{d}/{d} ext{d} pages{d} host{d} roce{d} p2p{s}/{s}/{s} pad{d} pdl{d} dsel{d} wide{d}{s}", .{
+         sm,                                          driver,                                     e.share.world,             hex[0..],                     @intFromBool(e.drafter != null),
+         if (e.drafter) |dr| dr.bits else @as(u8, 0), draft_hex[0..],                             set.layers,                @intFromBool(set.l2pf.on),    @intFromBool(set.l2pf.named),
+--- a/zig/src/families/glm/cuda_latent.zig
++++ b/zig/src/families/glm/cuda_latent.zig
+@@ -16,6 +16,12 @@
+ /// latent.head_block: a rank's 32 heads a program in prompt chunks (each key read once), 16 in decode windows.
+ pub fn headBlock(rows: usize) usize {
+     return if (rows >= 64) heads_tile_wide else heads_tile;
++}
++
++/// The long-context preset uses 8–16 rows. The GB10 sweep covers every additional width from 4K.
++pub fn wideVerifyRange(pos: usize, rows: usize, extended: bool) bool {
++    return (pos >= 40960 and rows >= 8 and rows <= 16) or
++        (extended and pos >= 4096 and rows >= 6 and rows <= 16);
+ }
+ 
+ /// latent.chunks_for: 512-key chunks to cover `length` keys.
+@@ -145,7 +151,7 @@
+ pub fn sparseAttentionFormat(set: glue.Set, stream: cuda.Stream, qa: u64, cache: u64, scales: u64, t: Table, tokens: u64, counts: u64, w: usize, p: Partials, out: u64, rows: usize, heads: usize, lw: usize, scale: f32) !void {
+     const nch = chunksFor(w);
+     // A tested single-stream verify window can share the same 32 keys across both head tiles.
+-    const wide = set.decode_mla_wide and !set.prompt and scales != 0 and t.pt != 0 and t.logical and heads == 32 and w == 2051 and rows >= 8 and rows <= 16;
++    const wide = set.decode_mla_wide and !set.prompt and scales != 0 and t.pt != 0 and t.logical and heads == 32 and w == 2051 and rows >= (if (set.decode_tile_ranges) @as(usize, 6) else 8) and rows <= 16;
+     const hb = if (wide) heads_tile_wide else headBlock(rows);
+     try chunks(set, stream, qa, cache, scales, t, 0, tokens, counts, p, rows, heads, lw, nch, w, scale, hb, true);
+     try merge(set, stream, p, out, counts, rows, heads, lw, nch, true);
+@@ -159,6 +165,14 @@
+ }
+ 
+ test "latent.py's tiling rules" {
++    try std.testing.expect(!wideVerifyRange(4095, 7, true));
++    try std.testing.expect(!wideVerifyRange(4096, 5, true));
++    try std.testing.expect(wideVerifyRange(4096, 6, true));
++    try std.testing.expect(wideVerifyRange(32768, 8, true));
++    try std.testing.expect(!wideVerifyRange(32768, 8, false));
++    try std.testing.expect(wideVerifyRange(32768, 16, true));
++    try std.testing.expect(!wideVerifyRange(32768, 17, true));
++    try std.testing.expect(wideVerifyRange(40960, 16, false));
+     try std.testing.expectEqual(@as(usize, 16), headBlock(8));
+     try std.testing.expectEqual(@as(usize, 32), headBlock(64));
+     try std.testing.expectEqual(@as(usize, 3), chunksFor(1025));
+--- a/zig/src/families/glm/cuda_ranks.zig
++++ b/zig/src/families/glm/cuda_ranks.zig
+@@ -35,6 +35,7 @@
+     kv_pow2: bool = false,
+     exl3_decode: bool = false,
+     decode_mla_wide: bool = false,
++    decode_tile_ranges: bool = false,
+     decode_score_tile: bool = false,
+     absorb_mma: bool = false,
+     kv_live_half: bool = false, // TF_GLM_KV_LIVE_HALF=1: a keep carries the live KDA half alone (cuda_snapshot_layout.zig)
+@@ -59,6 +60,10 @@
+         };
+         s.decode_mla_wide = @import("sys").environment.value(bool, "TF_GLM_DECODE_MLA_WIDE", get("TF_GLM_DECODE_MLA_WIDE"), false) catch {
+             problem.* = "TF_GLM_DECODE_MLA_WIDE: 0 or 1";
++            return error.BadSetting;
++        };
++        s.decode_tile_ranges = @import("sys").environment.value(bool, "TF_GLM_DECODE_TILE_RANGES", get("TF_GLM_DECODE_TILE_RANGES"), false) catch {
++            problem.* = "TF_GLM_DECODE_TILE_RANGES: 0 or 1";
+             return error.BadSetting;
+         };
+         s.decode_score_tile = @import("sys").environment.value(bool, "TF_GLM_DECODE_SCORE_TILE", get("TF_GLM_DECODE_SCORE_TILE"), false) catch {
+@@ -252,7 +257,7 @@
+ 
+ /// What every rank must agree on, as bytes the communicator carries.
+ pub const Fingerprint = extern struct {
+-    layout: u32 = 29, // mtp also identifies DFlash2 down projection precision
++    layout: u32 = 30, // decode_score_tile packs the optional SM121 tile-range extension
+     world: u32,
+     rank: u32,
+     kv8: u32 = 0,
+@@ -351,7 +356,7 @@
+             .rank = @intCast(rank),
+             .prompt_fixed_k = @intFromBool(s.prompt_fixed_k),
+             .tiled = @intFromBool(s.tiled),
+-            .decode_score_tile = @intFromBool(s.decode_score_tile),
++            .decode_score_tile = @as(u8, @intFromBool(s.decode_score_tile)) | (@as(u8, @intFromBool(s.decode_tile_ranges)) << 1),
+             .decode_mla_wide = @intFromBool(s.decode_mla_wide),
+             .exl3_decode = @intFromBool(s.exl3_decode),
+             .split = if (!s.split) 0 else if (s.ring) 2 else 1,
+@@ -399,6 +404,12 @@
+     const h: [32]u8 = @splat(0);
+     const all = [_]Fingerprint{ Fingerprint.of(2, 0, .{}, 8192, true, h, h, h), Fingerprint.of(2, 1, .{ .dflash_q4_down = true }, 8192, true, h, h, h) };
+     try std.testing.expectEqual(Mismatch{ .field = .mtp, .rank = 1 }, mismatch(&all).?);
++}
++
++test "fingerprints: agreeing ranks require the same verification tile ranges" {
++    const h: [32]u8 = @splat(0);
++    const all = [_]Fingerprint{ Fingerprint.of(2, 0, .{}, 8192, true, h, h, h), Fingerprint.of(2, 1, .{ .decode_tile_ranges = true }, 8192, true, h, h, h) };
++    try std.testing.expectEqual(Mismatch{ .field = .decode_score_tile, .rank = 1 }, mismatch(&all).?);
+ }
+ 
+ test "fingerprints: agreeing ranks require the same verification scorer" {
+@@ -552,7 +563,7 @@
+         .pages => "TF_KV_PAGES (unset or auto pages from two ranks)",
+         .prompt_fixed_k => "TF_GLM_PROMPT_K",
+         .tiled => "TF_GLM_MM",
+-        .decode_score_tile => "TF_GLM_DECODE_SCORE_TILE",
++        .decode_score_tile => "TF_GLM_DECODE_SCORE_TILE or TF_GLM_DECODE_TILE_RANGES",
+         .decode_mla_wide => "TF_GLM_DECODE_MLA_WIDE",
+         .exl3_decode => "TF_GLM_EXL3_DECODE",
+         .split => "TF_GLM_PREFILL_REDUCE",
+--- a/zig/src/families/glm/cuda_ranks_test.zig
++++ b/zig/src/families/glm/cuda_ranks_test.zig
+@@ -617,7 +617,7 @@
+     const f0 = Fingerprint.of(2, 0, .{}, 8192, true, h0, h0, hashBytes("/c"));
+     try std.testing.expectEqual(@as(u32, 0), f0.kv_shard);
+     try std.testing.expectEqual(@as(u32, 0), f0.kv_shard_check);
+-    try std.testing.expectEqual(@as(u32, 29), f0.layout);
++    try std.testing.expectEqual(@as(u32, 30), f0.layout);
+     var all = [_]Fingerprint{ f0, Fingerprint.of(2, 1, s, 8192, true, h0, h0, hashBytes("/c")) };
+     try std.testing.expectEqual(Mismatch{ .field = .kv_shard, .rank = 1 }, mismatch(&all).?); // on one rank only
+     all[0] = Fingerprint.of(2, 0, s, 8192, true, h0, h0, hashBytes("/c"));
+--- a/zig/src/families/glm/cuda_sparse.zig
++++ b/zig/src/families/glm/cuda_sparse.zig
+@@ -156,7 +156,7 @@
+         const quick = if (set.index) |k| if (k.takes(rows, np_max, pk, t.ps)) k else null else null;
+         const index = @import("cuda_index.zig");
+         const tiles = if (quick != null) index.score_tiles else if (set.decode_score_tile and !set.prompt and split == null)
+-            index.decodeTiles(host_pos + a, n, nb, heads, pk, t.pt, t.ps, set.kv_pow2)
++            index.decodeTiles(host_pos + a, n, nb, heads, pk, t.pt, t.ps, set.kv_pow2, set.decode_tile_ranges)
+         else
+             null;
+         var stamp = prof.span(profile, stream, .index_score);
+--- a/zig/src/platform/environment.zig
++++ b/zig/src/platform/environment.zig
+@@ -113,6 +113,7 @@
+     .{ .name = "TF_GLM_EXL3_DECODE", .scope = .glm, .kind = .flag, .forms = "0 or 1" },
+     .{ .name = "TF_GLM_DECODE_MLA_WIDE", .scope = .glm, .kind = .flag, .forms = "0 or 1" },
+     .{ .name = "TF_GLM_L2PF_SHARED_FIRST", .scope = .glm, .kind = .flag, .forms = "0 or 1" },
++    .{ .name = "TF_GLM_DECODE_TILE_RANGES", .scope = .glm, .kind = .flag, .forms = "0 or 1" },
+     .{ .name = "TF_GLM_DECODE_SCORE_TILE", .scope = .glm, .kind = .flag, .forms = "0 or 1" },
+     .{ .name = "TF_GLM_DFLASH_Q4_DOWN", .scope = .glm, .kind = .flag, .forms = "0 or 1" },
+     .{ .name = "TF_GLM_DFLASH_ONLY", .scope = .glm, .kind = .flag, .forms = "0 or 1" },
