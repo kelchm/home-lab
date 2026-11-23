@@ -160,7 +160,10 @@ def shape(lock, mod):
         kind = "qwen-tp1"
     else:
         raise InvalidManifest("unsupported lock shape; only the shared tensorfold-readiness mod is dependency-free")
-    fields(lock, SHAPES[kind], kind)
+    shape_fields = SHAPES[kind]
+    if kind == "glm-native-kit" and "derived_image" in lock:
+        shape_fields += " derived_image"
+    fields(lock, shape_fields, kind)
     return kind
 
 
@@ -213,10 +216,20 @@ def validate_lock(lock, mod):
     else:
         pattern(lock["image"], rf"{IMAGE_NAME}:{TAG}", "image", "expected a named local image tag paired with image_id")
     if kind == "glm-native-kit":
-        fields(files, "LICENSE NOTICE.md build.sh prepare.py run.sh serve.py chat_template.jinja", "native kit mod_files")
+        allowed_files = "LICENSE NOTICE.md build.sh prepare.py run.sh serve.py chat_template.jinja"
+        if "derived_image" in lock:
+            variant = lock["derived_image"]
+            fields(variant, "name image image_id parent_image_id patch", "derived_image")
+            equal(variant["name"], "prompt-s2", "derived_image.name")
+            equal(variant["patch"], "prompt-s2/0017-glm-packed-prompt-s2.patch", "derived_image.patch")
+            equal(variant["parent_image_id"], lock["image_id"], "derived_image.parent_image_id")
+            digest(variant["image_id"], "derived_image.image_id")
+            require(variant["image_id"] != lock["image_id"], "derived_image.image_id", "expected a distinct derived config ID")
+            allowed_files += " prompt-s2/build.py " + variant["patch"]
+        fields(files, allowed_files, "native kit mod_files")
         for name, pin in files.items():
             path = mod / name
-            require(path.is_file() and not path.is_symlink() and hashlib.sha256(path.read_bytes()).hexdigest() == pin,
+            require(path.is_file() and not path.parent.is_symlink() and not path.is_symlink() and hashlib.sha256(path.read_bytes()).hexdigest() == pin,
                     "mod_files." + name, "missing, linked or changed frozen native kit input")
         hash_value(lock["kit_archive_sha256"], 64, "kit_archive_sha256")
         positive(lock["upstream_patch_count"], "upstream_patch_count")
@@ -231,6 +244,9 @@ def validate_lock(lock, mod):
         source(lock["drafter"], "drafter")
         expected = f"1104-{lock['kit_revision'][:7]}-{lock['upstream_patch_hash']}"
         equal(lock["image"].rsplit(":", 1)[1], expected, "image tag")
+        if "derived_image" in lock:
+            tag = f"{lock['image'].rsplit('-', 1)[0]}-{variant['name']}-{files[variant['patch']][:12]}"
+            equal(variant["image"], tag, "derived_image.image")
     elif kind == "glm":
         pattern(lock["engine_version"], r"[0-9]+\.[0-9]+\.[0-9]+", "engine_version", "expected a release version")
         env = lock["launcher_env"]
@@ -345,7 +361,12 @@ def validate_recipe(recipe, path, locks):
     metadata, defaults = recipe.get("metadata"), recipe.get("defaults")
     require(isinstance(metadata, dict) and isinstance(defaults, dict), "recipe", "metadata and defaults are required")
     equal(metadata.get("profile"), path.stem, "metadata.profile")
-    expected_image = lock["image_id"] if kind in ("qwen-tp1", "deepseek", "glm-native-kit") else lock["image"]
+    selected_image = lock
+    if "image_variant" in metadata:
+        require("derived_image" in lock, "metadata.image_variant", "engine lock has no derived image")
+        equal(metadata["image_variant"], lock["derived_image"]["name"], "metadata.image_variant")
+        selected_image = lock["derived_image"]
+    expected_image = selected_image["image_id"] if kind in ("qwen-tp1", "deepseek", "glm-native-kit") else selected_image["image"]
     equal(recipe.get("container"), expected_image, "container")
     for key in ("engine_revision", "kit_revision", "upstream_patch_count", "upstream_patch_hash"):
         if key in lock:
@@ -366,7 +387,7 @@ def validate_recipe(recipe, path, locks):
         equal(metadata.get("server_patch_count"), len(lock["server_patches"]) + len(lock.get("site_patches", [])), "metadata.server_patch_count")
         equal({"repository": recipe.get("model"), "revision": recipe.get("model_revision")}, lock["weights"], "model/weights")
     if kind == "deepseek" or "image" in metadata:
-        equal(metadata.get("image"), lock["image"], "metadata.image")
+        equal(metadata.get("image"), selected_image["image"], "metadata.image")
     repository(recipe.get("model"), "model")
     hash_value(recipe.get("model_revision"), 40, "model_revision")
     equal(metadata.get("target_model_revision"), recipe["model_revision"], "metadata.target_model_revision")
@@ -435,10 +456,11 @@ def validate_repository(root=ROOT):
             kind = validate_lock(lock, manifest.parent)
             locks[manifest.parent.resolve()] = (lock, kind)
             if kind != "readiness":
-                reference, config_id = lock["image"], lock["image_id"]
-                if reference in images:
-                    equal(config_id, images[reference], "image/image_id relationship (same reference, different config IDs)")
-                images[reference] = config_id  # Same ID under several aliases is valid.
+                for record in [lock] + ([lock["derived_image"]] if "derived_image" in lock else []):
+                    reference, config_id = record["image"], record["image_id"]
+                    if reference in images:
+                        equal(config_id, images[reference], "image/image_id relationship (same reference, different config IDs)")
+                    images[reference] = config_id  # Same ID under several aliases is valid.
         except (ValueError, KeyError, TypeError, OSError) as exc:
             raise InvalidManifest(f"{manifest.relative_to(root)}: {exc}") from exc
     recipes = sorted(path for extension in ("*.yaml", "*.yml") for path in root.rglob(extension)

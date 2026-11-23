@@ -16,11 +16,12 @@ def main():
         raise ValueError("Missing or linked native TensorFold mod manifest")
     lock = json.loads(manifest.read_text())
     names = {"LICENSE", "NOTICE.md", "build.sh", "prepare.py", "run.sh", "serve.py", "chat_template.jinja"}
+    names.update({"prompt-s2/build.py", "prompt-s2/0017-glm-packed-prompt-s2.patch"})
     if set(lock["mod_files"]) != names:
         raise ValueError("Incomplete native TensorFold mod manifest")
     for name, digest in lock["mod_files"].items():
         path = here / name
-        if path.is_symlink() or not path.is_file() or hashlib.sha256(path.read_bytes()).hexdigest() != digest:
+        if path.parent.is_symlink() or path.is_symlink() or not path.is_file() or hashlib.sha256(path.read_bytes()).hexdigest() != digest:
             raise ValueError(f"Missing or changed frozen mod file: {name}")
     print(f"Verified native TensorFold mod for {lock['kit_revision']}")
 

@@ -88,6 +88,37 @@ The median coding turn finished 0.7% sooner with retention. The complete review 
 
 The original Python profile passed readiness after the comparison. The 111,952-token replay restored 111,936 tokens from disk in one load and returned the expected marker with a 0.50 s time to first token.
 
+#### Long coding sessions and interleaved workspaces
+
+The [shared-page profile](mia-tensorfold-glm53-native-tp2/glm53-mia-1104-6c55c20-shared.yaml) completed the four-workspace sequence in 196.41 s on Mia's original image, 44.5% less elapsed request time than stock. It uses q4 dense weights, a q8 head, verified priority copies and unsharded paged FP8 KV. `TF_KV_SHARE=32` lets retained prompts refer to pages already in the live pool. The engine allocated 32 recurrent-state slots (7.3 GiB within the 8 GiB prompt-cache budget) and reported 2,801,152 live token positions across four streams. It inherited a 262K-token coding workload and retained usable prefixes for all 14 subsequent workspace follow-ups.
+
+The [12 GiB profile](mia-tensorfold-glm53-native-tp2/glm53-mia-1104-6c55c20-tuned.yaml) runs on Mia's original 1.3.0 image. It uses q4 dense weights, a q8 head, verified priority copies, message-start checkpoints and sharded KV pages. On the measured boot, the engine reserved 12 GiB per rank for retained prompts and reported two live partitions of 3,721 pages at 512 positions per page (3,810,304 positions). The earlier q4/q8 quality measurement above applies to this precision choice.
+
+| Matched workload | Mia stock | 12 GiB profile | Shared pages |
+| --- | ---: | ---: | ---: |
+| One stream, median end-to-end output tok/s | 52.0 | 60.0 | 60.6 |
+| Four streams, median aggregate output tok/s | 90.3 | 96.3 | 97.0 |
+| Cold 262,309-token coding history, first token | 194.27 s | 205.64 s | 188.81 s |
+| Warm 768-token coding turn, median completion time | 14.33 s | 12.97 s | 12.50 s |
+
+All three profiles served the same 24 request bodies. Fifteen short requests measured decode throughput. The cold history seeded three fixed-length coding turns, a complete review and four growing tool-result turns with max reasoning effort. The review took 9.24 s for 362 output tokens on stock, 9.26 s for 407 on the 12 GiB profile and 8.85 s for 407 with shared pages. Request counters matched, and all three profiles passed all four tool-result marker checks.
+
+The workspace test seeds four independent 52K-token coding histories, creates four sibling branches in each of workspaces B, C and D, then asks for the original release tag from A. Each of its 18 requests has an exact expected answer. The table sums each client's end-to-end request times. The last column measures time to the first output token on the final return to A. Prior requests matter because they determine which checkpoints compete for space.
+
+| Profile and starting cache | All 18 requests | Follow-ups with at least 85% cached | Return to A |
+| --- | ---: | ---: | ---: |
+| Mia stock, fresh boot | 353.83 s | 10/14 | 38.91 s |
+| 12 GiB, after the 262K coding workload | 333.03 s | 11/14 | 0.34 s |
+| 12 GiB with two-stage prompt kernels, fresh boot | 200.24 s | 14/14 | 0.40 s |
+| Shared pages, after the 262K coding workload | 196.41 s | 14/14 | 0.99 s |
+| Current Python profile, fresh isolated spill store | 133.90 s | 14/14 | 0.35 s |
+
+The fresh two-stage native arm saved 153.59 s against fresh stock across the same sequence. Stock reprocessed all 52,281 tokens on its return to A. Both 12 GiB profiles reused 52,223, and the shared-page profile reused 51,200. The 14 follow-ups consumed 197.70 s on stock and 44.70 s with shared pages. The preloaded 12 GiB profile also retained several roughly 2 GiB snapshots from the preceding coding session and had to reprocess three 55K-token C branches. An initial stock run with that same preceding workload stopped on a legitimate cache miss at request 15. Its request hashes and cached-token counts matched the first 15 requests of the completed stock rerun.
+
+The [two-stage kernel profile](mia-tensorfold-glm53-native-tp2/glm53-mia-1104-6c55c20-s2.yaml) adds a local packed prompt-matmul patch on top of Mia's 16 patches. At identical 12 GiB settings, median cold first-token time across three independent 27K prompts went from 18.90 to 18.08 s. A 111,952-token prompt went from 77.61 to 74.33 s. All four requests had zero cached tokens, matching request bytes and output token hashes between arms, and the expected answers. All 29,281 natural-text log-probabilities also matched. Most of the time saved on the four workspaces came from avoiding repeated prefill. The [builder](mods/mia-tensorfold-glm53-6c55c20/prompt-s2/build.py) takes the stock image as its parent.
+
+The current Python profile served the same 18 frozen requests using a new isolated 64 GiB spill directory and returned all 18 expected tags. Initial requests took 106.29 s in total and follow-ups took 27.61 s. It was the fastest measured profile on this sequence and supports restart recovery. After the final trial, both original Python ranks passed readiness with the 2,582,528-position pool and the original 64 GiB spill tier. The 111,952-token replay restored 111,936 tokens in one disk load, returned the expected marker and produced its first token in 0.50 s. The native profiles remain staged alternatives for in-memory serving.
+
 ### Python serving kit
 
 `mia-tensorfold-glm53-exl3-tp2/` holds the profile for [Mia's two-Spark GLM kit](https://github.com/MiaAI-Lab/GLM-5.3-Flash-EXL3-2x-DGX-Sparks-TensorFold): TensorFold 0.6.0's Python CUDA engine with Mia's patches, serving Mia's 4 bpw EXL3 checkpoint across both Sparks. The kit's `main` at `3fd60dfc` replaced its v1.10 release after [#941's comparison on October 22](https://github.com/kelchm/home-lab/issues/941#issuecomment-6334247435), in which the same 48 requests gave identical replies on both, and decode and prefill were within about 3% of v1.10's. `bf5f9452` replaced `3fd60dfc` on October 25 and passed [a trial on October 27](https://github.com/kelchm/home-lab/issues/938#issuecomment-6448276787). `bf5f9452` has served day to day since [October 28](https://github.com/kelchm/home-lab/issues/938#issuecomment-6458998037); GLM had last served day to day on October 8, on v1.10.

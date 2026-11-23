@@ -27,8 +27,17 @@
     "NOTICE.md": "e89515bba4cfb70d27b3dc04fb5dbb55a2079f4b21cd57a5782a53ad804ebaf1",
     "build.sh": "b71434fae638feab59587c3ca02edf312bb0f69aad0b6c4743f0273eec5c1567",
     "chat_template.jinja": "f2e36c6b7fdd89f5f61564635227a1708e1601357cd41f9b5c0190911573d1e2",
-    "prepare.py": "879757c20fb3b5a5ce2c5eb39a8a2aecb49c316281edb1ecbe875b4b050a232b",
+    "prepare.py": "0f8f69608f0ba1df1cdeae8d2cc47480439c15d47ba442136a571884596ff4f7",
     "run.sh": "8eb750ab1c526816000c6d9d03944f7a709d6539613f0d77a12de5be16556e30",
-    "serve.py": "22a69dcae47f98e353f44cd75b2ba23e4737947178b059a527b5a38109b74e2f"
+    "serve.py": "4bc1f633bb56677e70c8a5c7ea307e2fb51fdd30bd1b285686f31f744c72fc1d",
+    "prompt-s2/build.py": "e4ad8e3c75d54c4f6388e9f66f0b0bdba23d06cfa03b95a72c372c1b83659e7a",
+    "prompt-s2/0017-glm-packed-prompt-s2.patch": "51b5948ebc4673a361b327ae12293e55dcb210e656e4a39c72c4f53dc69a48d3"
+  },
+  "derived_image": {
+    "name": "prompt-s2",
+    "image": "glm53-tf:1104-6c55c20-prompt-s2-51b5948ebc46",
+    "image_id": "sha256:8726a0ec8e909e309e67d97b2c5400604881f03777cc81cf3743c067be25bff5",
+    "parent_image_id": "sha256:44b3fdc1cd2b7cf24e4b00bf878ed859d96e35c79ff416922d744daef23ed1af",
+    "patch": "prompt-s2/0017-glm-packed-prompt-s2.patch"
   }
 }

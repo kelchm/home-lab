@@ -344,3 +344,33 @@ def test_cli_fails_with_the_lock_path_and_bad_field(source):
     assert result.returncode != 0
     assert f"mods/{MODS['qwen1']}/upstream.lock.json" in result.stderr
     assert "build.pip_packages" in result.stderr
+
+
+@pytest.mark.parametrize(("variant", "container", "error"), [
+    (None, "derived", "container"),
+    ("prompt-s2", "stock", "container"),
+    ("unknown", "derived", "metadata.image_variant"),
+])
+def test_native_derived_image_requires_explicit_matching_selection(source, variant, container, error):
+    profile = "glm53-mia-1104-6c55c20-s2.yaml"
+    path = source / "mia-tensorfold-glm53-native-tp2" / profile
+    lock = json.loads((source / "mods/mia-tensorfold-glm53-6c55c20/upstream.lock.json").read_text())
+    recipe = yaml.safe_load(path.read_text())
+    if variant is None:
+        del recipe["metadata"]["image_variant"]
+    else:
+        recipe["metadata"]["image_variant"] = variant
+    recipe["container"] = (lock if container == "stock" else lock["derived_image"])["image_id"]
+    path.write_text(yaml.safe_dump(recipe))
+    with pytest.raises(validator.InvalidManifest, match=error):
+        validator.validate_repository(source)
+
+
+def test_native_derived_patch_is_verified_at_install_and_in_ci(source):
+    mod = source / "mods/mia-tensorfold-glm53-6c55c20"
+    lock = json.loads((mod / "upstream.lock.json").read_text())
+    (mod / lock["derived_image"]["patch"]).write_text("changed patch")
+    result = subprocess.run([sys.executable, str(mod / "prepare.py"), "--check"], capture_output=True, text=True)
+    assert result.returncode != 0 and "changed frozen mod file" in result.stderr
+    with pytest.raises(validator.InvalidManifest, match="changed frozen native kit input"):
+        validator.validate_repository(source)

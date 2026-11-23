@@ -42,7 +42,7 @@ def launch(env):
             '--no-thinking', '--reasoning-effort', 'xhigh', '--no-update-check',
             '--vision', '--vision-max-images', '50',
             '--chat-template', '/opt/tensorfold-mod/chat_template.jinja',
-            '--drafter', env['DRAFTER'], '--drafter-bits', '4', '--prompt-cache-gib', '5']
+            '--drafter', env['DRAFTER'], '--drafter-bits', '4', '--prompt-cache-gib', env.get('GLM_PROMPT_CACHE_GIB', '5')]
     return args, env
 
 

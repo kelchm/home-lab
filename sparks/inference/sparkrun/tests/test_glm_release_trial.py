@@ -53,6 +53,19 @@ def receipts(pages=6147, cache='4.1', host='0.0', store=None, quota=65536, ranks
             f"info: glm: conversation states on disk in {store or LEARN + '/0123456789abcdef'} (0 states, 0 MiB of {quota} MiB; {ranks} ranks' parts)\n")
 
 
+@pytest.mark.parametrize(('profile', 'cache_gib'), [('benchmark', '5'), ('tuned', '12'), ('shared', '8')])
+def test_mia_130_device_prompt_cache_reaches_engine(profile, cache_gib):
+    path = PROFILE.parent / f'glm53-mia-1104-6c55c20-{profile}.yaml'
+    recipe = Recipe(yaml.safe_load(path.read_text()), source_path=str(path))
+    launcher = load('glm_130_launcher', ROOT / 'mods/mia-tensorfold-glm53-6c55c20/serve.py')
+    args, _ = launcher.launch({**recipe.env, 'RANK': '0', 'FABRIC_MASTER': '192.0.2.1',
+                               'MASTER_PORT': '25000', 'NCCL_IB_HCA': 'mlx5_0,mlx5_1',
+                               'MODEL_PATH': '/target', 'DRAFTER': '/drafter', 'SERVED_NAME': 'GLM-5.3-Flash',
+                               'CONTEXT': '1048576', 'MAX_TOKENS': '32768', 'HOST': '0.0.0.0', 'PORT': '8888'})
+    assert args.count('--prompt-cache-gib') == 1
+    assert args[args.index('--prompt-cache-gib') + 1] == cache_gib
+
+
 def test_source_real_receipts_accept_identity_child_and_actual_shard():
     report = capacity.check(receipts(), health(), learn_dir=LEARN)
     assert report['aggregate_pool_tokens'] == 3144704
