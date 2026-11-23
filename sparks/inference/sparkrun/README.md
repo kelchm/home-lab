@@ -73,6 +73,21 @@ The full combination delivered 60.1 tok/s at one stream and 97.0 aggregate at fo
 
 After the last arm drained, the original durable Python profile passed readiness on both ranks with its 2,582,528-token pool and 64 GiB spill tier. Replaying the 111,952-token prompt returned the expected marker and recorded one disk load of 111,936 tokens, with a 0.50 s time to first token.
 
+#### November 22 DFlash2 retention control
+
+The retained November 7 image from Mia's `13f2464` kit, engine `e52eb42b`, already implements `TF_GLM_SNAP_DRAFTER`. Both arms used that same image with q4 dense, q8 head, sharded FP8 KV and isolated learning directories. At max effort and temperature zero, one 262,309-token Pi-shaped history seeded each arm. All four measured follow-ups reused 262,144 tokens and ingested 698–744 fresh tokens. The request bytes, generated token hashes and target cache reuse matched across arms. The measured order was retention on then off, with one boot per arm. An earlier alignment probe left one other history resident in the on arm. Both arms served the measured history from device cache without evictions.
+
+| Warm measurement | Drafter resets | Drafter retained |
+| --- | ---: | ---: |
+| Coding TTFT, median of three | 1.042 s | 1.040 s |
+| Coding completion, 768 tokens, median of three | 12.42 s | 12.33 s |
+| Coding verification rounds, median of three | 172 | 171 |
+| Complete review, 415 tokens | 8.96 s | 8.86 s |
+
+The median coding turn finished 0.7% sooner with retention. The complete review used 146 rounds with retention and 148 with a reset. The cache-aligned test gives a small gain at the recorded median Pi suffix size. It covers one history and one stream at a time on the older kernel and cache path. The result puts a standalone port to TensorFold 1.3.0 behind native durability work.
+
+The original Python profile passed readiness after the comparison. The 111,952-token replay restored 111,936 tokens from disk in one load and returned the expected marker with a 0.50 s time to first token.
+
 ### Python serving kit
 
 `mia-tensorfold-glm53-exl3-tp2/` holds the profile for [Mia's two-Spark GLM kit](https://github.com/MiaAI-Lab/GLM-5.3-Flash-EXL3-2x-DGX-Sparks-TensorFold): TensorFold 0.6.0's Python CUDA engine with Mia's patches, serving Mia's 4 bpw EXL3 checkpoint across both Sparks. The kit's `main` at `3fd60dfc` replaced its v1.10 release after [#941's comparison on October 22](https://github.com/kelchm/home-lab/issues/941#issuecomment-6334247435), in which the same 48 requests gave identical replies on both, and decode and prefill were within about 3% of v1.10's. `bf5f9452` replaced `3fd60dfc` on October 25 and passed [a trial on October 27](https://github.com/kelchm/home-lab/issues/938#issuecomment-6448276787). `bf5f9452` has served day to day since [October 28](https://github.com/kelchm/home-lab/issues/938#issuecomment-6458998037); GLM had last served day to day on October 8, on v1.10.
