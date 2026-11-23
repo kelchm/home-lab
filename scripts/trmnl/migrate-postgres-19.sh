@@ -173,12 +173,18 @@ create_pod "$target_pod" "$target_claim" target
 
 # Restore cluster-wide roles before the database dump applies ownership and grants.
 # Keep the role dump, which contains password verifiers, off disk and out of logs.
-if ! dump_roles |
+if dump_roles |
   "${kube[@]}" exec -i "$target_pod" -- sh -ec '
+    set -o pipefail
     export PGOPTIONS="-c log_statement=none -c log_min_error_statement=panic"
-    exec psql -Xq -v ON_ERROR_STOP=1 --single-transaction -U "$POSTGRES_USER" -d postgres -f - >/dev/null 2>&1
+    psql -Xq -v VERBOSITY=sqlstate -v ON_ERROR_STOP=1 --single-transaction -U "$POSTGRES_USER" -d postgres -f - 2>&1 |
+      sed -nE "s/^.*(ERROR|FATAL):[[:space:]]+([A-Z0-9]{5})$/Role restore SQLSTATE \\2/p" >&2
   '; then
-  echo "$app role restore failed. The PostgreSQL 19 claim is not marked ready." >&2
+  :
+else
+  role_status=("${PIPESTATUS[@]}")
+  printf '%s role restore failed (source exit %s, target exit %s).\n' \
+    "$app" "${role_status[0]}" "${role_status[1]}" >&2
   exit 1
 fi
 
