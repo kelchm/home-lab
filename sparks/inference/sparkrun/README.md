@@ -149,14 +149,17 @@ python3 prime_glm_prefix.py --url http://10.32.21.31:8888 question-1.json questi
 
 The helper accepts text-only chat bodies for the same served model and defaults to skipping prefixes shorter than 2,048 tokens. The tokens the engine can reuse depend on its checkpoint boundaries. The primer and subsequent chats must reach the same running server.
 
-| Four sequential questions, live durable Python on two Sparks | Ordinary batch | Including prefix discovery and priming | Elapsed reduction |
-| --- | ---: | ---: | ---: |
-| Tickets sharing a 13,124-token document, mean of two batches per mode | 27.03 s | 21.40 s | 20.8% |
-| Workspace B sibling requests sharing 52,251 tokens, one batch per mode | 60.44 s | 35.37 s | 41.5% |
+| Four sequential questions on two Sparks | Serving profile | Ordinary batch | Including prefix discovery and priming | Elapsed reduction |
+| --- | --- | ---: | ---: | ---: |
+| Tickets sharing a 13,124-token document, mean of two batches per mode | Durable Python | 27.03 s | 21.40 s | 20.8% |
+| Workspace B sibling requests sharing 52,251 tokens, one batch per mode | Durable Python | 60.44 s | 35.37 s | 41.5% |
+| Same Workspace B requests, one batch per mode | Native shared-MMA | 144.61 s | 47.02 s | 67.5% |
 
-Each batch started with a fresh identifier near the beginning of the prompt to isolate it from the live cache. All four ordinary and primed chats in each matched pair had the same token counts and returned the expected tags. The ordinary batches reused zero tokens on their first two requests and found the shared prefix on the third and fourth. With priming, all four ticket requests reused 13,120 tokens and all four B requests reused 52,224. The B primer itself took 26.49 s, included in the 35.37 s total. These four B forks started without the seed turn in the earlier 18-request benchmark. The serving measurements in this table used the Python profile.
+Each batch used a different identifier near the beginning of the prompt to isolate its cache entries. The four Workspace B requests started without the seed turn in the earlier 18-request benchmark. Each matched pair had identical prompt lengths and returned the expected tags.
 
-The pinned shared-MMA native cache planner also ran both schedules on the host, using its actual checkpoint selection and page reference counts with mock GPU storage. The four B requests required 221,513 prompt rows with direct submission and 68,964 including the primer. Direct submission missed on all four branches because its first checkpoints fell beyond the fork. Each primed branch restored 51,200 tokens. The native chat and tokenization handlers produced byte-identical token IDs to the four primed planner inputs. The ticket workload required 78,215 rows directly and 42,187 with the primer. Native GPU wall time remains unmeasured for both batches.
+On native shared-MMA, the direct requests missed all four times because their checkpoints fell beyond the fork. Priming took 34.21 s, then each question reused 51,200 tokens and finished in 2.81–3.61 s. The two batches processed 221,513 and 68,964 uncached prompt tokens respectively, including the primer. These counts matched the pinned native cache planner's host-side results. The native request counter recorded exactly four requests for direct submission and five for priming plus submission.
+
+On durable Python, the ordinary batches found the shared prefix on their third and fourth questions. With priming, all four ticket questions reused 13,120 tokens and all four Workspace B questions reused 52,224. Prefix discovery and priming took 26.49 s on Workspace B. For tickets, a separate host-side run of the native cache planner with mock GPU storage reduced uncached prompt rows from 78,215 to 42,187. The ticket wall times in the table were measured on Python.
 
 ### Python serving kit
 
