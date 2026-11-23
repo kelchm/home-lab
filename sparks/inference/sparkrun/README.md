@@ -51,6 +51,28 @@ Both profiles completed all eight tool turns with the expected call arguments an
 
 The candidate drained before both ranks stopped. The original Python profile passed readiness again with its full pool and active spill tier. Replaying the 111,952-token prompt returned the expected marker after one disk load of 111,936 tokens, which the response also reported as cached. Time to first token was 0.47 s. The pinned candidate image stays staged on both Sparks for repeat measurements.
 
+#### November 22 follow-up tuning
+
+The tuning trial used the same TensorFold 1.3.0 image and weights. Each native arm had one boot with four streams, FP8 KV and a 1M context cap. The stock measurement comes from the preceding comparison. First the head changed from BF16 to q8. The next arm also changed the dense weights from q8 to q4. Each decode arm ran the same 15 requests, with three one-stream and three four-stream cohorts and 768 generated tokens per request.
+
+| Dense weights / head | One stream | Four streams aggregate | Natural-text NLL |
+| --- | ---: | ---: | ---: |
+| q8 / BF16, stock | 53.7 tok/s | 92.7 tok/s | — |
+| q8 / q8 | 53.8 tok/s | 91.5 tok/s | 1.8342 |
+| q4 / q8 | 62.9 tok/s | 99.2 tok/s | 1.8618 |
+
+The q4 move increased throughput by 16.7% at one stream and 8.4% at four, with the head held constant. On the same 29,281 scored natural-text tokens, NLL rose 1.5%. This is a model-likelihood measurement on one document sample.
+
+With q4/q8 retained, the `TF_GLM_COPIES=1` verified root/context copy policy raised median end-to-end throughput from 108.5 to 112.7 tok/s on the retained file-edit-and-re-emit fixture. All three paired responses generated 1,024 tokens and matched output token hashes. Verification rounds fell from 55–56 to 51–52.
+
+With copies enabled, `TF_GLM_REQUEST_STARTS=1` caches the state at message starts. The client sent the same five fixed Pi-style histories with max reasoning and a 48-token thinking budget. The first history was cold at 111,655 tokens. Median time to first token on the four warm follow-ups fell from 1.31 s to 0.65 s. Cached input increased from 110,592 to 111,604–111,977 tokens. The single cold sample rose from 79.01 s to 87.25 s. Both arms returned all five expected markers and separately passed a max-effort Pi smoke test with a real `read` call.
+
+Adding `TF_GLM_KV_SHARD=1` to that profile initialized two partitions of 4,096 pages and 512 positions per page. The nominal pool grew from 3,165,184 to 4,194,304 positions. Live health showed both partitions in use during concurrent decode. The sharded arm returned all five long-history markers and passed the Pi smoke test. Its warm median was 0.65 s and its cold sample was 86.80 s. The capacity figure comes from the allocated page pools. The trial exercised four-stream decode and one long history at a time.
+
+The full combination delivered 60.1 tok/s at one stream and 97.0 aggregate at four on the same 15 decode requests. That is 11.9% and 4.7% above stock native and below the earlier Python baseline of 67.4 and 117.2 tok/s. The decode comparison from q4/q8 to the full combination includes copies, message starts and sharding together. The paired message-start and sharding arms isolate their effects on the long-history fixture.
+
+After the last arm drained, the original durable Python profile passed readiness on both ranks with its 2,582,528-token pool and 64 GiB spill tier. Replaying the 111,952-token prompt returned the expected marker and recorded one disk load of 111,936 tokens, with a 0.50 s time to first token.
+
 ### Python serving kit
 
 `mia-tensorfold-glm53-exl3-tp2/` holds the profile for [Mia's two-Spark GLM kit](https://github.com/MiaAI-Lab/GLM-5.3-Flash-EXL3-2x-DGX-Sparks-TensorFold): TensorFold 0.6.0's Python CUDA engine with Mia's patches, serving Mia's 4 bpw EXL3 checkpoint across both Sparks. The kit's `main` at `3fd60dfc` replaced its v1.10 release after [#941's comparison on October 22](https://github.com/kelchm/home-lab/issues/941#issuecomment-6334247435), in which the same 48 requests gave identical replies on both, and decode and prefill were within about 3% of v1.10's. `bf5f9452` replaced `3fd60dfc` on October 25 and passed [a trial on October 27](https://github.com/kelchm/home-lab/issues/938#issuecomment-6448276787). `bf5f9452` has served day to day since [October 28](https://github.com/kelchm/home-lab/issues/938#issuecomment-6458998037); GLM had last served day to day on October 8, on v1.10.
