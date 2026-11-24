@@ -19,7 +19,7 @@ spec:
           app:
             image:
               repository: ghcr.io/usetrmnl/larapaper
-              tag: 0.48.0@sha256:a69335618acd95268b68fb5223b5b9fb99ac5e54a7cffe8b9fd93a8f627a64d7
+              tag: 0.49.0@sha256:583736516b288a67b8e169cd0106f9d44c098b5f76d01d59417aec89267bd94c
             env:
               TZ: America/New_York
               APP_URL: https://larapaper.home.kelch.io
