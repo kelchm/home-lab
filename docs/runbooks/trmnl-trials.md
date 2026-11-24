@@ -163,6 +163,8 @@ Before normal traffic resumes, suspend the affected trial's HelmRelease and scal
 
 Once a trial has accepted writes on PostgreSQL 19, the 18 claim contains the state at the final dump. Preserve the newer claim and get a decision on how to recover those writes before reverting. If rebuilding from a logical backup on a fresh 19 claim, verify the restored data before writing the `.trmnl-pg19-restored` marker.
 
+The retained PostgreSQL 18 claims are [exempt from recurring backups](longhorn-backup-restore.md#group-membership-and-opt-out). When returning one to service, remove its `recurring-job-group.longhorn.io/no-backup` PVC label, keep `recurring-job.longhorn.io/source`, and verify the Longhorn volume has rejoined `default` and completes a backup.
+
 ## Verification record
 
 The initial eight-server deployment was adopted by Flux on 2026-11-01 at `f8687927e4f648ae818ce9b9f035a2dcda676d0b`. All eight releases and private routes were healthy. Synthetic device setup/display/image requests succeeded through HTTPS for Terminus and Inker (800×480 PNG) and the four subsequently retired experimental servers (800×480 BMP). Those results established basic protocol and rendering behavior, rather than project maturity or physical-board compatibility.

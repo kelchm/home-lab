@@ -49,6 +49,12 @@ spec:
         enabled: true
       prometheusRules:
         enabled: true
+        overrides:
+          KaniopK8sApiErrors:
+            # Keep a single burst from satisfying the chart's five-minute hold.
+            expr: sum(increase(kaniop_kubernetes_client_http_requests_total{status=~"5..|403|429"}[5m])) > 2
+            annotations:
+              description: Kubernetes API errors (5xx, 403, or 429) exceeded two in a rolling five-minute window for at least five minutes.
       dashboards:
         enabled: true
         annotations:

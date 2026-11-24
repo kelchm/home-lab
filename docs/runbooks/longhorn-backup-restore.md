@@ -46,7 +46,7 @@ Cron is evaluated in UTC, so the America/New_York wall time shifts an hour acros
 
 ## Group membership and opt-out
 
-**Policy: backed up unless the manifest says otherwise.** Longhorn's `default` group is implicit — a Longhorn `Volume` carrying no recurring-job labels has `recurring-job-group.longhorn.io/default: enabled` added for it, so a PVC that says nothing is backed up. Keep it that way. Omission failing towards a backup costs NAS capacity; omission failing towards no backup costs data. Only volumes whose contents are regenerable should opt out, except for the explicit owner-accepted scrobl exception below. Exclusions belong in their own manifest so they are reviewable in the diff.
+**Policy: use recurring backups by default.** Longhorn adds `recurring-job-group.longhorn.io/default: enabled` to a volume with no recurring-job labels, so a PVC that says nothing is backed up. Opt-outs are limited to regenerable data and the owner-approved exceptions below. Declare exclusions in the claim manifest for managed PVCs. Record exemptions for retained claims in this table and apply the labels to those PVCs directly.
 
 Currently excluded:
 
@@ -55,6 +55,7 @@ Currently excluded:
 | `ai/lemon-manuals-mcp` `search` (100 GiB) | SQLite FTS index built lazily from the read-only `lemon-manuals-k8s-prod` NFS share |
 | `personal/photon` `data` (50 GiB) | Photon's US geocoding index, downloaded from the photon-docker mirror on start and every 30 days |
 | `ai/scrobl` `data` (1 GiB; prepared deployment) | Owner-accepted exception: normally detached outside the nightly sync, with detached-volume backups intentionally disabled. History can be fetched again, but `removed` cannot. Revisit when `serve` keeps the claim attached; see [scrobl](scrobl.md). |
+| `trmnl-trials` `byos-next` and `terminus-database` | Owner-approved exception for the retained PostgreSQL 18 rollback claims. The last completed backups predate the cutover. Restore recurring backups if either claim returns to service. See [PostgreSQL 19 cutover](trmnl-trials.md#postgresql-19-cutover). |
 
 ### How to opt a volume out
 
