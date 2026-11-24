@@ -1,7 +1,41 @@
 rule_files:
   - rules.yaml
+  - node-link-rules.yaml
 evaluation_interval: 1m
 tests:
+  - name: A degraded node link keeps its hold across an exporter rollout
+    interval: 1m
+    input_series:
+      - series: node_network_speed_bytes{cluster="k8s-prod",instance="k8s-prod-1",job="node-exporter",platform="k8s",device="eno1",pod="old"}
+        values: 12500000x2 stale
+      - series: node_network_speed_bytes{cluster="k8s-prod",instance="k8s-prod-1",job="node-exporter",platform="k8s",device="eno1",pod="new"}
+        values: _ _ 12500000x8
+      - series: node_network_speed_bytes{cluster="k8s-prod",instance="k8s-prod-1",job="node-exporter",platform="k8s",device="enp6s0",pod="new"}
+        values: _ _ 312500000x8
+      - series: node_uname_info{cluster="k8s-prod",instance="k8s-prod-1",job="node-exporter",nodename="k8s-prod-1",pod="old"}
+        values: 1x2 stale
+      - series: node_uname_info{cluster="k8s-prod",instance="k8s-prod-1",job="node-exporter",nodename="k8s-prod-1",pod="new"}
+        values: _ _ 1x8
+    alert_rule_test:
+      - eval_time: 4m
+        alertname: NodeLinkSpeedDegraded
+        exp_alerts: []
+      - eval_time: 5m
+        alertname: NodeLinkSpeedDegraded
+        exp_alerts:
+          - exp_labels:
+              cluster: k8s-prod
+              instance: k8s-prod-1
+              job: node-exporter
+              platform: k8s
+              device: eno1
+              expected_mbps: "1000"
+              nodename: k8s-prod-1
+              severity: warning
+            exp_annotations:
+              summary: Node k8s-prod-1 physical link is below its expected speed
+              description: Interface eno1 on k8s-prod-1 negotiated at 100 Mb/s; expected 1000 Mb/s. Check the cable, keystone, patch lead, switch port, and port profile.
+
   - name: A host out-of-memory kill on a Spark or a Pi alerts for 15 minutes; cluster nodes are left to Kubernetes
     interval: 1m
     input_series:
