@@ -139,3 +139,7 @@ Moving the shared expert ahead of routed expert work reduced time per layer for 
 Both Sparks returned to the original production image with the 2,582,528-token pool and 64 GiB disk spill. Replaying a 111,952-token prompt restored 111,936 tokens from disk and returned the expected marker in 0.49 s to first token. SparkRun passed 354 tests and 34 subtests, with six skips. All eight dependency locks and fifteen recipes validated.
 
 The Spark head holds the client streams, request hashes, per-turn metrics, code checks and matched-width trace summary in `~/sparkrun/results/zig-equivalent-wg1omxkn/timing-3ad27f5c5ffd.tar.gz`, SHA-256 `3ad27f5c5ffd2fc21232c2dc13074d7160f0a78dc900561e9355f8789c1bc565`. The raw Nsight captures are in the neighboring `zig-policy-trace` and `py-target-trace` directories.
+
+## Later TensorFold releases
+
+The two-Spark release comparison measures upstream TensorFold with Mia’s EXL3 weights and evaluates verification scheduling, expert kernels and prompt-cache settings with production-equivalent quantization. [November 23 release matrix](glm53-tf134-matrix.md)
