@@ -50,7 +50,7 @@ services:
   # the host does.
   apt-metrics:
     <<: *service
-    image: docker.io/library/ubuntu:24.04@sha256:9c7f200c07e3d4a03e7249d2c16bf66a51120fb876aa2242cf31451412543289
+    image: docker.io/library/ubuntu:24.04@sha256:562111b88caa79c71391c0c4d3c2114a7d5c35915c20561fd893cb1e07929e6b
     # Root without capabilities, to write the root-owned textfile volume.
     user: "0:0"
     entrypoint: ["/bin/sh", "/usr/local/bin/apt-metrics"]
@@ -71,7 +71,7 @@ services:
   # by hand if this service is retired.
   apt-list-refresh:
     <<: *service
-    image: docker.io/library/ubuntu:24.04@sha256:9c7f200c07e3d4a03e7249d2c16bf66a51120fb876aa2242cf31451412543289
+    image: docker.io/library/ubuntu:24.04@sha256:562111b88caa79c71391c0c4d3c2114a7d5c35915c20561fd893cb1e07929e6b
     user: "0:0"
     restart: "no"
     labels:
