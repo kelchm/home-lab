@@ -69,7 +69,7 @@ A problem that only affects what can be seen of a device is `info` when every no
 
 The bundled `RequestErrorsToAPI` and `TooManyLogs` are disabled. VictoriaMetrics counts every query a client cancels as an API error and logs it as a warning, so Grafana cancelling overlapping dashboard refreshes kept both firing most of the day: in an hour sampled on 2026-11-08, 628 of VMSingle's 634 warnings were cancelled Grafana queries. `TooManyErrorLogs`, `ServiceDown`, `TooManyRestarts`, `AlertingRulesError` and `RecordingRulesError` still notify for a failing component.
 
-`ServiceDown` uses the latest scrape within 75 seconds and keeps its two-minute hold. A retired pod's final failed scrape expires before it can trigger the alert. The [independent heartbeat](#independent-dead-man-heartbeat) covers losing the notification pipeline itself. Temperature rules match on the host and sensor so they still evaluate when samples from both exporter pods are visible during a rollout.
+`ServiceDown` uses the latest scrape within 75 seconds and keeps its two-minute hold. A retired pod's final failed scrape expires before it can trigger the alert. The [independent heartbeat](#independent-dead-man-heartbeat) covers losing the notification pipeline itself. Temperature and physical link rules use stable host, sensor, and interface labels so they still evaluate when samples from both exporter pods are visible during a rollout.
 
 ## Planned maintenance
 

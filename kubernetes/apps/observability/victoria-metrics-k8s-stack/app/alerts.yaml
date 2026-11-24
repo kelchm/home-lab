@@ -10,7 +10,8 @@
 # Scope the rule to those exact names so bridges, VLANs, veths, and Cilium
 # devices cannot generate false positives. node_uname_info adds the hostname;
 # node_network_speed_bytes itself only identifies the node-exporter instance.
-# Its cluster matcher keeps the lab's other hosts out of these rules.
+# Fold overlapping exporters by node and interface to keep one alert across a
+# pod replacement. The lowest reported speed preserves evidence of a slow link.
 apiVersion: monitoring.coreos.com/v1
 kind: PrometheusRule
 metadata:
@@ -24,18 +25,21 @@ spec:
       rules:
         - alert: NodeLinkSpeedDegraded
           expr: |
-            (
+            min by (cluster, instance, job, platform, device, expected_mbps) (
               label_replace(
-                node_network_speed_bytes{device="eno1"} * 8 / 1e6 < 1000,
+                node_network_speed_bytes{cluster="k8s-prod", job="node-exporter", device="eno1"} * 8 / 1e6 < 1000,
                 "expected_mbps", "1000", "", ".*"
               )
               or
               label_replace(
-                node_network_speed_bytes{device="enp6s0"} * 8 / 1e6 < 2500,
+                node_network_speed_bytes{cluster="k8s-prod", job="node-exporter", device="enp6s0"} * 8 / 1e6 < 2500,
                 "expected_mbps", "2500", "", ".*"
               )
             )
-            * on (instance) group_left (nodename) node_uname_info{cluster="k8s-prod"}
+            * on (cluster, instance, job) group_left (nodename)
+              group by (cluster, instance, job, nodename) (
+                node_uname_info{cluster="k8s-prod", job="node-exporter"}
+              )
           for: 5m
           labels:
             severity: warning

@@ -365,6 +365,13 @@ spec:
             "cluster_verb_scope_le:apiserver_request_sli_duration_seconds_bucket:increase30d":
               spec:
                 expr: sum((avg_over_time(cluster_verb_scope_le:apiserver_request_sli_duration_seconds_bucket:increase1h{evaluator=""}[30d]) * 24) * 30) by(cluster,verb,scope,le)
+        vm-health:
+          rules:
+            # A retired pod can leave one failed scrape when vmagent also rolls.
+            # Require a recent sample throughout the chart's two-minute hold.
+            ServiceDown:
+              spec:
+                expr: last_over_time(up{job=~".*(victoriametrics|vmselect|vminsert|vmstorage|vmagent|vmalert|vmsingle|vmalertmanager|vmauth).*"}[75s]) == 0
         # count:up0/count:up1 have no consumers, and count:up0 is empty while
         # every target is up, which keeps RecordingRulesNoData firing.
         kube-prometheus-general.rules:
@@ -379,11 +386,6 @@ spec:
         KubeClientCertificateExpiration:
           spec:
             for: 1h
-        # A retired pod can leave one failed scrape when vmagent also rolls.
-        # Require a recent sample throughout the chart's two-minute hold.
-        ServiceDown:
-          spec:
-            expr: last_over_time(up{job=~".*(victoriametrics|vmselect|vminsert|vmstorage|vmagent|vmalert|vmsingle|vmalertmanager|vmauth).*"}[75s]) == 0
         # VictoriaMetrics counts every query a client cancels as an API error
         # and logs it as a warning, so overlapping Grafana refreshes kept both
         # firing most of the day. TooManyErrorLogs, ServiceDown,
