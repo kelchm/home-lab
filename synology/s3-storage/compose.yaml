@@ -38,7 +38,7 @@ services:
     restart: unless-stopped
 
   traefik:
-    image: docker.io/library/traefik:v3.7.19@sha256:a6c0194dda77bcb804824580f36fa7edc56e315b1acfe933366c8b52844a78a4
+    image: docker.io/library/traefik:v3.7.20@sha256:f454571dee2afa1fc77287d811e92ce3c4353e82802116b0622a3665322b63aa
     user: "0:0"
     read_only: true
     command:
