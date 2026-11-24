@@ -125,19 +125,22 @@ spec:
             summary: '{{ $labels.instance }} is nearly out of memory, with {{ $value | humanize1024 }}B available'
             description: 'Available memory on {{ $labels.instance }} has been under 1.25 GiB for two minutes. Restart the model now, with the clean stop in sparks/inference/sparkrun/README.md if the engine still answers, before an allocation fails or the Spark freezes.'
 
-        # Headroom to the drive's own warning temperature, above which it throttles.
+        # Filter with a set match so overlapping exporter pods cannot break
+        # evaluation. Alert once per physical drive using the least headroom.
         - alert: NodeNVMeCompositeTemperatureCritical
           expr: |
-            (
-              node_hwmon_temp_max_celsius{job=~"node-exporter|(pve|spark)-node"}
-              - node_hwmon_temp_celsius{job=~"node-exporter|(pve|spark)-node"}
-            )
-            * on (instance, chip, sensor) group_left (label)
-              node_hwmon_sensor_label{job=~"node-exporter|(pve|spark)-node", label="Composite"}
-            < 5
+            min by (cluster, instance, job, platform, chip, sensor) (
+              (
+                node_hwmon_temp_max_celsius{job=~"node-exporter|(pve|spark)-node"}
+                - node_hwmon_temp_celsius{job=~"node-exporter|(pve|spark)-node"}
+              )
+              and on (cluster, instance, job, chip, sensor)
+                node_hwmon_sensor_label{job=~"node-exporter|(pve|spark)-node", label="Composite"}
+            ) < 5
           for: 5m
           labels:
             severity: critical
+            label: Composite
           annotations:
             summary: NVMe on {{ $labels.instance }} is {{ printf "%.0f" $value }} C from its warning temperature
             description: 'The NVMe drive on {{ $labels.instance }} has been within 5 C of its own warning temperature for five minutes. Above it, the drive throttles and raises a SMART warning. Check airflow around the drive.'
@@ -158,15 +161,15 @@ spec:
           expr: |
             min by (cluster, instance, job, platform) (
               (node_hwmon_temp_crit_celsius{job="pve-node"} - node_hwmon_temp_celsius{job="pve-node"})
-              * on (instance, chip, sensor) group_left
+              and on (cluster, instance, job, chip, sensor)
                 node_hwmon_sensor_label{job="pve-node", label="Package id 0"}
               or
               (95 - node_hwmon_temp_celsius{job="node-exporter"})
-              * on (instance, chip, sensor) group_left
+              and on (cluster, instance, job, chip, sensor)
                 node_hwmon_sensor_label{job="node-exporter", label=~"Tctl|edge"}
               or
               (85 - node_hwmon_temp_celsius{job="pi-node"})
-              * on (instance, chip) group_left
+              and on (cluster, instance, job, chip)
                 node_hwmon_chip_names{job="pi-node", chip_name="cpu_thermal"}
             ) < 5
           for: 5m

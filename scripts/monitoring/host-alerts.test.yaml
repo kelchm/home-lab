@@ -66,6 +66,9 @@ tests:
         values: 91x30
       - series: node_hwmon_sensor_label{instance="k8s-prod-1",platform="k8s",job="node-exporter",cluster="k8s-prod",chip="pci0000:00_0000:00:18_3",sensor="temp1",label="Tctl"}
         values: 1x30
+      # Metadata from a previous exporter pod overlaps the replacement.
+      - series: node_hwmon_sensor_label{instance="k8s-prod-1",platform="k8s",job="node-exporter",cluster="k8s-prod",chip="pci0000:00_0000:00:18_3",sensor="temp1",label="Tctl",pod="node-exporter-old"}
+        values: 1x30
       - series: node_hwmon_temp_celsius{instance="k8s-prod-2",platform="k8s",job="node-exporter",cluster="k8s-prod",chip="pci0000:00_0000:00:18_3",sensor="temp1"}
         values: 80x30
       - series: node_hwmon_sensor_label{instance="k8s-prod-2",platform="k8s",job="node-exporter",cluster="k8s-prod",chip="pci0000:00_0000:00:18_3",sensor="temp1",label="Tctl"}
@@ -146,6 +149,13 @@ tests:
       - series: node_hwmon_temp_max_celsius{instance="k8s-prod-1",platform="k8s",job="node-exporter",cluster="k8s-prod",chip="nvme_nvme0",sensor="temp1"}
         values: 83.85x30
       - series: node_hwmon_sensor_label{instance="k8s-prod-1",platform="k8s",job="node-exporter",cluster="k8s-prod",chip="nvme_nvme0",sensor="temp1",label="Composite"}
+        values: 1x30
+      # Overlapping pods still produce one alert for the hottest reading.
+      - series: node_hwmon_temp_celsius{instance="k8s-prod-1",platform="k8s",job="node-exporter",cluster="k8s-prod",chip="nvme_nvme0",sensor="temp1",pod="node-exporter-old"}
+        values: 79x30
+      - series: node_hwmon_temp_max_celsius{instance="k8s-prod-1",platform="k8s",job="node-exporter",cluster="k8s-prod",chip="nvme_nvme0",sensor="temp1",pod="node-exporter-old"}
+        values: 83.85x30
+      - series: node_hwmon_sensor_label{instance="k8s-prod-1",platform="k8s",job="node-exporter",cluster="k8s-prod",chip="nvme_nvme0",sensor="temp1",label="Composite",pod="node-exporter-old"}
         values: 1x30
       - series: node_hwmon_temp_celsius{instance="spark-1",platform="spark",job="spark-node",chip="nvme_nvme0",sensor="temp1"}
         values: 76x30
