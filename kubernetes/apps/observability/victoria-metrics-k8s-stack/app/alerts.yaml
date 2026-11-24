@@ -63,12 +63,14 @@ spec:
       rules:
         - alert: NodeCPUTemperatureSensorMissing
           expr: |
-            node_uname_info{cluster="k8s-prod"}
-            unless on (instance)
+            group by (cluster, instance, job, nodename, platform) (
+              node_uname_info{cluster="k8s-prod", job="node-exporter"}
+            )
+            unless on (cluster, instance, job)
             (
-              node_hwmon_temp_celsius
-              * on (instance, chip, sensor) group_left (label)
-                node_hwmon_sensor_label{label="Tctl"}
+              node_hwmon_temp_celsius{cluster="k8s-prod", job="node-exporter"}
+              and on (cluster, instance, job, chip, sensor)
+                node_hwmon_sensor_label{cluster="k8s-prod", job="node-exporter", label="Tctl"}
             )
           for: 15m
           labels:
@@ -81,12 +83,17 @@ spec:
 
         - alert: NodeNVMeTemperatureSensorMissing
           expr: |
-            node_uname_info{cluster="k8s-prod"}
-            unless on (instance)
+            group by (cluster, instance, job, nodename, platform) (
+              node_uname_info{cluster="k8s-prod", job="node-exporter"}
+            )
+            unless on (cluster, instance, job)
             (
-              (node_hwmon_temp_max_celsius - node_hwmon_temp_celsius)
-              * on (instance, chip, sensor) group_left (label)
-                node_hwmon_sensor_label{label="Composite"}
+              (
+                node_hwmon_temp_max_celsius{cluster="k8s-prod", job="node-exporter"}
+                - node_hwmon_temp_celsius{cluster="k8s-prod", job="node-exporter"}
+              )
+              and on (cluster, instance, job, chip, sensor)
+                node_hwmon_sensor_label{cluster="k8s-prod", job="node-exporter", label="Composite"}
             )
           for: 15m
           labels:
