@@ -175,6 +175,7 @@ Settings → Networks → Network Lists. Each list's description records what th
 | NetBird Routers | IPv4 | `10.32.19.103`, `10.32.19.104` |
 | Thermostats | IPv4 | `10.32.90.30-10.32.90.33` |
 | Bambu Printers | IPv4 | `10.32.90.50`, `10.32.90.51` |
+| Ritornel Streamers | IPv4 | `10.32.90.60` |
 | Thingino Cameras | IPv4 | `10.32.5.30`, `10.32.5.31` |
 | Visionect | IPv4 | `10.32.150.30` |
 | Admin Ingress | IPv4 | `10.32.130.1` |
@@ -187,9 +188,10 @@ Settings → Networks → Network Lists. Each list's description records what th
 | Home Assistant Web | Port | 8123 |
 | Visionect Device Protocol | Port | 11113 |
 | Bambu LAN Mode | Port | 8883, 990, 322, 6000, 2024-2026, 50000-50100 |
+| Ritornel Hub | Port | 4747 |
 | Thingino Update Hosts | Domain | `github.com`, `raw.githubusercontent.com`, `release-assets.githubusercontent.com` |
 
-The Home Assistant, Hyperion and Visionect Test Display reservations were added on 2026-11-08 at their existing addresses. Hyperion's reservation is tied to a private Wi-Fi address, so that network's private-address setting must stay fixed. No client groups are used; the five unused ones were deleted.
+The Home Assistant, Hyperion and Visionect Test Display reservations were added on 2026-11-08 at their existing addresses. Hyperion's reservation is tied to a private Wi-Fi address, so that network's private-address setting must stay fixed. The `Ritornel Streamers` reservation at `10.32.90.60` was added on 2026-11-24 below the IoT dynamic pool (`.100–.254`). No client groups are used; the five unused ones were deleted.
 
 ### Untrusted zone
 
@@ -202,6 +204,7 @@ The Home Assistant, Hyperion and Visionect Test Display reservations were added 
 | `IoT to Home Assistant` | Untrusted; network IoT | Internal; list Home Assistant | Home Assistant Web | Allow; generated return |
 | `IoT to Visionect` | Untrusted; network IoT | Internal; list Visionect | Visionect Device Protocol | Allow; generated return |
 | `Visionect Test Display to Lab Server` | Untrusted; list Visionect Test Display | Internal; list Hyperion | Visionect Device Protocol | Allow; generated return |
+| `Ritornel Streamers to Hub` | Untrusted; list Ritornel Streamers | Internal; list Hyperion | Ritornel Hub | Allow; generated return |
 | `IoT to Visionect Routed` | Untrusted; network IoT | External; list Visionect | Visionect Device Protocol | Allow |
 | `Untrusted to Service Pools` | Untrusted; any | External; list Service Pools | any | Block; new only; logged |
 | `Thingino Cameras to Updates` | Untrusted; list Thingino Cameras | External; list Thingino Update Hosts | HTTPS | Allow; logged |
@@ -209,6 +212,8 @@ The Home Assistant, Hyperion and Visionect Test Display reservations were added 
 Visionect is permitted in both the Internal and External destination cells because the routed address has matched both, depending on the path. Cilium still restricts Bambuddy's pod-level access; the gateway sees the node addresses.
 
 `Visionect Test Display to Lab Server` is temporary. It lets a reverse-engineering test display reach the capture proxy and lab Visionect server on Hyperion; it lost the unused TCP 11199 on 2026-11-08. How devices reach development workstations is an open question in #348.
+
+`Ritornel Streamers to Hub` was added on 2026-11-24 in UniFi Network 11.0.104 so IoT audio streamers can pull FLAC streams and cover art from the Ritornel hub on Hyperion over TCP 4747. A Network backup and before/after JSON snapshots verified that only the new lists, the Hyperion list description, the rule and its generated return changed. When the hub moves off Hyperion, update the rule's destination to a dedicated hub list outside Infra Mgmt and Storage.
 
 ### Gateway access
 
