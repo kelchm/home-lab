@@ -10,6 +10,8 @@ from concurrent.futures import ThreadPoolExecutor
 from contextlib import contextmanager
 import json
 from pathlib import Path
+import re
+import shlex
 import socket
 import subprocess
 import threading
@@ -17,6 +19,12 @@ import time
 import urllib.request
 
 from tokenizers import Tokenizer
+
+CONTAINER_ID_RE = re.compile(r"^[0-9a-f]{12,64}$")
+
+
+class LowMemoryEmergency(RuntimeError):
+    """Confirmed sustained low memory that warrants stopping captured rank containers."""
 
 
 class Campaign:
@@ -31,8 +39,70 @@ class Campaign:
         self.finished = threading.Event()
         self.minimum = {}
         self.failures = []
+        self.rank_containers = {}
         self.lock = threading.Lock()
         self.memory = threading.Thread(target=self.monitor, daemon=True)
+
+    def _record_failure(self, message):
+        with self.lock:
+            self.failures.append(message)
+
+    def _docker_cmd(self, host, args):
+        if host == "head":
+            return ["docker", *args]
+        return ["ssh", "-o", "BatchMode=yes", "-o", "ConnectTimeout=5", host, shlex.join(["docker", *args])]
+
+    def _identify_rank(self, host, rank):
+        cmd = self._docker_cmd(host, [
+            "ps", "--no-trunc", "-q",
+            "--filter", "status=running",
+            "--filter", f"label=sparkrun.recipe={self.args.recipe}",
+            "--filter", f"label=sparkrun.rank={rank}",
+        ])
+        try:
+            raw = subprocess.check_output(cmd, text=True, stderr=subprocess.PIPE, timeout=10)
+        except Exception as error:
+            detail = getattr(error, "stderr", "") or str(error)
+            raise RuntimeError(f"Failed to identify rank {rank} container on {host}: {detail.strip()}") from error
+        ids = [line.strip() for line in raw.splitlines() if line.strip()]
+        if not ids:
+            raise RuntimeError(
+                f"Could not identify rank {rank} container on {host} for recipe {self.args.recipe}: "
+                "no running container matched"
+            )
+        if len(ids) > 1:
+            raise RuntimeError(
+                f"Ambiguous rank {rank} container on {host} for recipe {self.args.recipe}: "
+                f"matched {len(ids)} containers ({', '.join(ids)})"
+            )
+        container_id = ids[0]
+        if not CONTAINER_ID_RE.fullmatch(container_id):
+            raise RuntimeError(f"Invalid rank {rank} container ID on {host}: {container_id!r}")
+        return container_id
+
+    def identify_ranks(self):
+        return {
+            ("head", 0): self._identify_rank("head", 0),
+            (self.args.worker, 1): self._identify_rank(self.args.worker, 1),
+        }
+
+    def emergency_stop_ranks(self):
+        if not self.rank_containers:
+            self._record_failure("Emergency stop skipped: no rank container IDs were captured")
+            return
+        for (host, rank), container_id in self.rank_containers.items():
+            cmd = self._docker_cmd(host, ["stop", container_id])
+            try:
+                result = subprocess.run(cmd, capture_output=True, text=True, timeout=30, check=False)
+                if result.returncode != 0:
+                    detail = (result.stderr or result.stdout or f"exit {result.returncode}").strip()
+                    self._record_failure(
+                        f"Emergency stop failed for rank {rank} ({container_id}) on {host}: {detail}"
+                    )
+            except Exception as error:
+                self._record_failure(
+                    f"Emergency stop failed for rank {rank} ({container_id}) on {host}: {error}"
+                )
 
     def monitor(self):
         low = {}
@@ -63,13 +133,17 @@ class Campaign:
                             raise RuntimeError(f"{host} management link changed: {link}")
                     low[host] = low.get(host, 0) + 1 if gib < 2 else 0
                     if low[host] >= 3:
-                        raise RuntimeError(f"{host} MemAvailable below 2 GiB for three samples")
-                except Exception as error:
-                    self.failures.append(f"Campaign monitoring failed: {error}")
+                        raise LowMemoryEmergency(f"{host} MemAvailable below 2 GiB for three samples")
+                except LowMemoryEmergency as error:
+                    self._record_failure(f"Campaign monitoring failed: {error}")
                     self.cancel.set()
-                    # Evaluation abort only; never replace a stack or launch a watchdog.
-                    subprocess.run(["sparkrun", "stop", self.args.recipe, "--cluster", "sparks"],
-                                   timeout=120, check=False)
+                    # Confirmed low-memory emergency teardown only; target captured rank IDs directly.
+                    self.emergency_stop_ranks()
+                    return
+                except Exception as error:
+                    self._record_failure(f"Campaign monitoring failed: {error}")
+                    self.cancel.set()
+                    # Non-memory telemetry, parsing, or link failures abort load but leave the ready service running.
                     return
             self.finished.wait(5)
 
@@ -166,7 +240,8 @@ class Campaign:
         if self.cancel.is_set():
             # Socket shutdown can surface as EOF or a transport error. Preserve one
             # cancellation outcome and the already-parsed content in either case.
-            reason = self.failures[-1] if self.failures else "cancellation requested"
+            with self.lock:
+                reason = self.failures[-1] if self.failures else "cancellation requested"
             stream_error = RuntimeError("Campaign aborted: " + reason)
         ended = time.monotonic()
         text = "".join(chunks)
@@ -216,6 +291,7 @@ class Campaign:
         return rows
 
     def run(self):
+        self.rank_containers = self.identify_ranks()
         self.memory.start()
         try:
             # Fixed salts/marker make payloads identical between engines and paired boots.
@@ -270,9 +346,11 @@ class Campaign:
                 self.phase("c1-near-850k", [near], retrieval, 64, self.args.marker)
         finally:
             self.finished.set()
-            self.memory.join(timeout=15)
-            if self.failures:
-                raise RuntimeError("; ".join(self.failures))
+            self.memory.join(timeout=90)
+            with self.lock:
+                failures = list(self.failures)
+            if failures:
+                raise RuntimeError("; ".join(failures))
 
 
 def main():
