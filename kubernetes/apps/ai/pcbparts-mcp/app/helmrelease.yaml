@@ -1,7 +1,6 @@
 ---
-# In-cluster HTTP MCP server. MCPHub uses http://pcbparts.dev/mcp through its
-# pod-only alias to this Service. No Gateway. The original internal endpoint
-# http://pcbparts-mcp.ai.svc.cluster.local:8080/mcp remains available.
+# In-cluster HTTP MCP server for MCPHub at
+# http://pcbparts-mcp.ai.svc.cluster.local:8080/mcp.
 #
 # Read-only component search: keyless JLCPCB in-stock DB + EasyEDA footprint
 # checks. Complements digikey-mcp with JLCPCB/LCSC pricing and assembly stock.
@@ -34,10 +33,9 @@ spec:
               CALL_LOG_DIR: ""
               LOG_PATH: ""
               DISTRIBUTOR_STORE_PATH: ""
-              # MCPHub resolves pcbparts.dev to this private Service so short PDF
-              # links use upstream's public resolver. Keep the internal name too.
-              # Temporary workaround and removal trigger: ../../mcphub/README.md.
-              MCP_ALLOWED_HOSTS: pcbparts-mcp.ai.svc.cluster.local,pcbparts.dev
+              MCP_ALLOWED_HOSTS: pcbparts-mcp.ai.svc.cluster.local
+              # Clients fetch PDFs from the upstream resolver.
+              DATASHEET_LINK_BASE: https://pcbparts.dev
               # Light up the DigiKey cross-reference tools by reusing the
               # existing digikey-mcp client-credentials (2-legged, no refresh
               # token).
@@ -88,13 +86,7 @@ spec:
     service:
       app:
         controller: pcbparts-mcp
-        # Coupled to MCPHub's pod-only hostAliases; reserve the existing IP so
-        # a recreated Service cannot silently move. See ../../mcphub/README.md.
-        clusterIP: 10.43.125.172
         ports:
           http:
             primary: true
             port: *port
-          http-alias:
-            port: 80
-            targetPort: *port
