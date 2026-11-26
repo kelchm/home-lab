@@ -855,7 +855,7 @@ jobs:
         run: actionlint
 
       - name: Validate Renovate configuration and workflow image updates
-        uses: docker://ghcr.io/renovatebot/renovate:44.181.5@sha256:611eac05a6ee11c06d23157ae2ca11364f5b4a096c12d7f82a65aec2b6ec8a48
+        uses: docker://ghcr.io/renovatebot/renovate:45.0.2@sha256:87835d4961b543ed5d88656fae463c374db18835c0eb107a81de91dae22d46c4
         with:
           entrypoint: bash
           args: >-
