@@ -28,6 +28,9 @@ spec:
               # Every client arrives from the single MCPHub pod IP, so the
               # per-IP limiter is one global bucket; raise it from the default.
               RATE_LIMIT_REQUESTS: "500"
+              # All callers share the distributor quota through MCPHub.
+              # Preserve the previous default of 1,000 live lookups per UTC day.
+              DISTRIBUTOR_DAILY_PER_ADDRESS: "1000"
               # Keep call diagnostics off, application logs on stdout, and
               # distributor lookups cached only in memory.
               CALL_LOG_DIR: ""
