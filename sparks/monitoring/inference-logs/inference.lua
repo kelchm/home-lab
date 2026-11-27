@@ -12,6 +12,11 @@ local function seconds(v)
   if n and n >= 0 then return n end
 end
 
+-- Native Zig `loop=period:<n>` marker when repetition detection fires.
+local function loop_period(v)
+  return v:match('^period:(%d+)$')
+end
+
 -- Fields of a `done` line by the key the engines print, and how to read the
 -- ones that need it. VictoriaLogs stores every value as text, so the rest are
 -- kept as printed.
@@ -22,6 +27,7 @@ local DONE = {
   thinking = { 'inference.thinking', string.lower },
   effort = { 'inference.effort' },
   finish = { 'inference.finish' },
+  loop = { 'inference.loop_period', loop_period },
   rounds = { 'inference.spec.rounds' },
   preemptions = { 'inference.preemptions' },
   queued = { 'inference.queue_s', seconds },
@@ -34,7 +40,12 @@ local DONE = {
 
 -- Requests that poll the server: a successful one is dropped, because metrics
 -- already show the polling.
-local POLLED = { ['/metrics'] = true, ['/health'] = true, ['/stats'] = true }
+local POLLED = { ['/metrics'] = true, ['/v1/metrics'] = true, ['/health'] = true, ['/stats'] = true, ['/v1/load'] = true }
+
+-- Native Zig TensorFold optionally prepends a UTC timestamp (`TENSORFOLD_LOG_TIME=1`).
+local function strip_timestamp(line)
+  return (line:gsub('^%d%d%d%d%-%d%d%-%d%dT%d%d:%d%d:%d%d%.%d+Z ', '', 1))
+end
 
 local function done(attributes, rest)
   -- Whole keys only: `draft_tokens=` is not `tokens=`.
@@ -49,15 +60,61 @@ local function done(attributes, rest)
   attributes['inference.spec.accepted'], attributes['inference.spec.drafted'] = rest:match(' accepted=(%d+)/(%d+)')
 end
 
+-- Native Zig engine std.log lines for thermal gating (`heat_wait_s`) and disk
+-- prompt-cache activity (`imprint:` / `imprint verify:`).
+local function engine_event(attributes, line)
+  local wait = line:match('^info: heat_wait_s (%d+%.?%d*)$')
+  if wait then
+    attributes['event.name'] = 'inference.heat_wait'
+    attributes['inference.heat_wait_s'] = tonumber(wait)
+    return
+  end
+  local tokens, mib, ms = line:match('^info: imprint: (%d+) tokens on disk: %d+ new blocks and its own %d+ MiB %((%d+) MiB this state, %d+ MiB of rows it shares%) in (%d+) ms$')
+  if tokens then
+    attributes['event.name'] = 'inference.disk_cache.write'
+    attributes['inference.disk_cache.tokens'] = tokens
+    attributes['inference.disk_cache.mib'] = mib
+    attributes['inference.disk_cache.ms'] = ms
+    return
+  end
+  tokens, mib, ms = line:match('^info: imprint: read (%d+) tokens from disk %((%d+) MiB in (%d+) ms[,%a ]*%)$')
+  if tokens then
+    attributes['event.name'] = 'inference.disk_cache.read'
+    attributes['inference.disk_cache.tokens'] = tokens
+    attributes['inference.disk_cache.mib'] = mib
+    attributes['inference.disk_cache.ms'] = ms
+    return
+  end
+  local err
+  tokens, err = line:match('^error: imprint verify: (%d+) tokens read back differ or failed %((.-)%)$')
+  if tokens then
+    attributes['event.name'] = 'inference.disk_cache.verify_failed'
+    attributes['inference.disk_cache.tokens'] = tokens
+    attributes['error.type'] = err
+    return
+  end
+  tokens = line:match('^warning: prompt cache: imprint: writing (%d+) tokens failed %(VerifyFailed%);')
+  if tokens then
+    attributes['event.name'] = 'inference.disk_cache.verify_failed'
+    attributes['inference.disk_cache.tokens'] = tokens
+    attributes['error.type'] = 'VerifyFailed'
+  end
+end
+
 -- `[tensorfold] done <id> ... prompt=...`, `ended <id> reason=client-left ...`
 -- or `reason=error (Kind) ...`, `refused <id>: <message>`, and the Zig
--- server's access line. Lines without the engine's prefix, or that only start
--- with one of those words, keep just the common fields. Returns false for a
--- line to drop.
+-- server's access line, with an optional leading UTC timestamp when
+-- `TENSORFOLD_LOG_TIME=1` is set. Native Zig `heat_wait_s` and `imprint:`
+-- lines get their own event fields; all other lines keep just the common
+-- fields. Returns false for a line to drop.
 local function request(attributes, line)
   local tagged
+  line = strip_timestamp(line)
   line, tagged = line:gsub('^%[tensorfold%] ', '')
-  if tagged == 0 then return true end
+  if tagged == 0 then
+    engine_event(attributes, line)
+    return true
+  end
   local verb, id, rest = line:match('^(%a+) ([%w_.-]+)(.*)$')
   if verb == 'done' and rest:find(' prompt=%d') then
     attributes['event.name'] = 'inference.request.done'

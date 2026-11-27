@@ -1083,6 +1083,126 @@
    "expect": []
   },
   {
+   "rule": "InferenceDiskCacheVerifyFailed",
+   "name": "a native imprint verification error names its Spark and model",
+   "records": [
+    {
+     "fields": {
+      "service.name": "inference",
+      "service.namespace": "spark",
+      "host.name": "spark-1",
+      "inference.model": "GLM-5.3-Flash",
+      "event.name": "inference.disk_cache.verify_failed",
+      "error.type": "HashMismatch",
+      "severity_number": 0,
+      "_msg": "error: imprint verify: 19200 tokens read back differ or failed (HashMismatch)"
+     },
+     "offset": -120,
+     "repeat": 2,
+     "every": 15
+    }
+   ],
+   "expect": [
+    {
+     "labels": {
+      "instance": "spark-1",
+      "model": "GLM-5.3-Flash"
+     },
+     "value": 2
+    }
+   ]
+  },
+  {
+   "rule": "InferenceDiskCacheVerifyFailed",
+   "name": "a threaded native imprint VerifyFailed warning fires",
+   "records": [
+    {
+     "fields": {
+      "service.name": "inference",
+      "service.namespace": "spark",
+      "host.name": "spark-1",
+      "inference.model": "GLM-5.3-Flash",
+      "event.name": "inference.disk_cache.verify_failed",
+      "error.type": "VerifyFailed",
+      "severity_number": 0,
+      "_msg": "warning: prompt cache: imprint: writing 19200 tokens failed (VerifyFailed); the save is skipped"
+     },
+     "offset": -90
+    }
+   ],
+   "expect": [
+    {
+     "labels": {
+      "instance": "spark-1",
+      "model": "GLM-5.3-Flash"
+     },
+     "value": 1
+    }
+   ]
+  },
+  {
+   "rule": "InferenceDiskCacheVerifyFailed",
+   "name": "a verification error older than 15 minutes stays quiet",
+   "records": [
+    {
+     "fields": {
+      "service.name": "inference",
+      "service.namespace": "spark",
+      "host.name": "spark-1",
+      "inference.model": "GLM-5.3-Flash",
+      "event.name": "inference.disk_cache.verify_failed",
+      "error.type": "HashMismatch",
+      "severity_number": 0,
+      "_msg": "error: imprint verify: 19200 tokens read back differ or failed (HashMismatch)"
+     },
+     "offset": -1200
+    }
+   ],
+   "expect": []
+  },
+  {
+   "rule": "InferenceDiskCacheVerifyFailed",
+   "name": "routine disk cache reads, writes and non-verify warnings stay quiet",
+   "records": [
+    {
+     "fields": {
+      "service.name": "inference",
+      "service.namespace": "spark",
+      "host.name": "spark-1",
+      "inference.model": "GLM-5.3-Flash",
+      "event.name": "inference.disk_cache.read",
+      "severity_number": 0,
+      "_msg": "info: imprint: read 19200 tokens from disk (120 MiB in 285 ms)"
+     },
+     "offset": -120
+    },
+    {
+     "fields": {
+      "service.name": "inference",
+      "service.namespace": "spark",
+      "host.name": "spark-1",
+      "inference.model": "GLM-5.3-Flash",
+      "event.name": "inference.disk_cache.write",
+      "severity_number": 0,
+      "_msg": "info: imprint: 19200 tokens on disk: 12 new blocks and its own 18 MiB (120 MiB this state, 102 MiB of rows it shares) in 410 ms"
+     },
+     "offset": -100
+    },
+    {
+     "fields": {
+      "service.name": "inference",
+      "service.namespace": "spark",
+      "host.name": "spark-1",
+      "inference.model": "GLM-5.3-Flash",
+      "severity_number": 0,
+      "_msg": "warning: prompt cache: imprint: writing 19200 tokens failed (NoSpaceLeft); the save is skipped"
+     },
+     "offset": -80
+    }
+   ],
+   "expect": []
+  },
+  {
    "rule": "ADSBReceiverStalling",
    "name": "three sample stalls in an hour fire",
    "records": [

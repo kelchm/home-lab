@@ -390,27 +390,30 @@ Every engine prints one line when a request finishes, but each prints different 
 | --- | --- |
 | `service.name` | `inference`, one stream per Spark. |
 | `inference.recipe`, `inference.model`, `inference.runtime`, `inference.rank` | The recipe file name without `.yaml`, the served name, the runtime and the rank. These match the inference metrics' `recipe`, `model` and `runtime` labels. A one-Spark run has no rank, as in the metrics. |
-| `event.name` | `inference.request.done` when a request finishes, `inference.request.ended` when the client leaves or the engine fails it, and `inference.request.refused` when it is turned away. Absent on other lines. |
+| `event.name` | `inference.request.done` when a request finishes, `inference.request.ended` when the client leaves or the engine fails it, `inference.request.refused` when it is turned away, `inference.heat_wait` when a native Zig prompt-chunk thermal wait completes under `TF_HEAT_HIGH`/`TF_HEAT_LOW`, and `inference.disk_cache.write`, `inference.disk_cache.read` or `inference.disk_cache.verify_failed` (under `TF_IMPRINT_VERIFY=1`, covering both the default threaded writer's `VerifyFailed` warning and synchronous `imprint verify:` errors) for native Zig `--learn-conversations` disk-store lines. Absent on other lines. |
 | `inference.request.id` | The request's ID, such as `chatcmpl-…`. |
-| `inference.finish` | How it ended: the engine's finish reason (`stop`, `length`, `tool_calls`), or `client-left`, `error` or `refused`. `error.type` names the engine's error. |
+| `inference.finish` | How it ended: the engine's finish reason (`stop`, `length`, `tool_calls`), or `client-left`, `error` or `refused`. `error.type` names the engine's error (or a disk-cache verify error). |
+| `inference.loop_period` | Repetition loop period from native Zig `v1.3.6` `loop=period:<n>` when loop detection triggers. |
 | `inference.tokens.prompt`, `inference.tokens.cached`, `inference.tokens.output` | Prompt tokens, how many of them came from the prompt cache, and reply tokens. |
 | `inference.thinking`, `inference.effort` | Whether thinking was on (`true` or `false`), and the reasoning level. |
 | `inference.ttft_s`, `inference.queue_s`, `inference.prefill_s`, `inference.decode_s`, `inference.total_s` | Seconds to the first token, waiting in the queue, reading the prompt, writing the reply, and in all. |
 | `inference.output_tps` | Reply tokens per second, as the engine computes it. |
 | `inference.spec.rounds`, `inference.spec.accepted`, `inference.spec.drafted`, `inference.preemptions` | Decode rounds, draft tokens accepted and proposed, and times the request was preempted. |
-| `http.request.method`, `url.path`, `http.response.status_code` | From the Zig server's line for each HTTP request. A successful request for `/metrics`, `/health` or `/stats` is dropped, since the metrics already show polling. |
+| `inference.heat_wait_s` | Seconds a native Zig prompt chunk waited for the thermal guard (`TF_HEAT_HIGH`/`TF_HEAT_LOW`), logged once the wait completes. |
+| `inference.disk_cache.tokens`, `inference.disk_cache.mib`, `inference.disk_cache.ms` | Token count, state size in MiB and latency in ms from native Zig `imprint:` disk-cache read/write lines (`tokens` and `error.type` on `TF_IMPRINT_VERIFY=1` read-back verification failures). |
+| `http.request.method`, `url.path`, `http.response.status_code` | From the Zig server's line for each HTTP request. A successful request for `/metrics`, `/v1/metrics`, `/health`, `/stats` or `/v1/load` is dropped, since the metrics already show polling. |
 | `_msg` | The line as the engine printed it. |
-| `_time` | When Docker read the line, to the millisecond. The engines print no time of their own. |
+| `_time` | When Docker read the line, to the millisecond. Leading UTC timestamps emitted under native Zig `TENSORFOLD_LOG_TIME=1` are stripped before matching while `_msg` keeps the original line. |
 
 Which timings a recipe has depends on its engine:
 
 | Engine | Recipes | Timings |
 | --- | --- | --- |
 | TensorFold 0.6.0's Python server | Mia's GLM kit | `ttft_s`, `prefill_s`, `output_tps`, `preemptions` |
-| TensorFold's Zig server | Qwen TP2 v1.1, native GLM | `ttft_s`, `queue_s`, `decode_s`, `total_s`, `output_tps` |
+| TensorFold's Zig server (`v1.3.6` and recent releases) | Qwen TP2 v1.1, native GLM | `ttft_s`, `queue_s`, `decode_s`, `total_s`, `output_tps`, plus `loop_period`, `heat_wait_s` and `disk_cache.*` on `v1.3.6` |
 | Older forks of the Zig server | DeepSeek, Qwen one-Spark | None: only tokens, cache, finish and drafts |
 
-All other lines, such as model loading, `prompt cache:` summaries and tracebacks, are kept with only the common fields. A request line must start with the engine's `[tensorfold]` prefix, and the parser reads only the keys above, so a key an engine adds later is ignored rather than misread, and stays searchable in `_msg`. Other delivery behaviour:
+All other lines, such as model loading, `prompt cache:` summaries and tracebacks, are kept with only the common fields. Request lines must carry the engine's `[tensorfold]` prefix (with an optional leading UTC timestamp when `TENSORFOLD_LOG_TIME=1` is set), and the parser reads only the keys above, so a key an engine adds later is ignored rather than misread, and stays searchable in `_msg`. Other delivery behaviour:
 
 - **Before a launch:** the change applies when a container is created. An instance launched before the adapter change keeps `json-file` and sends nothing until its next launch.
 - **Collector down:** Docker's driver is asynchronous, so the container starts and the engine writes whether or not the collector is up. Docker holds up to 16,384 lines in memory while it can't connect. It drops lines beyond that, everything it holds if the Docker daemon restarts, and whatever is still queued when the container is removed. A write to the collector gives up after 5 seconds, so a collector that hangs can't stop SparkRun removing the container. Docker sends without waiting for Fluent Bit to confirm, so delivery up to the collector is best effort; from there on the collector's file buffer holds records as it does the journal's. The log file in the container still has every line, and the engine's errors are in the same stream as its output.
@@ -538,6 +541,8 @@ For `KanidmSignInsRejected`, `{k8s.namespace.name="identity", service.name="kani
 The ADS-B receiver's `ADSBReceiverStalling` and `ADSBFeedSilent` are `info`; see [ADS-B](host-monitoring.md#ads-b).
 
 `NodeGPUMemoryExhausted` warns when a Spark's kernel logs `NV_ERR_NO_MEMORY` in the last 15 minutes, because the engine may report nothing. None were stored in the 30 days to October 31, 2026. Other pairs have logged one or two isolated lines with no harm; repeats mean the engine is failing. List them with `service.namespace:=spark service.name:=kernel "NV_ERR_NO_MEMORY"`.
+
+`InferenceDiskCacheVerifyFailed` warns when native Zig TensorFold logs an `imprint verify:` read-back mismatch or failure (`event.name:=inference.disk_cache.verify_failed`) in the last 15 minutes while `--learn-conversations` is active. List them with `service.namespace:=spark service.name:=inference event.name:=inference.disk_cache.verify_failed`.
 
 To add a log alert, put a VMRule labelled `alerting.home.kelch.io/datasource: victorialogs` in the VictoriaLogs app, which `vmalert-victoria-logs` reads, using `type: vlogs`, a `_time` window in the expression, a stream filter on `service.name` and `k8s.namespace.name`, `k8s.cluster.name:=k8s-prod` and the group label `cluster: k8s-prod`. Rename dotted fields in the result (`| rename k8s.pod.name as pod`), because alert labels cannot contain dots. Add cases to [logsql-rules-fixtures.json](../../scripts/logging/logsql-rules-fixtures.json): `python3 scripts/logging/test-logsql-rules.py`, run in CI by `scripts/ci/validate-logging.sh`, fails when a rule has no cases. It has vmalert parse the rules, evaluates each expression in VictoriaLogs at each case's time less vmalert's 30-second evaluation delay and checks the result labels, the values and the labels the annotations use. It does not exercise `for`, so express persistence in the expression, as `KanidmReplicationFailing` counts minutes with errors.
 
