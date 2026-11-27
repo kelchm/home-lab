@@ -6,7 +6,7 @@ Manage 104 like 103, through the guest agent on its host: `ssh kelchm@pve-sbx-2`
 
 ## Installed definition
 
-Read back on 2026-11-08:
+Read back on 2026-11-08 unless a row gives a later date:
 
 | Setting | Value |
 |---|---|
