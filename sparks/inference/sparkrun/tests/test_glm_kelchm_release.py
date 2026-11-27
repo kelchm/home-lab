@@ -199,3 +199,38 @@ def test_kelchm_native_lock_is_strict_and_bound_to_copied_release(tmp_path):
     lock_path.write_text(json.dumps(lock))
     with pytest.raises(validator.InvalidManifest, match="engine_revision.*disagrees"):
         validator.validate_repository(source)
+
+
+@pytest.mark.parametrize("keys,value,error", [
+    (("recipe_commit",), "main", "release.recipe_commit"),
+    (("recipe_commit",), "0" * 40, "release.recipe_commit.*zero"),
+    (("build", "base_image"), "nvidia/cuda:latest", "release.build.base_image.*immutable"),
+    (("build", "runtime_image"), "nvidia/cuda:latest", "release.build.runtime_image.*immutable"),
+    (("build", "zig_sha256"), "0" * 64, "release.build.zig_sha256.*zero"),
+])
+def test_kelchm_release_mutable_build_or_recipe_pins_rejected_after_rehash(tmp_path, keys, value, error):
+    source = Path(
+        shutil.copytree(ROOT, tmp_path / "source", ignore=shutil.ignore_patterns("__pycache__", "tests", "plugins", "benchmarks", "out"))
+    )
+    mod = source / "mods" / MOD.name
+    lock_path = mod / "upstream.lock.json"
+    rel_path = mod / "release.json"
+
+    rel = json.loads(rel_path.read_text())
+    target = rel
+    for key in keys[:-1]:
+        target = target[key]
+    target[keys[-1]] = value
+    rel_bytes = (json.dumps(rel, indent=2) + "\n").encode()
+    rel_path.write_bytes(rel_bytes)
+    new_sha = hashlib.sha256(rel_bytes).hexdigest()
+
+    lock = json.loads(lock_path.read_text())
+    lock["release_sha256"] = new_sha
+    lock["mod_files"]["release.json"] = new_sha
+    lock_path.write_text(json.dumps(lock))
+
+    # Rehashed mod passes checksum verification alone, but semantic lock validation must refuse it.
+    subprocess.run([sys.executable, str(mod / "prepare.py"), "--check"], check=True, capture_output=True)
+    with pytest.raises(validator.InvalidManifest, match=error):
+        validator.validate_repository(source)
