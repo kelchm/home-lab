@@ -33,3 +33,22 @@ spec:
               failed allocation latches the engine broken, so check /health
               on spark-1. Restart the model if it reports a fault or the
               failures repeat.
+
+        # Native Zig TensorFold logs disk prompt-cache verification failures
+        # (`--learn-conversations` with `TF_IMPRINT_VERIFY=1`) either through
+        # the default threaded writer (`warning: prompt cache: imprint: writing
+        # ... failed (VerifyFailed)`) or synchronous `error: imprint verify:`.
+        - alert: InferenceDiskCacheVerifyFailed
+          expr: >-
+            _time:15m {service.name="inference"} service.namespace:=spark event.name:=inference.disk_cache.verify_failed
+            | stats by (host.name, inference.model) count() as failures
+            | rename host.name as instance, inference.model as model
+          labels:
+            severity: warning
+          annotations:
+            summary: "{{ $labels.instance }} failed {{ $value }} disk prompt-cache checks for {{ $labels.model }}"
+            description: >-
+              Native TensorFold reported a disk prompt-cache verification
+              mismatch or read error on {{ $labels.instance }}. Inspect the
+              inference logs for imprint verify or VerifyFailed lines and check
+              the host disk before trusting saved conversation states.

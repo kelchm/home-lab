@@ -814,17 +814,50 @@ tests:
           instance: spark-1
           platform: spark
           model: GLM-5.3-Flash
+          recipe: a
+          runtime: tensorfold
           severity: warning
         exp_annotations:
           summary: The inference engine on spark-1 has stopped serving GLM-5.3-Flash
-          description: The engine reports a fault that stops it serving. Read the first cause from /health on port 8888 of spark-1, then restart the model with SparkRun.
+          description: The engine reports a fault that stops it serving. Check /health on port 8888 of spark-1 and the inference logs for the cause, then restart the model with SparkRun.
+
+  - name: A broken native Zig engine alerts; healthy, parked and overlapping recipes stay isolated
+    interval: 1m
+    input_series:
+    - series: tensorfold:engine_parked{instance="spark-1",platform="spark",job="spark-inference",model="GLM-5.3-Flash",recipe="native-broken",runtime="tensorfold"}
+      values: 0x15
+    - series: tensorfold:kv_cache_usage_ratio{instance="spark-1",platform="spark",job="spark-inference",model="GLM-5.3-Flash",recipe="native-broken",runtime="tensorfold",pool="0"}
+      values: 0x5 stale _x9
+    - series: tensorfold:engine_parked{instance="spark-1",platform="spark",job="spark-inference",model="GLM-5.3-Flash",recipe="native-healthy",runtime="tensorfold"}
+      values: 0x15
+    - series: tensorfold:kv_cache_usage_ratio{instance="spark-1",platform="spark",job="spark-inference",model="GLM-5.3-Flash",recipe="native-healthy",runtime="tensorfold",pool="0"}
+      values: 0x15
+    - series: tensorfold:engine_parked{instance="spark-2",platform="spark",job="spark-inference",model="GLM-5.3-Flash",recipe="parked",runtime="tensorfold"}
+      values: 1x15
+    alert_rule_test:
+    - eval_time: 5m
+      alertname: InferenceEngineBroken
+      exp_alerts: []
+    - eval_time: 8m
+      alertname: InferenceEngineBroken
+      exp_alerts:
+      - exp_labels:
+          instance: spark-1
+          platform: spark
+          model: GLM-5.3-Flash
+          recipe: native-broken
+          runtime: tensorfold
+          severity: warning
+        exp_annotations:
+          summary: The inference engine on spark-1 has stopped serving GLM-5.3-Flash
+          description: The engine reports a fault that stops it serving. Check /health on port 8888 of spark-1 and the inference logs for the cause, then restart the model with SparkRun.
 
   - name: A decoding stream that stops writing tokens alerts; one that keeps writing does not
     interval: 1m
     input_series:
-    - series: tensorfold_health:streams{instance="spark-1",platform="spark",job="spark-inference",model="GLM-5.3-Flash",state="decoding"}
+    - series: tensorfold_health:streams{instance="spark-1",platform="spark",job="spark-inference",model="GLM-5.3-Flash",recipe="py",runtime="tensorfold",state="decoding"}
       values: 1x20
-    - series: tensorfold_health:completion_tokens_total{instance="spark-1",platform="spark",job="spark-inference",model="GLM-5.3-Flash"}
+    - series: tensorfold_health:completion_tokens_total{instance="spark-1",platform="spark",job="spark-inference",model="GLM-5.3-Flash",recipe="py",runtime="tensorfold"}
       values: 0+100x8 800x12
     alert_rule_test:
     - eval_time: 6m
@@ -837,17 +870,19 @@ tests:
           instance: spark-1
           platform: spark
           model: GLM-5.3-Flash
+          recipe: py
+          runtime: tensorfold
           severity: warning
         exp_annotations:
           summary: The inference engine on spark-1 has stopped writing tokens
-          description: A stream has been decoding GLM-5.3-Flash for three minutes with no new tokens. Check iteration_s in /health on port 8888 of spark-1 and the RoCE link, then restart the model with SparkRun if it does not recover.
+          description: A stream has been decoding GLM-5.3-Flash for three minutes with no new tokens. Check /health on port 8888 of spark-1, GPU temperature and heat_wait_s inference logs, and the RoCE link, then restart the model with SparkRun if it does not recover.
 
   - name: A stream that has only just started decoding is given three minutes
     interval: 1m
     input_series:
-    - series: tensorfold_health:streams{instance="spark-1",platform="spark",job="spark-inference",model="GLM-5.3-Flash",state="decoding"}
+    - series: tensorfold_health:streams{instance="spark-1",platform="spark",job="spark-inference",model="GLM-5.3-Flash",recipe="py",runtime="tensorfold",state="decoding"}
       values: 0x5 1x10
-    - series: tensorfold_health:completion_tokens_total{instance="spark-1",platform="spark",job="spark-inference",model="GLM-5.3-Flash"}
+    - series: tensorfold_health:completion_tokens_total{instance="spark-1",platform="spark",job="spark-inference",model="GLM-5.3-Flash",recipe="py",runtime="tensorfold"}
       values: 500x15
     alert_rule_test:
     - eval_time: 8m
@@ -860,17 +895,19 @@ tests:
           instance: spark-1
           platform: spark
           model: GLM-5.3-Flash
+          recipe: py
+          runtime: tensorfold
           severity: warning
         exp_annotations:
           summary: The inference engine on spark-1 has stopped writing tokens
-          description: A stream has been decoding GLM-5.3-Flash for three minutes with no new tokens. Check iteration_s in /health on port 8888 of spark-1 and the RoCE link, then restart the model with SparkRun if it does not recover.
+          description: A stream has been decoding GLM-5.3-Flash for three minutes with no new tokens. Check /health on port 8888 of spark-1, GPU temperature and heat_wait_s inference logs, and the RoCE link, then restart the model with SparkRun if it does not recover.
 
   - name: A newly started engine is judged only once it has three minutes of history
     interval: 15s
     input_series:
-    - series: tensorfold_health:streams{instance="spark-1",platform="spark",job="spark-inference",model="GLM-5.3-Flash",state="decoding"}
+    - series: tensorfold_health:streams{instance="spark-1",platform="spark",job="spark-inference",model="GLM-5.3-Flash",recipe="py",runtime="tensorfold",state="decoding"}
       values: _x20 1x20
-    - series: tensorfold_health:completion_tokens_total{instance="spark-1",platform="spark",job="spark-inference",model="GLM-5.3-Flash"}
+    - series: tensorfold_health:completion_tokens_total{instance="spark-1",platform="spark",job="spark-inference",model="GLM-5.3-Flash",recipe="py",runtime="tensorfold"}
       values: _x20 500x20
     alert_rule_test:
     - eval_time: 6m
@@ -886,17 +923,19 @@ tests:
           instance: spark-1
           platform: spark
           model: GLM-5.3-Flash
+          recipe: py
+          runtime: tensorfold
           severity: warning
         exp_annotations:
           summary: The inference engine on spark-1 has stopped writing tokens
-          description: A stream has been decoding GLM-5.3-Flash for three minutes with no new tokens. Check iteration_s in /health on port 8888 of spark-1 and the RoCE link, then restart the model with SparkRun if it does not recover.
+          description: A stream has been decoding GLM-5.3-Flash for three minutes with no new tokens. Check /health on port 8888 of spark-1, GPU temperature and heat_wait_s inference logs, and the RoCE link, then restart the model with SparkRun if it does not recover.
 
   - name: An engine restarted after a stall is judged afresh, not on samples from before the restart
     interval: 15s
     input_series:
-    - series: tensorfold_health:streams{instance="spark-1",platform="spark",job="spark-inference",model="GLM-5.3-Flash",state="decoding"}
+    - series: tensorfold_health:streams{instance="spark-1",platform="spark",job="spark-inference",model="GLM-5.3-Flash",recipe="py",runtime="tensorfold",state="decoding"}
       values: 1x20 stale _x3 1x20
-    - series: tensorfold_health:completion_tokens_total{instance="spark-1",platform="spark",job="spark-inference",model="GLM-5.3-Flash"}
+    - series: tensorfold_health:completion_tokens_total{instance="spark-1",platform="spark",job="spark-inference",model="GLM-5.3-Flash",recipe="py",runtime="tensorfold"}
       values: 500x20 stale _x3 0x20
     alert_rule_test:
     - eval_time: 7m
@@ -912,17 +951,19 @@ tests:
           instance: spark-1
           platform: spark
           model: GLM-5.3-Flash
+          recipe: py
+          runtime: tensorfold
           severity: warning
         exp_annotations:
           summary: The inference engine on spark-1 has stopped writing tokens
-          description: A stream has been decoding GLM-5.3-Flash for three minutes with no new tokens. Check iteration_s in /health on port 8888 of spark-1 and the RoCE link, then restart the model with SparkRun if it does not recover.
+          description: A stream has been decoding GLM-5.3-Flash for three minutes with no new tokens. Check /health on port 8888 of spark-1, GPU temperature and heat_wait_s inference logs, and the RoCE link, then restart the model with SparkRun if it does not recover.
 
   - name: A pause restarts the three minutes
     interval: 1m
     input_series:
-    - series: tensorfold_health:streams{instance="spark-1",platform="spark",job="spark-inference",model="GLM-5.3-Flash",state="decoding"}
+    - series: tensorfold_health:streams{instance="spark-1",platform="spark",job="spark-inference",model="GLM-5.3-Flash",recipe="py",runtime="tensorfold",state="decoding"}
       values: 1x5 0 1x10
-    - series: tensorfold_health:completion_tokens_total{instance="spark-1",platform="spark",job="spark-inference",model="GLM-5.3-Flash"}
+    - series: tensorfold_health:completion_tokens_total{instance="spark-1",platform="spark",job="spark-inference",model="GLM-5.3-Flash",recipe="py",runtime="tensorfold"}
       values: 500x16
     alert_rule_test:
     - eval_time: 8m
@@ -932,14 +973,121 @@ tests:
   - name: A long prefill with nothing decoding is not a stall
     interval: 1m
     input_series:
-    - series: tensorfold_health:streams{instance="spark-1",platform="spark",job="spark-inference",model="GLM-5.3-Flash",state="decoding"}
+    - series: tensorfold_health:streams{instance="spark-1",platform="spark",job="spark-inference",model="GLM-5.3-Flash",recipe="py",runtime="tensorfold",state="decoding"}
       values: 0x20
-    - series: tensorfold_health:completion_tokens_total{instance="spark-1",platform="spark",job="spark-inference",model="GLM-5.3-Flash"}
+    - series: tensorfold_health:completion_tokens_total{instance="spark-1",platform="spark",job="spark-inference",model="GLM-5.3-Flash",recipe="py",runtime="tensorfold"}
       values: 500x20
     alert_rule_test:
     - eval_time: 15m
       alertname: InferenceEngineStalled
       exp_alerts: []
+
+  - name: A native Zig decoding stream that stalls alerts; active decoding, overlapping recipes and cold prefill stay isolated
+    interval: 1m
+    input_series:
+    - series: tensorfold:generation_tokens_running{instance="spark-1",platform="spark",job="spark-inference",model="GLM-5.3-Flash",recipe="native-stalled",runtime="tensorfold"}
+      values: 0x3 24x17
+    - series: tensorfold:scheduler_tokens_total{instance="spark-1",platform="spark",job="spark-inference",model="GLM-5.3-Flash",recipe="native-stalled",runtime="tensorfold",mode="decode"}
+      values: 0x3 0+120x5 600x12
+    - series: tensorfold:generation_tokens_running{instance="spark-1",platform="spark",job="spark-inference",model="GLM-5.3-Flash",recipe="native-active",runtime="tensorfold"}
+      values: 24x20
+    - series: tensorfold:scheduler_tokens_total{instance="spark-1",platform="spark",job="spark-inference",model="GLM-5.3-Flash",recipe="native-active",runtime="tensorfold",mode="decode"}
+      values: 0+120x20
+    - series: tensorfold:generation_tokens_running{instance="spark-2",platform="spark",job="spark-inference",model="GLM-5.3-Flash",recipe="native-prefill",runtime="tensorfold"}
+      values: 0x20
+    - series: tensorfold:scheduler_tokens_total{instance="spark-2",platform="spark",job="spark-inference",model="GLM-5.3-Flash",recipe="native-prefill",runtime="tensorfold",mode="decode"}
+      values: 400x20
+    alert_rule_test:
+    - eval_time: 2m
+      alertname: InferenceEngineStalled
+      exp_alerts: []
+    - eval_time: 7m
+      alertname: InferenceEngineStalled
+      exp_alerts: []
+    - eval_time: 13m
+      alertname: InferenceEngineStalled
+      exp_alerts:
+      - exp_labels:
+          instance: spark-1
+          platform: spark
+          model: GLM-5.3-Flash
+          recipe: native-stalled
+          runtime: tensorfold
+          severity: warning
+        exp_annotations:
+          summary: The inference engine on spark-1 has stopped writing tokens
+          description: A stream has been decoding GLM-5.3-Flash for three minutes with no new tokens. Check /health on port 8888 of spark-1, GPU temperature and heat_wait_s inference logs, and the RoCE link, then restart the model with SparkRun if it does not recover.
+
+  - name: A native Zig engine restarted after a stall is judged afresh
+    interval: 15s
+    input_series:
+    - series: tensorfold:generation_tokens_running{instance="spark-1",platform="spark",job="spark-inference",model="GLM-5.3-Flash",recipe="native",runtime="tensorfold"}
+      values: 12x20 stale _x3 12x20
+    - series: tensorfold:scheduler_tokens_total{instance="spark-1",platform="spark",job="spark-inference",model="GLM-5.3-Flash",recipe="native",runtime="tensorfold",mode="decode"}
+      values: 500x20 stale _x3 0x20
+    alert_rule_test:
+    - eval_time: 7m
+      alertname: InferenceEngineStalled
+      exp_alerts: []
+    - eval_time: 8m
+      alertname: InferenceEngineStalled
+      exp_alerts: []
+    - eval_time: 9m
+      alertname: InferenceEngineStalled
+      exp_alerts:
+      - exp_labels:
+          instance: spark-1
+          platform: spark
+          model: GLM-5.3-Flash
+          recipe: native
+          runtime: tensorfold
+          severity: warning
+        exp_annotations:
+          summary: The inference engine on spark-1 has stopped writing tokens
+          description: A stream has been decoding GLM-5.3-Flash for three minutes with no new tokens. Check /health on port 8888 of spark-1, GPU temperature and heat_wait_s inference logs, and the RoCE link, then restart the model with SparkRun if it does not recover.
+
+  - name: A pause on native Zig restarts the three minutes
+    interval: 1m
+    input_series:
+    - series: tensorfold:generation_tokens_running{instance="spark-1",platform="spark",job="spark-inference",model="GLM-5.3-Flash",recipe="native",runtime="tensorfold"}
+      values: 12x5 0 12x10
+    - series: tensorfold:scheduler_tokens_total{instance="spark-1",platform="spark",job="spark-inference",model="GLM-5.3-Flash",recipe="native",runtime="tensorfold",mode="decode"}
+      values: 500x16
+    alert_rule_test:
+    - eval_time: 8m
+      alertname: InferenceEngineStalled
+      exp_alerts: []
+
+  - name: An active native Zig prompt cache too small for one state warns; healthy, disabled and overlapping recipes stay isolated
+    interval: 1m
+    input_series:
+    - series: tensorfold:prompt_cache_can_keep_state{instance="spark-1",platform="spark",job="spark-inference",model="GLM-5.3-Flash",recipe="undersized",runtime="tensorfold"}
+      values: 0x10
+    - series: tensorfold:prompt_cache_states{instance="spark-1",platform="spark",job="spark-inference",model="GLM-5.3-Flash",recipe="undersized",runtime="tensorfold"}
+      values: 0x10
+    - series: tensorfold:prompt_cache_can_keep_state{instance="spark-1",platform="spark",job="spark-inference",model="GLM-5.3-Flash",recipe="healthy",runtime="tensorfold"}
+      values: 1x10
+    - series: tensorfold:prompt_cache_states{instance="spark-1",platform="spark",job="spark-inference",model="GLM-5.3-Flash",recipe="healthy",runtime="tensorfold"}
+      values: 3x10
+    - series: tensorfold:prompt_cache_can_keep_state{instance="spark-1",platform="spark",job="spark-inference",model="GLM-5.3-Flash",recipe="disabled",runtime="tensorfold"}
+      values: 0x10
+    alert_rule_test:
+    - eval_time: 4m
+      alertname: InferencePromptCacheUndersized
+      exp_alerts: []
+    - eval_time: 6m
+      alertname: InferencePromptCacheUndersized
+      exp_alerts:
+      - exp_labels:
+          instance: spark-1
+          platform: spark
+          model: GLM-5.3-Flash
+          recipe: undersized
+          runtime: tensorfold
+          severity: warning
+        exp_annotations:
+          summary: The prompt cache for GLM-5.3-Flash on spark-1 cannot keep a state
+          description: The native TensorFold prompt cache budget on spark-1 is smaller than one minimum retained state, so no prefix can be kept. Raise --prompt-cache-gib or adjust the memory reserve, or disable the cache explicitly.
 
   - name: A Spark under 2 GiB for ten minutes warns; tonight's 2.4 GiB and other hosts stay quiet
     interval: 1m

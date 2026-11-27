@@ -419,10 +419,19 @@ INFERENCE_LINES = {
     'rounds=48 accepted=186/240 ttft=0.199 decode=4.082 elapsed=4.281 queued=0.250 tok/s=57.1 seed=20260930': {
         'event.name': 'inference.request.done', 'inference.request.id': 'chatcmpl-zig', 'inference.tokens.prompt': '65',
         'inference.tokens.cached': '0', 'inference.tokens.output': '234', 'inference.thinking': 'false',
-        'inference.effort': 'none', 'inference.finish': 'stop', 'inference.spec.rounds': '48',
-        'inference.spec.accepted': '186', 'inference.spec.drafted': '240', 'inference.ttft_s': '0.199',
-        'inference.decode_s': '4.082', 'inference.total_s': '4.281', 'inference.queue_s': '0.25',
-        'inference.output_tps': '57.1', 'inference.prefill_s': None},
+        'inference.effort': 'none', 'inference.finish': 'stop', 'inference.loop_period': None,
+        'inference.spec.rounds': '48', 'inference.spec.accepted': '186', 'inference.spec.drafted': '240',
+        'inference.ttft_s': '0.199', 'inference.decode_s': '4.082', 'inference.total_s': '4.281',
+        'inference.queue_s': '0.25', 'inference.output_tps': '57.1', 'inference.prefill_s': None},
+    '2026-11-26T18:54:04.123Z [tensorfold] done chatcmpl-v136 prompt=39640 cached=38912 thinking=True effort=high '
+    'tokens=768 sha=9f8e7d6c5b4a finish=length loop=period:3 rounds=160 accepted=608/760 ttft=0.517 decode=10.520 '
+    'elapsed=11.037 queued=0.000 tok/s=72.9 seed=43': {
+        'event.name': 'inference.request.done', 'inference.request.id': 'chatcmpl-v136', 'inference.tokens.prompt': '39640',
+        'inference.tokens.cached': '38912', 'inference.tokens.output': '768', 'inference.thinking': 'true',
+        'inference.effort': 'high', 'inference.finish': 'length', 'inference.loop_period': '3',
+        'inference.spec.rounds': '160', 'inference.spec.accepted': '608', 'inference.spec.drafted': '760',
+        'inference.ttft_s': '0.517', 'inference.decode_s': '10.52', 'inference.total_s': '11.037',
+        'inference.queue_s': '0', 'inference.output_tps': '72.9', 'inference.prefill_s': None},
     '[tensorfold] done chatcmpl-fork prompt=33 cached=0 thinking=False effort=none tokens=4 sha=bca3318b4669 finish=stop '
     'rounds=2 accepted=3/8': {
         'event.name': 'inference.request.done', 'inference.tokens.output': '4', 'inference.spec.drafted': '8',
@@ -441,6 +450,9 @@ INFERENCE_LINES = {
         'event.name': 'inference.request.ended', 'inference.request.id': 'chatcmpl-err', 'inference.finish': 'error',
         'error.type': 'TopKPastScratch', 'inference.tokens.prompt': '56', 'inference.tokens.output': '0',
         'inference.total_s': '0.08'},
+    '2026-11-26T18:54:05.001Z [tensorfold] ended chatcmpl-ts-left reason=client-left prompt=12 tokens=3 after=0.50s': {
+        'event.name': 'inference.request.ended', 'inference.request.id': 'chatcmpl-ts-left', 'inference.finish': 'client-left',
+        'error.type': None, 'inference.tokens.prompt': '12', 'inference.tokens.output': '3', 'inference.total_s': '0.5'},
     '[tensorfold] ended chatcmpl-left reason=client-left prompt=59 tokens=1 after=0.41s': {
         'inference.finish': 'client-left', 'error.type': None, 'inference.total_s': '0.41'},
     '[tensorfold] refused cmpl-1: prompt is 2000000 tokens, over the 1048576-token window': {
@@ -449,6 +461,27 @@ INFERENCE_LINES = {
         'http.request.method': 'POST', 'url.path': '/v1/chat/completions', 'http.response.status_code': '429',
         'event.name': None},
     '[tensorfold] 127.0.0.1 "GET /metrics HTTP/1.1" 503 -': {'http.response.status_code': '503'},
+    '2026-11-26T18:54:06.250Z [tensorfold] 127.0.0.1 "GET /v1/load HTTP/1.1" 503 -': {
+        'http.request.method': 'GET', 'url.path': '/v1/load', 'http.response.status_code': '503'},
+    # Native Zig v1.3.6 thermal guard and disk prompt-cache operational events.
+    'info: heat_wait_s 4.0': {
+        'event.name': 'inference.heat_wait', 'inference.heat_wait_s': '4', 'inference.request.id': None},
+    '2026-11-26T18:54:07.500Z info: heat_wait_s 6.5': {
+        'event.name': 'inference.heat_wait', 'inference.heat_wait_s': '6.5', 'inference.request.id': None},
+    'info: imprint: 19200 tokens on disk: 12 new blocks and its own 18 MiB (120 MiB this state, 102 MiB of rows it shares) in 410 ms': {
+        'event.name': 'inference.disk_cache.write', 'inference.disk_cache.tokens': '19200',
+        'inference.disk_cache.mib': '120', 'inference.disk_cache.ms': '410', 'inference.request.id': None},
+    'info: imprint: read 19200 tokens from disk (120 MiB in 285 ms, read ahead)': {
+        'event.name': 'inference.disk_cache.read', 'inference.disk_cache.tokens': '19200',
+        'inference.disk_cache.mib': '120', 'inference.disk_cache.ms': '285', 'inference.request.id': None},
+    '2026-11-26T18:54:08.900Z error: imprint verify: 19200 tokens read back differ or failed (HashMismatch)': {
+        'event.name': 'inference.disk_cache.verify_failed', 'inference.disk_cache.tokens': '19200',
+        'error.type': 'HashMismatch', 'inference.request.id': None},
+    'warning: prompt cache: imprint: writing 19200 tokens failed (VerifyFailed); the save is skipped': {
+        'event.name': 'inference.disk_cache.verify_failed', 'inference.disk_cache.tokens': '19200',
+        'error.type': 'VerifyFailed', 'inference.request.id': None},
+    '2026-11-26T18:54:08.950Z warning: prompt cache: imprint: writing 19200 tokens failed (NoSpaceLeft); the save is skipped': {
+        'event.name': None, 'inference.disk_cache.tokens': None, 'error.type': None, 'inference.request.id': None},
     # Only whole keys count, and only a line with the engine's prefix and a request's shape is a request.
     '[tensorfold] done chatcmpl-draft prompt=12 cached=0 tokens=4 draft_tokens=900 finish=stop': {
         'event.name': 'inference.request.done', 'inference.tokens.output': '4'},
@@ -460,7 +493,12 @@ INFERENCE_LINES = {
 # From a one-Spark container, which carries no rank label.
 SOLO_LINE = '[tensorfold] done chatcmpl-solo prompt=33 cached=0 thinking=False effort=none tokens=4 sha=bca3318b4669 finish=stop'
 # Polling that succeeded, which the overlay drops.
-INFERENCE_DROPPED = ['[tensorfold] 127.0.0.1 "GET /metrics HTTP/1.1" 200 -', '[tensorfold] 127.0.0.1 "GET /health HTTP/1.1" 200 -']
+INFERENCE_DROPPED = [
+    '[tensorfold] 127.0.0.1 "GET /metrics HTTP/1.1" 200 -',
+    '[tensorfold] 127.0.0.1 "GET /health HTTP/1.1" 200 -',
+    '2026-11-26T18:54:09.100Z [tensorfold] 127.0.0.1 "GET /v1/metrics HTTP/1.1" 200 -',
+    '[tensorfold] 127.0.0.1 "GET /v1/load HTTP/1.1" 200 -',
+]
 
 
 def adapter_docker_opts(port):

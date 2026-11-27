@@ -246,34 +246,79 @@ spec:
             summary: The board in {{ $labels.instance }} is at {{ $value | humanize }} °C
             description: 'The hottest thermal zone on {{ $labels.instance }} has been within 5 °C of its 104.8 °C critical trip point for five minutes. Check the Spark''s airflow and the cabinet temperature, and reduce its workload.'
 
-        # Inference is started by hand and nothing depends on it overnight, so these two
-        # warn. Neither fires while a model loads, when the engine reports nothing.
+        # Inference is started by hand and nothing depends on it overnight, so these warn.
+        # None fire while a model loads, when the engine reports nothing, or while native
+        # TensorFold is intentionally idle-unloaded (`tensorfold:engine_parked == 1`).
+        # Python 0.6.0 exports `tensorfold_health:ok == 0` on a fault; native Zig v1.3.6
+        # keeps `tensorfold:engine_parked == 0` while switching `/metrics` to its parked
+        # fallback body, which omits `tensorfold:kv_cache_usage_ratio`. Preserve `recipe`
+        # and `runtime` so overlapping scrapes on the same model cannot mask each other.
         - alert: InferenceEngineBroken
-          expr: max by (instance, platform, model) (tensorfold_health:ok{job="spark-inference"}) == 0
+          expr: |
+            (
+              max by (instance, platform, model, recipe, runtime) (tensorfold_health:ok{job="spark-inference"}) == 0
+            )
+            or
+            (
+              (max by (instance, platform, model, recipe, runtime) (tensorfold:engine_parked{job="spark-inference"}) == 0)
+              unless
+              max by (instance, platform, model, recipe, runtime) (tensorfold:kv_cache_usage_ratio{job="spark-inference"})
+            )
           for: 1m
           labels:
             severity: warning
           annotations:
             summary: The inference engine on {{ $labels.instance }} has stopped serving {{ $labels.model }}
-            description: 'The engine reports a fault that stops it serving. Read the first cause from /health on port 8888 of {{ $labels.instance }}, then restart the model with SparkRun.'
+            description: 'The engine reports a fault that stops it serving. Check /health on port 8888 of {{ $labels.instance }} and the inference logs for the cause, then restart the model with SparkRun.'
 
         # Three minutes of unbroken decoding with no new token. The window sits in the
         # expression, not in `for`, so a stream that has only just started does not count.
         # The window skips steps where the series is missing, so all 12 steps must be there:
         # a new or restarted engine is not judged on its first seconds, nor on samples from
-        # before a restart. A long prefill holds no stream in the decoding state.
+        # before a restart. A solo long prefill holds no stream in the decoding state (Python)
+        # and leaves `generation_tokens_running` at 0 (native Zig). If a second request enters
+        # prefill and hits native Zig's `TF_HEAT_HIGH` thermal gate for over three minutes
+        # while another stream is already decoding, the shared engine thread pauses with
+        # `generation_tokens_running > 0` and flat `decode` and fires this alert (an actual
+        # decode stall for the waiting reply).
         - alert: InferenceEngineStalled
           expr: |
-            min_over_time((sum by (instance, platform, model) (tensorfold_health:streams{job="spark-inference", state="decoding"}))[3m:15s]) > 0
-            and
-            count_over_time((sum by (instance, platform, model) (tensorfold_health:streams{job="spark-inference", state="decoding"}))[3m:15s]) >= 12
-            and
-            sum by (instance, platform, model) (increase(tensorfold_health:completion_tokens_total{job="spark-inference"}[3m])) == 0
+            (
+              min_over_time((sum by (instance, platform, model, recipe, runtime) (tensorfold_health:streams{job="spark-inference", state="decoding"}))[3m:15s]) > 0
+              and
+              count_over_time((sum by (instance, platform, model, recipe, runtime) (tensorfold_health:streams{job="spark-inference", state="decoding"}))[3m:15s]) >= 12
+              and
+              sum by (instance, platform, model, recipe, runtime) (increase(tensorfold_health:completion_tokens_total{job="spark-inference"}[3m])) == 0
+            )
+            or
+            (
+              min_over_time((sum by (instance, platform, model, recipe, runtime) (tensorfold:generation_tokens_running{job="spark-inference"}))[3m:15s]) > 0
+              and
+              count_over_time((sum by (instance, platform, model, recipe, runtime) (tensorfold:generation_tokens_running{job="spark-inference"}))[3m:15s]) >= 12
+              and
+              sum by (instance, platform, model, recipe, runtime) (increase(tensorfold:scheduler_tokens_total{job="spark-inference", mode="decode"}[3m])) == 0
+            )
           labels:
             severity: warning
           annotations:
             summary: The inference engine on {{ $labels.instance }} has stopped writing tokens
-            description: 'A stream has been decoding {{ $labels.model }} for three minutes with no new tokens. Check iteration_s in /health on port 8888 of {{ $labels.instance }} and the RoCE link, then restart the model with SparkRun if it does not recover.'
+            description: 'A stream has been decoding {{ $labels.model }} for three minutes with no new tokens. Check /health on port 8888 of {{ $labels.instance }}, GPU temperature and heat_wait_s inference logs, and the RoCE link, then restart the model with SparkRun if it does not recover.'
+
+        # Native Zig TensorFold exports startup prompt-cache capacity alongside the live
+        # store gauge. If the store is active but its budget cannot hold even one minimum
+        # state, every prompt misses silently. Intentionally disabled caches
+        # (`--prompt-cache-gib 0` or `TF_KV_SHARE`) omit `prompt_cache_states` and stay quiet.
+        - alert: InferencePromptCacheUndersized
+          expr: |
+            (max by (instance, platform, model, recipe, runtime) (tensorfold:prompt_cache_can_keep_state{job="spark-inference"}) == 0)
+            and on (instance, platform, model, recipe, runtime)
+            max by (instance, platform, model, recipe, runtime) (tensorfold:prompt_cache_states{job="spark-inference"})
+          for: 5m
+          labels:
+            severity: warning
+          annotations:
+            summary: The prompt cache for {{ $labels.model }} on {{ $labels.instance }} cannot keep a state
+            description: 'The native TensorFold prompt cache budget on {{ $labels.instance }} is smaller than one minimum retained state, so no prefix can be kept. Raise --prompt-cache-gib or adjust the memory reserve, or disable the cache explicitly.'
 
         - alert: NodeMetricsDropped
           expr: increase(vm_persistentqueue_bytes_dropped_total{job=~"(pve|spark|synology|pi)-vmagent"}[15m]) > 0
