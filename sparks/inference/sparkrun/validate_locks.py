@@ -26,6 +26,7 @@ SHAPES = {
     "deepseek": f"{COMMON} engine_branch inputs_branch inputs_revision patches kit engram",
     "readiness": "mod_files",
     "glm-native": f"{COMMON} {KIT} release_manifest release_sha256 upstream_patch_count kit_patches_sha256",
+    "glm-native-kelchm": f"{COMMON} engine_branch engine_upstream release_manifest release_sha256 carry_count",
 }
 # Repository names, image names and package specs are the literal forms consumed
 # by the current builders, not arbitrary URLs, shell expressions or pip options.
@@ -146,7 +147,7 @@ def shape(lock, mod):
     if mod.name in READINESS_MODS:
         kind = "readiness"
     elif "release_manifest" in lock:
-        kind = "glm-native"
+        kind = "glm-native" if "kit_repository" in lock else "glm-native-kelchm"
     elif set(lock) & {"launcher_env", "installed_files", "engine_version"}:
         kind = "glm"
     elif set(lock) & {"kit", "engram", "inputs_revision", "inputs_branch"}:
@@ -180,6 +181,31 @@ def validate_lock(lock, mod):
     if "kit_repository" in lock:
         repository(lock["kit_repository"], "kit_repository")
     digest(lock["image_id"], "image_id")  # Config ID, not the registry manifest digest.
+    if kind == "glm-native-kelchm":
+        fields(files, "prepare.py run.sh chat_template.jinja upstream_chat_template.jinja release.json", "native kelchm mod_files")
+        image(lock["image"], "image")
+        positive(lock["carry_count"], "carry_count")
+        pattern(lock["engine_upstream"], rf"{REPOSITORY}@[0-9a-f]{{40}}", "engine_upstream", "expected owner/repository@<40 lowercase hex digits>")
+        require(lock["engine_upstream"].rpartition("@")[2] != "0" * 40, "engine_upstream", "zero is not a dependency pin")
+        equal(lock["release_manifest"], "release.json", "release_manifest")
+        hash_value(lock["release_sha256"], 64, "release_sha256")
+        require(files.get("release.json") == lock["release_sha256"], "release_sha256", "must match frozen local release.json")
+        release_path = mod / "release.json"
+        require(release_path.is_file() and not release_path.is_symlink(), "release.json", "missing or linked local release")
+        equal(hashlib.sha256(release_path.read_bytes()).hexdigest(), lock["release_sha256"], "release.json checksum")
+        release = read_json(release_path)
+        require("kit" not in release, "release.json", "kitless native lock must not wrap a kit release")
+        carries = release.get("carries")
+        require(isinstance(carries, list), "release.json", "expected carries list")
+        for key, expected in {"engine_repository": release["engine"]["repository"], "engine_branch": release["engine"]["branch"],
+                              "engine_revision": release["engine"]["commit"], "engine_upstream": release["engine"]["upstream"],
+                              "carry_count": len(carries), "image": release["image"]}.items():
+            equal(lock[key], expected, key)
+        for name, pin in files.items():
+            path = mod / name
+            require(path.is_file() and not path.is_symlink() and hashlib.sha256(path.read_bytes()).hexdigest() == pin,
+                    "mod_files." + name, "missing, linked or changed frozen native input")
+        return kind
     if kind == "glm-native":
         fields(files, "prepare.py run.sh serve.py capacity.py chat_template.jinja upstream_chat_template.jinja release.json", "native mod_files")
         image(lock["image"], "image")
@@ -328,10 +354,12 @@ def validate_recipe(recipe, path, locks):
     for key in ("engine_revision", "kit_revision", "upstream_patch_count", "upstream_patch_hash"):
         if key in lock:
             equal(metadata.get(key), lock[key], f"metadata.{key}")
-    if kind == "glm-native":
+    if kind in ("glm-native", "glm-native-kelchm"):
         owner = next((path.parent / ref).resolve() for ref in mods if locks[(path.parent / ref).resolve()][1] == kind)
         release = read_json(owner / "release.json")
         equal(metadata.get("release"), release["release"], "metadata.release")
+        if kind == "glm-native-kelchm":
+            equal(metadata.get("carry_count"), lock["carry_count"], "metadata.carry_count")
         equal({"repository": recipe.get("model"), "revision": recipe.get("model_revision")}, release["weights"], "native weights")
         equal({"repository": defaults.get("drafter"), "revision": defaults.get("drafter_revision")}, release["drafter"], "native drafter")
     if kind == "qwen-tp1":
