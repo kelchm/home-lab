@@ -1,0 +1,104 @@
+{
+  "release": "glm53-kelchm-2026.11.27",
+  "lane": "glm53-kelchm",
+  "image": "ghcr.io/kelchm/spark-inference/glm53-kelchm@sha256:4521e1d46bb7e8bd07672d92517432a0f162d35d2addf17f30789d7f80e7dca7",
+  "recipe_commit": "2f8977a19673d3b5699ecd70857ba7594613d612",
+  "model": "GLM-5.3-Flash",
+  "engine": {
+    "repository": "kelchm/TensorFold",
+    "branch": "deploy/glm53-kelchm",
+    "commit": "54cd73d425c5cec0117059ac1777a13db39f5c63",
+    "upstream": "ashhart/TensorFold@a681f00387a0c3eb6d24789cd196f10e015fe853"
+  },
+  "carries": [
+    {
+      "subject": "glm: port paged FP8 KV and cross-page disk save/restore onto v1.3.6"
+    },
+    {
+      "subject": "core: persist image conversation metadata in rows disk store"
+    },
+    {
+      "subject": "glm: port TF_GLM_DFLASH_ONLY=1 and DFlash2 selector vocab bounds guard"
+    },
+    {
+      "subject": "glm: port TF_GLM_DFLASH_Q4_DOWN=1 for Q4 DFlash2 MLP down projections"
+    },
+    {
+      "subject": "glm: port TF_GLM_COPY_8_16=1 verified context copy policy"
+    },
+    {
+      "subject": "glm: port bit-exact verify tile ranges and L2PF shared-first schedule"
+    },
+    {
+      "subject": "glm: port TF_GLM_EXL3_DECODE=1 and TF_GLM_EXL3_N_MAJOR=1 kernels"
+    },
+    {
+      "subject": "glm: port bit-exact TF_GLM_PACKED_PROMPT_S2=1 with L2 row-block groups"
+    },
+    {
+      "subject": "glm: port 640-row DFlash2 prompt context snapshot overlay (TF_GLM_DFLASH_SNAP_CONTEXT)"
+    },
+    {
+      "subject": "glm: pair prompt steps beside DFlash2 behind TF_GLM_PAIR_DFLASH=1"
+    },
+    {
+      "subject": "glm: extend EXL3 decode kernel eligibility to 1..32 rows"
+    },
+    {
+      "subject": "glm: opt-in TF_GLM_MULTI_PREFILL=1 batched short prompts beside stepped fills"
+    },
+    {
+      "subject": "glm: port TF_GLM_ROCE_FUSE=1 TP2 RoCE post-epilogue fusion"
+    },
+    {
+      "subject": "glm: port TF_GLM_PRICED_WINDOWS=1 measured DFlash2 window pricing"
+    },
+    {
+      "subject": "glm: support TF_GLM_REQUEST_STARTS=1 alongside --learn-conversations"
+    },
+    {
+      "subject": "glm: extend TF_GLM_EXL3_N_MAJOR=1 across all 1..32 decode rows"
+    },
+    {
+      "subject": "glm: batch greedy top-1 draw across verifyShared streams"
+    },
+    {
+      "subject": "glm: allow paired prompt chunks clear of TF_GLM_REQUEST_STARTS cuts"
+    },
+    {
+      "subject": "glm: restrict TF_GLM_EXL3_N_MAJOR=1 to rows 4 and 8..32"
+    },
+    {
+      "subject": "glm: use wide Q4 tiles (32/64/128 rows) in DFlash2 and draft head"
+    },
+    {
+      "subject": "glm: fold per-stream keeps into Kind.block for batched DFlash2 rounds"
+    },
+    {
+      "subject": "packaging: carry the MiaAI-Lab/GLM-5.3-Flash-DGX-Sparks-1104 licence, notice and credits"
+    },
+    {
+      "subject": "glm tests: pass st.pool to prompt_pair.ringsAgree in tf-cuda-test"
+    }
+  ],
+  "build": {
+    "base_image": "nvidia/cuda@sha256:afc92f9727f96346f2912934f11e5a43aa0581aca4a826bd5c8fd4ab6b152bcc",
+    "runtime_image": "nvidia/cuda@sha256:585155539dd4ff2ab653ee59d812aae81a9406a5804596d516c06e3a5719eb26",
+    "zig_version": "0.17.0",
+    "zig_sha256": "9e8d11661d4ae3bd57702a3832781e23ad151dde5798e16a5ccd503f65234ff8",
+    "zig_cpu": "cortex_a725+aes-mte-perfmon+sha2+sha3+sm4-spe",
+    "sm": "121"
+  },
+  "weights": {
+    "repository": "Mia-AiLab/GLM-5.3-Flash-EXL3-4bpw-TensorFold",
+    "revision": "078455ffe6472f9a52fbc1139f58b9db2881b25c"
+  },
+  "drafter": {
+    "repository": "incoai/GLM-5.3-Flash-DFlash2",
+    "revision": "bf582e4eacc1810f76656d1811693ff6c6737d2a"
+  },
+  "changes": "First release of glm53-kelchm on TensorFold v1.3.6 P5: paged FP8 KV (4x1M), durable image conversations, TF_GLM_REQUEST_STARTS with --learn-conversations, wide Q4 DFlash2 tiles, folded Kind.block keeps, and baked shared runtime contract.",
+  "qualification": {
+    "status": "pending"
+  }
+}

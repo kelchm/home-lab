@@ -1,0 +1,18 @@
+{
+  "release_manifest": "release.json",
+  "release_sha256": "b58477c2b0db7c4b74048444e07d7210a1c957fac435bfedcd67052227c02f9b",
+  "engine_repository": "kelchm/TensorFold",
+  "engine_branch": "deploy/glm53-kelchm",
+  "engine_revision": "54cd73d425c5cec0117059ac1777a13db39f5c63",
+  "engine_upstream": "ashhart/TensorFold@a681f00387a0c3eb6d24789cd196f10e015fe853",
+  "carry_count": 23,
+  "image": "ghcr.io/kelchm/spark-inference/glm53-kelchm@sha256:4521e1d46bb7e8bd07672d92517432a0f162d35d2addf17f30789d7f80e7dca7",
+  "image_id": "sha256:138dd655b45ff48827a58b4acac5b7ea5c5093beb4d81aa60ece0d36879894f3",
+  "mod_files": {
+    "chat_template.jinja": "f2e36c6b7fdd89f5f61564635227a1708e1601357cd41f9b5c0190911573d1e2",
+    "prepare.py": "2b179e846cb110bab87a1986e4718c76d61a8f6bdfb50ded67cb140da4a99084",
+    "release.json": "b58477c2b0db7c4b74048444e07d7210a1c957fac435bfedcd67052227c02f9b",
+    "run.sh": "bc29943fce5811559c5ada66d272119ac790481010f21478b10bd8cf8980ae3a",
+    "upstream_chat_template.jinja": "15ff929998c3dd126addaa1448f7f811bb3724fe835f448ac889d8f558d034c8"
+  }
+}
