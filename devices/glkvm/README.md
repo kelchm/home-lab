@@ -122,7 +122,7 @@ devices/glkvm/netbird/install.sh
 
 It downloads the release archive, verifies it against the release's checksum file, installs the binary and boot script, stops the daemon, waits for the old one to exit, remounts and starts it, and prints the status. NetBird access to the console drops for a few seconds; the local network path is unaffected. Do it from home or with a second way in.
 
-Installed 2026-11-11: 0.82.1, the routers' version. The peer kept its identity and address, reconnected to management, signal and relays, and announced `Networks: 10.32.20.10/32`; NetBird's input and forward rules for the away iPhone were unchanged. The first run exposed a race, now handled by the installer: a daemon started while the previous one was still shutting down exited at once.
+Installed 2026-11-11: 0.82.1, the routers' version. The peer kept its identity and address, reconnected to management, signal and relays, and announced `Networks: 10.32.20.10/32`; NetBird's input and forward rules for the away iPhone were unchanged. The first run exposed a race, now handled by the installer: a daemon started while the previous one was still shutting down exited at once. Upgraded 2026-11-27 to `0.83.2` via `install.sh` (daemon and CLI `0.83.2`, kernel interface, Management/Signal/Relays connected, `10.32.20.10/32` announced, identity preserved).
 
 Enrolled 2026-11-11 as `kvm-compute-rack.netbird.cloud` with a one-off setup key whose auto-group is the console's router group; the key was revoked after its single use. The peer reported Management, Signal and Relay connected and `Networks: 10.32.20.10/32`. On the same day the iPhone, on cellular, loaded the console at its normal hostname with the trusted certificate.
 
