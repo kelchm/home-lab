@@ -45,7 +45,9 @@ Read with the Auditor token before and after the 2026-11-08 changes; the exports
 
 The original `Automation` admin service user, whose token expired on 2026-10-27, and the expired `netbird-pilot-router` setup key were deleted on 2026-11-08; the old token's 1Password item is archived. Dashboard changes need an owner browser session.
 
-The peers are `netbird-router-1` and `netbird-router-2` (Debian 13, NetBird 0.82.1), `Hyperion`, `iPhone-kelchm` and `Persephone`. `kvm-compute-rack` joined on 2026-11-11, so `All` now has six peers. `Persephone`, Matt's older personal MacBook Pro, joined `clients` on 2026-11-08 so that all his personal machines have the same access, and passed an away check that day. Its stored per-peer login-expiration flag is still set but has no effect while the account-level setting is off.
+The peers are `netbird-router-1` and `netbird-router-2` (Debian 13, NetBird 0.83.2), `Hyperion`, `iPhone-kelchm` and `Persephone`. `kvm-compute-rack` joined on 2026-11-11, so `All` now has six peers. `Persephone`, Matt's older personal MacBook Pro, joined `clients` on 2026-11-08 so that all his personal machines have the same access, and passed an away check that day. Its stored per-peer login-expiration flag is still set but has no effect while the account-level setting is off.
+
+Because the gateway runs 50/50 Dual-WAN load balancing across T-Mobile (WAN1) and Starlink (WAN2), UniFi Policy-Based Routes added on 2026-11-27 pin `netbird-router-1` and `kvm-compute-rack` to T-Mobile (WAN1) and `netbird-router-2` to Starlink (WAN2), each with Fallback enabled (`kill_switch_enabled: false`). Without pinning, a single peer's STUN probes and ICE connectivity checks split across both WANs and triggered 5-minute `sr_watcher` resets; both WANs have Endpoint-Independent (Cone) NAT once pinned. See the [UniFi reference](../../network/unifi/README.md#remote-admin-applied-state) for the applied routes and verification probes.
 
 ### GLKVM console, added 2026-11-11
 
@@ -81,7 +83,7 @@ Read back on 2026-11-08:
 
 | Peer | Installed from | Version | Upgrade owner and effect |
 |---|---|---|---|
-| `netbird-router-1`, `netbird-router-2` | Debian package from `pkgs.netbird.io` `stable`; vendor data installs it at first boot | 0.82.1 | Renovate opens a PR for each NetBird release against [`upgrade-routers.sh`](../../proxmox/guests/netbird-router/upgrade-routers.sh). Merging changes no router; running the script upgrades them one at a time, and away clients move to the other router ([procedure](../../proxmox/guests/netbird-router/README.md#upgrades)). |
+| `netbird-router-1`, `netbird-router-2` | Debian package from `pkgs.netbird.io` `stable`; vendor data installs it at first boot | 0.83.2 (upgraded 2026-11-27) | Renovate opens a PR for each NetBird release against [`upgrade-routers.sh`](../../proxmox/guests/netbird-router/upgrade-routers.sh). Merging changes no router; running the script upgrades them one at a time, and away clients move to the other router ([procedure](../../proxmox/guests/netbird-router/README.md#upgrades)). |
 | Hyperion | Homebrew `netbirdio/tap/netbird` (daemon and CLI) and cask `netbirdio/tap/netbird-ui`; LaunchDaemon `netbird` runs `/opt/homebrew/bin/netbird service run` | 0.81.5, daemon and CLI read back on 2026-11-10 | Operator, with `brew upgrade`. A `netbird-ui` cask upgrade removes and reinstalls the service; an interrupted one on 2026-10-28 left no daemon until the upgrade was rerun. Check `netbird status` after upgrading. |
 | Persephone | — | 0.82.0, reported by management | Operator |
 | `kvm-compute-rack` | Upstream `linux/arm64` binary bind-mounted over the GLKVM firmware's client | 0.82.1, installed 2026-11-11 | Renovate opens a PR against [`devices/glkvm/netbird/install.sh`](../../devices/glkvm/netbird/install.sh); running it updates the appliance ([procedure](../../devices/glkvm/README.md#update-the-client)) |
