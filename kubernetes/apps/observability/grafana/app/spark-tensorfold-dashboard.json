@@ -1357,7 +1357,7 @@
             "uid": "${datasource}"
           },
           "editorMode": "code",
-          "expr": "max(max_over_time(tensorfold:requests_running{job=\"spark-inference\",platform=\"spark\",model=~\"$model\",recipe=~\"$recipe\",instance=~\"$serving_host\"}[$__rate_interval])) >= bool max({__name__=~\"tensorfold_health:streams_max|tensorfold:lanes\",job=\"spark-inference\",platform=\"spark\",model=~\"$model\",recipe=~\"$recipe\",instance=~\"$serving_host\"})",
+          "expr": "max(max by (job,instance,platform,model,recipe,runtime) (max_over_time(tensorfold:requests_running{job=\"spark-inference\",platform=\"spark\",model=~\"$model\",recipe=~\"$recipe\",instance=~\"$serving_host\"}[$__rate_interval])) >= bool max by (job,instance,platform,model,recipe,runtime) ({__name__=~\"tensorfold_health:streams_max|tensorfold:lanes\",job=\"spark-inference\",platform=\"spark\",model=~\"$model\",recipe=~\"$recipe\",instance=~\"$serving_host\"}))",
           "legendFormat": "All streams busy",
           "refId": "B",
           "range": true,

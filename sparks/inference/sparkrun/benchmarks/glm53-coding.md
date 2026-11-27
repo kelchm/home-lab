@@ -73,7 +73,7 @@ These eight warm turns use the same request bytes on every profile. The early Zi
 | + schedule shared expert work earlier for selected verification widths | 56.15 | 68.22 | 70.87 | 4.307 | 63.14 |
 | + select sparse attention tiles by measured context and width | 55.75 | 68.21 | 70.62 | 4.307 | 63.15 |
 
-The profile through Q4 drafter downs gained 4.25% end to end and 1.93% after the first token over production Python on the original replay. Test writing gained 2.92% after the first token across three replies of exactly 768 output tokens. The completed review gained 1.92%, while the four short tool replies streamed 4.77% slower. Both engines returned all four required tool markers. The one-token cold seed took 180.20 s on Zig and 138.07 s on Python.
+The profile through specialized routed EXL3 expert kernels gained 4.25% end to end and 1.93% after the first token over production Python on the original replay. Test writing gained 2.92% after the first token across three replies of exactly 768 output tokens. The completed review gained 1.92%, while the four short tool replies streamed 4.77% slower. Both engines returned all four required tool markers. The one-token cold seed took 180.20 s on Zig and 138.07 s on Python.
 
 A native control matched the production target, head, KV and all five Q4 drafter down projections while retaining the previous decode policy and kernels. It reached 50.20 end to end and 60.52 tok/s after the first token. Enabling the tuned features on that same binary reached 55.92 and 67.97; the range-enabled recipe reached 55.75 and 68.21, an 11.04% end-to-end and 12.69% streaming increase over the format-matched control.
 

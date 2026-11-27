@@ -294,7 +294,7 @@ W.tiles("inference", "Inference · $model", [
     ("Requests waiting", zero("sum(tensorfold:requests_waiting)"), dict(thresholds=th([{"value": None, "color": LOAD_HUE}, {"value": 4, "color": "orange"}]))),
     ("Decode speed per reply", f"sum(increase({GENERATED}[5m])) / (sum(increase({DECODE_SECONDS}[5m])) > 0.05)", dict(unit="suffix: tok/s", decimals=1, noValue="–", hue=SPEED_HUE)),
     ("Prompt cache hits", f"100 * sum(rate({CACHED}[15m])) / (sum(rate({PROMPT}[15m])) > 0)", dict(unit="percent", noValue="–", hue=CLOCK_HUE)),
-    ("Pool used", "(100 * (1 - sum(tensorfold_health:pool_free_tokens) / (sum(tensorfold_health:pool_tokens) > 0))) or (100 * (1 - sum(tensorfold:kv_pool_available_tokens) / (sum(tensorfold:kv_pool_capacity_tokens) > 0))) or (count(tensorfold:requests_running) * 0 - 1)",
+    ("Pool used", "(100 * (1 - sum(tensorfold_health:pool_free_tokens or tensorfold:kv_pool_available_tokens) / (sum(tensorfold_health:pool_tokens or tensorfold:kv_pool_capacity_tokens) > 0))) or (count(tensorfold:requests_running) * 0 - 1)",
      dict(unit="percent", noValue="–", hue=LOAD_HUE, mappings=[{"type": "value", "options": {"-1": {"text": "–", "index": 0}}}]))], trend=True,
     desc="What the model is doing: work in hand, work queued, how fast each reply is writing, how much of its prompts it found cached and how full its shared pool is, each with its recent history behind it. A dash means idle, or a recipe that does not report it.")
 W.add("inference-idle", "Inference", "stat", [q("count(tensorfold:kv_cache_usage_ratio)")],
