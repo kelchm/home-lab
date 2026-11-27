@@ -79,7 +79,7 @@ The script exits non-zero if any request fails. Its first full run, on 2026-10-2
 
 ## Clients and upgrades
 
-Read back on 2026-11-08:
+Read back on 2026-11-08 unless a row gives a later date:
 
 | Peer | Installed from | Version | Upgrade owner and effect |
 |---|---|---|---|
