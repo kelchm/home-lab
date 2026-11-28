@@ -1,0 +1,116 @@
+# Native Zig TensorFold v1.3.6 Phase 2B+3A+3B production profile (glm53-kelchm-2026.11.28).
+# Uses the container's baked /usr/local/bin/tensorfold-entrypoint contract; the frozen mod installs only chat_template.jinja.
+recipe_version: '2'
+model: Mia-AiLab/GLM-5.3-Flash-EXL3-4bpw-TensorFold
+model_revision: 078455ffe6472f9a52fbc1139f58b9db2881b25c
+runtime: tensorfold
+container: ghcr.io/kelchm/spark-inference/glm53-kelchm@sha256:f14caf82cfd55658e9acf619682940367902d2c3db1e9d95242c4a4602c49495
+min_nodes: 2
+max_nodes: 2
+metadata:
+  profile: glm53-kelchm-2026.11.28-agent-1m
+  release: glm53-kelchm-2026.11.28
+  serving_profile: agent-1m
+  engine_revision: 2fddd9855f1820cee71179b062bc7457a7ef2605
+  carry_count: 46
+  target_model_revision: 078455ffe6472f9a52fbc1139f58b9db2881b25c
+  draft_model_revision: bf582e4eacc1810f76656d1811693ff6c6737d2a
+  image: ghcr.io/kelchm/spark-inference/glm53-kelchm@sha256:f14caf82cfd55658e9acf619682940367902d2c3db1e9d95242c4a4602c49495
+defaults:
+  tensor_parallel: 2
+  pipeline_parallel: 1
+  host: 0.0.0.0
+  port: 8888
+  served_model_name: GLM-5.3-Flash
+  context: 1048576
+  max_tokens: 32768
+  drafter: incoai/GLM-5.3-Flash-DFlash2
+  drafter_revision: bf582e4eacc1810f76656d1811693ff6c6737d2a
+  entrypoint: /usr/local/bin/tensorfold-entrypoint
+env:
+  WORLD_SIZE: '2'
+  HF_HUB_OFFLINE: '1'
+  CUDA_DEVICE_ORDER: PCI_BUS_ID
+  TENSORFOLD_NO_UPDATE_CHECK: '1'
+  TENSORFOLD_NO_LIVE: '1'
+  CHAT_TEMPLATE: /opt/tensorfold-mod/chat_template.jinja
+  KV_CACHE: fp8
+  TF_KV_PAGES: 'on'
+  TENSORFOLD_MEMORY_RESERVE_GIB: '10.5'
+  PROMPT_CACHE_GIB: '8'
+  PARALLEL: '4'
+  TOP_K: '20'
+  VISION_ENABLED: '1'
+  VISION_MAX_IMAGES: '50'
+  VISION_VIDEO_TOKENS: '64'
+  THINKING_ENABLED: '1'
+  REASONING_EFFORT: xhigh
+  TF_GLM_CLEAR_THINKING: '0'
+  DASHBOARD_ENABLED: '1'
+  TF_TP_PORT_OFFSET: '-1'
+  TF_ROCE: '1'
+  TF_ROCE_MAX_KB: '4096'
+  GLM_LEARN_ENABLED: '1'
+  GLM_LEARN_ROOT: /cache/huggingface
+  GLM_LEARN_DIR: /cache/huggingface/glm53-kelchm-2026.11.28-learn
+  GLM_LEARN_GIB: '64'
+  GLM_LEARN_MIN_FREE_GIB: '50'
+  GLM_LEARN_DAILY_GIB: '128'
+  TF_GLM_DENSE_BITS: '4'
+  TF_GLM_HEAD_BITS: '8'
+  TF_GLM_DFLASH_ONLY: '1'
+  TF_GLM_DFLASH_Q4_DOWN: '1'
+  TF_GLM_DFLASH_SNAP_CONTEXT: '1'
+  TF_GLM_COPY_8_16: '1'
+  TF_GLM_DECODE_MLA_WIDE: '1'
+  TF_GLM_DECODE_TILE_RANGES: '1'
+  TF_GLM_L2PF_SHARED_FIRST: '1'
+  TF_GLM_EXL3_DECODE: '1'
+  TF_GLM_EXL3_N_MAJOR: '1'
+  TF_GLM_PACKED_PROMPT_S2: '1'
+  TF_GLM_PAIR_DFLASH: '1'
+  TF_GLM_MULTI_PREFILL: '1'
+  TF_GLM_ROCE_FUSE: '1'
+  TF_GLM_PRICED_WINDOWS: '0'
+  TF_GLM_REQUEST_STARTS: marks
+  TF_EXL3_PROMPT_GU: pc
+  TF_GLM_MM_FAST4: '1'
+  TF_GLM_SHARED_SLOT: '1'
+  TF_GLM_DENSE_PRUNE: '1'
+  TF_GLM_HC_FUSE: '1'
+  TF_GLM_ROUTER_FUSE: '1'
+  TF_GLM_CHUNK_SOLO: '4096'
+  TF_GLM_PROMPT_PAIR: solo
+  TF_IMPRINT_VERIFY: '0'
+executor_config:
+  entrypoint: ''
+  user: root
+  ipc: host
+  shm_size: 16g
+  devices:
+  - /dev/infiniband
+  cap_add:
+  - IPC_LOCK
+  ulimit:
+  - memlock=-1:-1
+  - stack=67108864
+  - nofile=65535:65535
+  auto_remove: false
+runtime_cache:
+  key_by_image: true
+mods:
+- ../mods/tensorfold-readiness-v2
+- ../mods/kelchm-tensorfold-glm53-2026.11.28
+post_exec:
+- python3 /opt/tensorfold-readiness/readiness.py --model GLM-5.3-Flash --context 1048576 --lanes 4 --efforts max,high,low
+distribution_config:
+  models:
+    entries:
+    - name: Mia-AiLab/GLM-5.3-Flash-EXL3-4bpw-TensorFold
+      revision: 078455ffe6472f9a52fbc1139f58b9db2881b25c
+      target:
+      - -1
+    - name: incoai/GLM-5.3-Flash-DFlash2
+      revision: bf582e4eacc1810f76656d1811693ff6c6737d2a
+      target:
+      - -1

@@ -23,9 +23,41 @@ from sparkrun.core.validation import ERROR
 from sparkrun.orchestration.executors.docker import DockerExecutor
 from sparkrun.runtimes._cluster_ops import ClusterContext
 
-MOD = ROOT / "mods/kelchm-tensorfold-glm53-2026.11.27"
-PROFILE = ROOT / "kelchm-tensorfold-glm53-native-tp2/glm53-kelchm-2026.11.27-agent-1m.yaml"
-LEARN = "/cache/huggingface/glm53-kelchm-2026.11.27-learn"
+RELEASES = (
+    pytest.param(
+        "2026.11.27",
+        23,
+        {
+            "TF_GLM_REQUEST_STARTS": "1",
+        },
+        (),
+        id="2026.11.27",
+    ),
+    pytest.param(
+        "2026.11.28",
+        46,
+        {
+            "TF_GLM_REQUEST_STARTS": "marks",
+            "TF_EXL3_PROMPT_GU": "pc",
+            "TF_GLM_MM_FAST4": "1",
+            "TF_GLM_SHARED_SLOT": "1",
+            "TF_GLM_DENSE_PRUNE": "1",
+            "TF_GLM_HC_FUSE": "1",
+            "TF_GLM_ROUTER_FUSE": "1",
+            "TF_GLM_CHUNK_SOLO": "4096",
+            "TF_GLM_PROMPT_PAIR": "solo",
+        },
+        ("TF_GLM_EXL3_BF16_SLOTS", "TF_GLM_ABSORB_MMA"),
+        id="2026.11.28",
+    ),
+)
+
+
+def release_paths(version: str):
+    mod = ROOT / f"mods/kelchm-tensorfold-glm53-{version}"
+    profile = ROOT / f"kelchm-tensorfold-glm53-native-tp2/glm53-kelchm-{version}-agent-1m.yaml"
+    learn = f"/cache/huggingface/glm53-kelchm-{version}-learn"
+    return mod, profile, learn
 
 
 def load(name, path):
@@ -52,8 +84,12 @@ def parse(command):
     return env, tokens[len(env) + 1 :]
 
 
-def test_kelchm_native_recipe_validates_with_zero_errors_and_no_managed_comm_env(monkeypatch):
+@pytest.mark.parametrize("version,carry_count,expected_env,forbidden_env", RELEASES)
+def test_kelchm_native_recipe_validates_with_zero_errors_and_no_managed_comm_env(
+    monkeypatch, version, carry_count, expected_env, forbidden_env
+):
     assert importlib.metadata.version("sparkrun") == "0.4.2"
+    mod, profile, learn = release_paths(version)
 
     def forbidden(*a, **kw):
         raise AssertionError("Off-host SDK test attempted a process or socket")
@@ -61,7 +97,7 @@ def test_kelchm_native_recipe_validates_with_zero_errors_and_no_managed_comm_env
     monkeypatch.setattr(subprocess, "Popen", forbidden)
     monkeypatch.setattr(socket, "socket", forbidden)
 
-    recipe = Recipe(yaml.safe_load(PROFILE.read_text()), source_path=str(PROFILE))
+    recipe = Recipe(yaml.safe_load(profile.read_text()), source_path=str(profile))
     runtime = TensorFoldRuntime()
     issues = runtime.validate_recipe(recipe)
     assert not [issue for issue in issues if issue.severity == ERROR]
@@ -71,18 +107,22 @@ def test_kelchm_native_recipe_validates_with_zero_errors_and_no_managed_comm_env
     for managed in ("NCCL_IB_HCA", "NCCL_IB_GID_INDEX", "NCCL_SOCKET_IFNAME", "TF_ROCE_HCA", "TF_ROCE_GID_INDEX"):
         assert managed not in recipe.env
 
-    assert recipe.mods == ["../mods/tensorfold-readiness-v2", "../mods/kelchm-tensorfold-glm53-2026.11.27"]
-    assert all((PROFILE.parent / mod / "run.sh").is_file() for mod in recipe.mods)
+    assert recipe.mods == ["../mods/tensorfold-readiness-v2", f"../mods/{mod.name}"]
+    assert all((profile.parent / m / "run.sh").is_file() for m in recipe.mods)
     assert recipe.post_exec == [
         "python3 /opt/tensorfold-readiness/readiness.py --model GLM-5.3-Flash --context 1048576 --lanes 4 --efforts max,high,low"
     ]
+    assert recipe.metadata["carry_count"] == carry_count
     assert recipe.env["CHAT_TEMPLATE"] == "/opt/tensorfold-mod/chat_template.jinja"
     assert recipe.env["GLM_LEARN_ROOT"] == "/cache/huggingface"
-    assert recipe.env["GLM_LEARN_DIR"] == LEARN
+    assert recipe.env["GLM_LEARN_DIR"] == learn
     assert recipe.env["TF_KV_PAGES"] == "on"
-    assert recipe.env["TF_GLM_REQUEST_STARTS"] == "1"
     assert recipe.env["TF_GLM_PRICED_WINDOWS"] == "0"
     assert recipe.env["TF_IMPRINT_VERIFY"] == "0"
+    for key, value in expected_env.items():
+        assert recipe.env[key] == value
+    for key in forbidden_env:
+        assert key not in recipe.env
 
     ctx = ClusterContext.build(
         runtime,
@@ -105,6 +145,8 @@ def test_kelchm_native_recipe_validates_with_zero_errors_and_no_managed_comm_env
     tokens = shlex.split(script)
     assert "WORLD_SIZE=2" in tokens
     assert "TF_GLM_ROCE_FUSE=1" in tokens
+    for key, value in expected_env.items():
+        assert f"{key}={value}" in tokens
 
     token = _FABRIC_MASTER.set("198.18.0.1")
     try:
@@ -130,17 +172,21 @@ def test_kelchm_native_recipe_validates_with_zero_errors_and_no_managed_comm_env
         _FABRIC_MASTER.reset(token)
 
 
-def test_kelchm_mod_preserves_baked_entrypoint():
-    run_sh = (MOD / "run.sh").read_text()
+@pytest.mark.parametrize("version,carry_count,expected_env,forbidden_env", RELEASES)
+def test_kelchm_mod_preserves_baked_entrypoint(version, carry_count, expected_env, forbidden_env):
+    mod, _, _ = release_paths(version)
+    run_sh = (mod / "run.sh").read_text()
     assert "/usr/local/bin/tensorfold-entrypoint" not in run_sh
     assert "install -m 0644 chat_template.jinja /opt/tensorfold-mod/chat_template.jinja" in run_sh
-    assert not (MOD / "serve.py").exists()
+    assert not (mod / "serve.py").exists()
 
 
+@pytest.mark.parametrize("version,carry_count,expected_env,forbidden_env", RELEASES)
 @pytest.mark.parametrize("mutation", ["content", "symlink", "missing", "manifest", "prepare-link"])
-def test_kelchm_frozen_mod_fails_before_installation(tmp_path, mutation):
-    bundle = tmp_path / MOD.name
-    shutil.copytree(MOD, bundle, ignore=shutil.ignore_patterns("__pycache__"))
+def test_kelchm_frozen_mod_fails_before_installation(tmp_path, version, carry_count, expected_env, forbidden_env, mutation):
+    mod, _, _ = release_paths(version)
+    bundle = tmp_path / mod.name
+    shutil.copytree(mod, bundle, ignore=shutil.ignore_patterns("__pycache__"))
     check = [sys.executable, str(bundle / "prepare.py"), "--check"]
     subprocess.run(check, check=True, capture_output=True)
     if mutation == "content":
@@ -148,34 +194,36 @@ def test_kelchm_frozen_mod_fails_before_installation(tmp_path, mutation):
     elif mutation in ("symlink", "missing"):
         (bundle / "chat_template.jinja").unlink()
         if mutation == "symlink":
-            (bundle / "chat_template.jinja").symlink_to(MOD / "chat_template.jinja")
+            (bundle / "chat_template.jinja").symlink_to(mod / "chat_template.jinja")
     elif mutation == "manifest":
         (bundle / "upstream.lock.json").unlink()
-        (bundle / "upstream.lock.json").symlink_to(MOD / "upstream.lock.json")
+        (bundle / "upstream.lock.json").symlink_to(mod / "upstream.lock.json")
     else:
         (bundle / "chat_template.jinja").write_text("changed")
         (bundle / "prepare.py").unlink()
-        (bundle / "prepare.py").symlink_to(MOD / "prepare.py")
+        (bundle / "prepare.py").symlink_to(mod / "prepare.py")
     assert subprocess.run(check, capture_output=True).returncode != 0
 
 
-def test_kelchm_native_lock_is_strict_and_bound_to_copied_release(tmp_path):
+@pytest.mark.parametrize("version,carry_count,expected_env,forbidden_env", RELEASES)
+def test_kelchm_native_lock_is_strict_and_bound_to_copied_release(tmp_path, version, carry_count, expected_env, forbidden_env):
+    orig_mod, orig_profile, _ = release_paths(version)
     source = Path(
         shutil.copytree(ROOT, tmp_path / "source", ignore=shutil.ignore_patterns("__pycache__", "tests", "plugins", "benchmarks", "out"))
     )
     assert all(validator.validate_repository(source))
 
-    mod = source / "mods" / MOD.name
+    mod = source / "mods" / orig_mod.name
     lock_path = mod / "upstream.lock.json"
-    recipe_path = source / "kelchm-tensorfold-glm53-native-tp2" / PROFILE.name
+    recipe_path = source / "kelchm-tensorfold-glm53-native-tp2" / orig_profile.name
 
     # Mutating carry_count in recipe metadata must fail validation.
     recipe = yaml.safe_load(recipe_path.read_text())
-    recipe["metadata"]["carry_count"] = 22
+    recipe["metadata"]["carry_count"] = carry_count - 1
     recipe_path.write_text(yaml.safe_dump(recipe))
     with pytest.raises(validator.InvalidManifest, match="metadata.carry_count"):
         validator.validate_repository(source)
-    recipe["metadata"]["carry_count"] = 23
+    recipe["metadata"]["carry_count"] = carry_count
     recipe_path.write_text(yaml.safe_dump(recipe))
 
     # Mutating engine_upstream to a zero pin or wrong commit must fail.
@@ -201,6 +249,7 @@ def test_kelchm_native_lock_is_strict_and_bound_to_copied_release(tmp_path):
         validator.validate_repository(source)
 
 
+@pytest.mark.parametrize("version,carry_count,expected_env,forbidden_env", RELEASES)
 @pytest.mark.parametrize("keys,value,error", [
     (("recipe_commit",), "main", "release.recipe_commit"),
     (("recipe_commit",), "0" * 40, "release.recipe_commit.*zero"),
@@ -208,11 +257,14 @@ def test_kelchm_native_lock_is_strict_and_bound_to_copied_release(tmp_path):
     (("build", "runtime_image"), "nvidia/cuda:latest", "release.build.runtime_image.*immutable"),
     (("build", "zig_sha256"), "0" * 64, "release.build.zig_sha256.*zero"),
 ])
-def test_kelchm_release_mutable_build_or_recipe_pins_rejected_after_rehash(tmp_path, keys, value, error):
+def test_kelchm_release_mutable_build_or_recipe_pins_rejected_after_rehash(
+    tmp_path, version, carry_count, expected_env, forbidden_env, keys, value, error
+):
+    orig_mod, _, _ = release_paths(version)
     source = Path(
         shutil.copytree(ROOT, tmp_path / "source", ignore=shutil.ignore_patterns("__pycache__", "tests", "plugins", "benchmarks", "out"))
     )
-    mod = source / "mods" / MOD.name
+    mod = source / "mods" / orig_mod.name
     lock_path = mod / "upstream.lock.json"
     rel_path = mod / "release.json"
 

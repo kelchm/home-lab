@@ -1,0 +1,201 @@
+{
+  "release": "glm53-kelchm-2026.11.28",
+  "lane": "glm53-kelchm",
+  "image": "ghcr.io/kelchm/spark-inference/glm53-kelchm@sha256:f14caf82cfd55658e9acf619682940367902d2c3db1e9d95242c4a4602c49495",
+  "recipe_commit": "59f036a109f4498d5886bbdac4774f29aba01267",
+  "model": "GLM-5.3-Flash",
+  "engine": {
+    "repository": "kelchm/TensorFold",
+    "branch": "deploy/glm53-kelchm",
+    "commit": "2fddd9855f1820cee71179b062bc7457a7ef2605",
+    "upstream": "ashhart/TensorFold@a681f00387a0c3eb6d24789cd196f10e015fe853"
+  },
+  "carries": [
+    {
+      "subject": "glm: port paged FP8 KV and cross-page disk save/restore onto v1.3.6"
+    },
+    {
+      "subject": "core: persist image conversation metadata in rows disk store"
+    },
+    {
+      "subject": "glm: port TF_GLM_DFLASH_ONLY=1 and DFlash2 selector vocab bounds guard"
+    },
+    {
+      "subject": "glm: port TF_GLM_DFLASH_Q4_DOWN=1 for Q4 DFlash2 MLP down projections"
+    },
+    {
+      "subject": "glm: port TF_GLM_COPY_8_16=1 verified context copy policy"
+    },
+    {
+      "subject": "glm: port bit-exact verify tile ranges and L2PF shared-first schedule"
+    },
+    {
+      "subject": "glm: port TF_GLM_EXL3_DECODE=1 and TF_GLM_EXL3_N_MAJOR=1 kernels"
+    },
+    {
+      "subject": "glm: port bit-exact TF_GLM_PACKED_PROMPT_S2=1 with L2 row-block groups"
+    },
+    {
+      "subject": "glm: port 640-row DFlash2 prompt context snapshot overlay (TF_GLM_DFLASH_SNAP_CONTEXT)"
+    },
+    {
+      "subject": "glm: pair prompt steps beside DFlash2 behind TF_GLM_PAIR_DFLASH=1"
+    },
+    {
+      "subject": "glm: extend EXL3 decode kernel eligibility to 1..32 rows"
+    },
+    {
+      "subject": "glm: opt-in TF_GLM_MULTI_PREFILL=1 batched short prompts beside stepped fills"
+    },
+    {
+      "subject": "glm: port TF_GLM_ROCE_FUSE=1 TP2 RoCE post-epilogue fusion"
+    },
+    {
+      "subject": "glm: port TF_GLM_PRICED_WINDOWS=1 measured DFlash2 window pricing"
+    },
+    {
+      "subject": "glm: support TF_GLM_REQUEST_STARTS=1 alongside --learn-conversations"
+    },
+    {
+      "subject": "glm: extend TF_GLM_EXL3_N_MAJOR=1 across all 1..32 decode rows"
+    },
+    {
+      "subject": "glm: batch greedy top-1 draw across verifyShared streams"
+    },
+    {
+      "subject": "glm: allow paired prompt chunks clear of TF_GLM_REQUEST_STARTS cuts"
+    },
+    {
+      "subject": "glm: restrict TF_GLM_EXL3_N_MAJOR=1 to rows 4 and 8..32"
+    },
+    {
+      "subject": "glm: use wide Q4 tiles (32/64/128 rows) in DFlash2 and draft head"
+    },
+    {
+      "subject": "glm: fold per-stream keeps into Kind.block for batched DFlash2 rounds"
+    },
+    {
+      "subject": "packaging: carry the MiaAI-Lab/GLM-5.3-Flash-DGX-Sparks-1104 licence, notice and credits"
+    },
+    {
+      "subject": "glm tests: pass st.pool to prompt_pair.ringsAgree in tf-cuda-test"
+    },
+    {
+      "subject": "glm: add opt-in TF_GLM_SHARED_DRAFT_CONFIDENCE for multi-stream DFlash2 rounds"
+    },
+    {
+      "subject": "glm: add opt-in TF_GLM_SHARED_KDA_WIDE for shared verify KDA chains"
+    },
+    {
+      "subject": "glm: batch greedy top-1 rows into one tf_glm_top1_rows launch"
+    },
+    {
+      "subject": "glm: add BM=32 and BM=64 FP32 Q4 tiles for wide DFlash2 down projections"
+    },
+    {
+      "subject": "glm: reconcile serving source pins and add CUDA contract gates for Phase 2 kernels"
+    },
+    {
+      "subject": "glm cuda: KDA decode steps with 4 or 2 warps a block for small windows (TF_GLM_KDA_STEP_WARPS)",
+      "adapted_from": [
+        "MiaAI-Lab/GLM-5.3-Flash-DGX-Sparks-1104@13f2464 patches/engine/0084-pdl5-0071-glm-kda-step-warps.patch",
+        "MiaAI-Lab/GLM-5.3-Flash-DGX-Sparks-1104@13f2464 patches/engine/0085-integ5-tests-kda-step-warps-no-logged-error.patch"
+      ]
+    },
+    {
+      "subject": "glm cuda: hc_pre's decode kernels over more threads, the same bytes (TF_GLM_HC_SPLIT, TF_GLM_HC_PART)",
+      "adapted_from": [
+        "MiaAI-Lab/GLM-5.3-Flash-DGX-Sparks-1104@13f2464 patches/engine/0086-glue5-0071-glm-decode-hc-finish-split.patch",
+        "MiaAI-Lab/GLM-5.3-Flash-DGX-Sparks-1104@13f2464 patches/engine/0089-glue5-0074-glm-decode-hc-partial-split.patch",
+        "MiaAI-Lab/GLM-5.3-Flash-DGX-Sparks-1104@13f2464 patches/engine/0090-pdl5-p0074-glm-pdl-hc-split-waits.patch"
+      ]
+    },
+    {
+      "subject": "glm cuda: batched multi-segment KDA chains and copies for shared decode windows (TF_GLM_KDA_SEGS)",
+      "adapted_from": [
+        "MiaAI-Lab/GLM-5.3-Flash-DGX-Sparks-1104@13f2464 patches/engine/0075-glue5-0070-glm-shared-window-segment-launches.patch",
+        "MiaAI-Lab/GLM-5.3-Flash-DGX-Sparks-1104@13f2464 patches/engine/0088-glue5-0073-glm-shared-window-batched-writes.patch"
+      ]
+    },
+    {
+      "subject": "glm cuda: decode window MoE shared expert on a side stream beside routed experts (TF_GLM_SHARED_SIDE)",
+      "adapted_from": [
+        "MiaAI-Lab/GLM-5.3-Flash-DGX-Sparks-1104@13f2464 patches/engine/0006-glm-cuda-a-decode-window-s-shared-expert-on-a-side-s.patch",
+        "MiaAI-Lab/GLM-5.3-Flash-DGX-Sparks-1104@13f2464 patches/engine/0010-glm-cuda-the-shared-expert-side-stream-drains-before.patch"
+      ]
+    },
+    {
+      "subject": "glm cuda: shared verify profiling, PDL weight-first scan fix, 5-SM nvcc 13.3 receipts and serving pins"
+    },
+    {
+      "subject": "glm cuda: address Phase 2B review findings (TFQ3 side exclusion, unaligned CTA barriers, contract/cache/prof fixes)"
+    },
+    {
+      "subject": "glm cuda: stage EXL3 prompt expert tiles ahead and add TF_EXL3_PROMPT_GU=pc",
+      "adapted_from": [
+        "MiaAI-Lab/GLM-5.3-Flash-DGX-Sparks-1104@13f2464 patches/engine/0078-exl3p-0067-exl3p-prompt-experts-main-loop-and-epilogues.patch"
+      ]
+    },
+    {
+      "subject": "glm cuda: add TF_GLM_SHARED_SLOT and TF_GLM_MM_FAST4 packed prompt projections"
+    },
+    {
+      "subject": "glm cuda: prefetch FP8 MLA keys, fuse sparse chunk merge, and add TF_GLM_DENSE_PRUNE",
+      "adapted_from": [
+        "MiaAI-Lab/GLM-5.3-Flash-DGX-Sparks-1104@13f2464 patches/engine/0005-glm-cuda-latent-attention-reads-FP8-key-tiles-in-8-b.patch",
+        "MiaAI-Lab/GLM-5.3-Flash-DGX-Sparks-1104@13f2464 patches/engine/0011-glm-cuda-the-latent-attention-chunks-256-thread-laun.patch",
+        "MiaAI-Lab/GLM-5.3-Flash-DGX-Sparks-1104@13f2464 patches/engine/0068-attn5-0068-glm-sparse-attention-in-kernel-merge.patch"
+      ]
+    },
+    {
+      "subject": "glm cuda: add TF_GLM_HC_FUSE and TF_GLM_ROUTER_FUSE prompt glue fusions"
+    },
+    {
+      "subject": "glm cuda: add TF_GLM_CHUNK_SOLO=8192, TF_GLM_PROMPT_PAIR=solo, and wide leaderRows"
+    },
+    {
+      "subject": "glm cuda: add opt-in TF_GLM_EXL3_BF16_SLOTS and TF_GLM_ABSORB_MMA prompt switches",
+      "adapted_from": [
+        "MiaAI-Lab/GLM-5.3-Flash-DGX-Sparks-1104@13f2464 patches/engine/0041-glm-cuda-TF_GLM_ABSORB_MMA-1-a-prompt-s-absorb_q-and.patch"
+      ]
+    },
+    {
+      "subject": "glm cuda: record Phase 3A 5-SM nvcc 13.3 receipts, serving pins, and verification fixes"
+    },
+    {
+      "subject": "glm cuda: address Phase 3A review findings (pc_epilogue barriers, roped absorb_mma gate, serving pins)"
+    },
+    {
+      "subject": "glm: allow wide and paired solo prompt steps alongside request-start cuts"
+    },
+    {
+      "subject": "glm: add opt-in TF_GLM_REQUEST_STARTS=marks for mark-driven prompt cuts"
+    },
+    {
+      "subject": "glm: size disk staging floor to longest RAM-fitting TP state and add concurrency tests"
+    },
+    {
+      "subject": "glm: key marks disk blocks on executed starts and enforce strict TF_GLM_REQUEST_STARTS validation"
+    }
+  ],
+  "build": {
+    "base_image": "nvidia/cuda@sha256:afc92f9727f96346f2912934f11e5a43aa0581aca4a826bd5c8fd4ab6b152bcc",
+    "runtime_image": "nvidia/cuda@sha256:585155539dd4ff2ab653ee59d812aae81a9406a5804596d516c06e3a5719eb26",
+    "zig_version": "0.17.0",
+    "zig_sha256": "9e8d11661d4ae3bd57702a3832781e23ad151dde5798e16a5ccd503f65234ff8",
+    "zig_cpu": "cortex_a725+aes-mte-perfmon+sha2+sha3+sm4-spe",
+    "sm": "121"
+  },
+  "weights": {
+    "repository": "Mia-AiLab/GLM-5.3-Flash-EXL3-4bpw-TensorFold",
+    "revision": "078455ffe6472f9a52fbc1139f58b9db2881b25c"
+  },
+  "drafter": {
+    "repository": "incoai/GLM-5.3-Flash-DFlash2",
+    "revision": "bf582e4eacc1810f76656d1811693ff6c6737d2a"
+  },
+  "changes": "Phase 2B+3A+3B performance and durability release on TensorFold v1.3.6 (2fddd9855f18): bit-exact EXL3 prompt tile staging (TF_EXL3_PROMPT_GU=pc), packed/fused prompt kernels, FP8 MLA key prefetch (-30% c4 decode MLA), paired 4096+4096 solo stepping alongside request-start cuts, opt-in TF_GLM_REQUEST_STARTS=marks with executed cut-history disk keying (-28.4% 262K cold prefill), and TP>1 disk staging-floor fix (0 StagingFull skips, 1.81s 262K restart recall).",
+  "qualification": {
+    "status": "pending"
+  }
+}
