@@ -1,0 +1,84 @@
+# Throwaway two-node Talos cluster for the DGX Spark trial (#1400). It is not
+# k8s-prod: separate secrets and talosconfig, Talos's default flannel and
+# kube-proxy, and nothing here is applied by Flux. Versions come from
+# ../talenv.yaml so the trial runs what k8s-prod would.
+clusterName: sparks-trial
+
+talosVersion: "${talosVersion}"
+kubernetesVersion: "${kubernetesVersion}"
+
+endpoint: https://10.32.21.31:6443
+allowSchedulingOnControlPlanes: true
+
+nodes:
+  - hostname: spark-1
+    ipAddress: 10.32.21.31
+    controlPlane: true
+    # The disk image written to the USB drive is the install: Talos finds META
+    # there and skips the installer. The NVMe is always nvme0n1, never sda.
+    installDisk: /dev/sda
+    talosImageURL: factory.talos.dev/installer/b4cc68af2f815f45fb7151db6dd023903bed21233e88f145f32d30228f246e58
+    nameservers: ["10.32.21.1"]
+    networkInterfaces:
+      # RTL8127 10GbE (enP7s7 on DGX OS), VLAN 21 native.
+      - deviceSelector:
+          hardwareAddr: "4c:bb:47:2e:24:0a"
+          physical: true
+        dhcp: false
+        addresses: ["10.32.21.31/24"]
+        routes:
+          - network: 0.0.0.0/0
+            gateway: 10.32.21.1
+        mtu: 1500
+      # ConnectX-7 fabric A (enp1s0f0np0, rocep1s0f0). Non-routed.
+      - deviceSelector:
+          hardwareAddr: "4c:bb:47:2e:24:0b"
+          physical: true
+        dhcp: false
+        addresses: ["198.19.240.11/24"]
+        mtu: 9000
+      # ConnectX-7 fabric B (enP2p1s0f0np0, roceP2p1s0f0). Non-routed.
+      - deviceSelector:
+          hardwareAddr: "4c:bb:47:2e:24:0f"
+          physical: true
+        dhcp: false
+        addresses: ["198.19.241.11/24"]
+        mtu: 9000
+  - hostname: spark-2
+    ipAddress: 10.32.21.32
+    controlPlane: false
+    installDisk: /dev/sda
+    talosImageURL: factory.talos.dev/installer/b4cc68af2f815f45fb7151db6dd023903bed21233e88f145f32d30228f246e58
+    nameservers: ["10.32.21.1"]
+    networkInterfaces:
+      - deviceSelector:
+          hardwareAddr: "4c:bb:47:2e:2b:b4"
+          physical: true
+        dhcp: false
+        addresses: ["10.32.21.32/24"]
+        routes:
+          - network: 0.0.0.0/0
+            gateway: 10.32.21.1
+        mtu: 1500
+      - deviceSelector:
+          hardwareAddr: "4c:bb:47:2e:2b:b5"
+          physical: true
+        dhcp: false
+        addresses: ["198.19.240.12/24"]
+        mtu: 9000
+      - deviceSelector:
+          hardwareAddr: "4c:bb:47:2e:2b:b9"
+          physical: true
+        dhcp: false
+        addresses: ["198.19.241.12/24"]
+        mtu: 9000
+
+patches:
+  - "@./patches/machine.yaml"
+  - "@./patches/nvidia-modules.yaml"
+  - "@./patches/dgx-os-volume.yaml"
+  - "@./patches/no-trim.yaml"
+
+controlPlane:
+  patches:
+    - "@./patches/etcd.yaml"

@@ -1,0 +1,13 @@
+# The DGX OS root partition on the internal NVMe, mounted read-only at
+# /var/mnt/dgx-os so the trial reads the model weights in place. Both Sparks
+# were imaged from one source, so the partition UUID is the same on each.
+# Shut DGX OS down cleanly first: ext4 replays an unclean journal even on a
+# read-only mount.
+apiVersion: v1alpha1
+kind: ExistingVolumeConfig
+name: dgx-os
+discovery:
+  volumeSelector:
+    match: disk.transport == "nvme" && volume.name == "ext4" && volume.partition_uuid == "49c2c0c1-9a21-4a53-a43a-95ab7d996027"
+mount:
+  readOnly: true
